@@ -1,0 +1,24 @@
+# Render — Web Service (backend API)
+services:
+  - type: web
+    name: ogefmeeting-api
+    runtime: node
+    plan: free
+    rootDir: .
+    buildCommand: npm install && npm run build -w @ogefmeeting/shared && npm run build -w @ogefmeeting/backend
+    startCommand: npm run start -w @ogefmeeting/backend
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: AUTH_ENFORCED
+        value: "false"
+      - key: CORS_ORIGIN
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
