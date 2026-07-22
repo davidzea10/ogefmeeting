@@ -48,12 +48,23 @@ export function errorHandler(
 
   logger.error({ err: error }, 'Erreur non gérée');
 
-  const detail = error instanceof Error ? error.message : undefined;
+  let detail: string;
+  if (error instanceof Error) {
+    detail = error.message;
+  } else if (typeof error === 'string') {
+    detail = error;
+  } else {
+    try {
+      detail = JSON.stringify(error);
+    } catch {
+      detail = String(error);
+    }
+  }
 
   res.status(500).json({
     success: false,
     error: {
-      message: detail ? `Erreur interne : ${detail}` : 'Erreur interne du serveur',
+      message: `Erreur interne : ${detail}`,
     },
   });
 }

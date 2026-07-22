@@ -24,9 +24,11 @@ import { attachAuth } from '../middleware/auth.js';
  */
 export const apiRouter = Router();
 
+/** Health avant auth — diagnostic même si attachAuth pose problème */
+apiRouter.use('/health', healthRouter);
+
 apiRouter.use(attachAuth);
 
-apiRouter.use('/health', healthRouter);
 apiRouter.use('/auth', authRouter);
 apiRouter.use('/profil', profilRouter);
 apiRouter.use('/utilisateurs', utilisateursRouter);

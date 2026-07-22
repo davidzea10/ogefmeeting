@@ -8,6 +8,11 @@ import { asyncHandler } from '../middleware/async-handler.js';
 export const healthRouter = Router();
 
 healthRouter.get(
+  '/ping',
+  asyncHandler((req, res) => healthController.ping(req, res)),
+);
+
+healthRouter.get(
   '/',
   asyncHandler((req, res) => healthController.getStatus(req, res)),
 );
