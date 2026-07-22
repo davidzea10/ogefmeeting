@@ -9,9 +9,12 @@ import {
   gererOrdreJourSchema,
   gererParticipantsSchema,
   listerReunionsQuerySchema,
+  modifierParticipantSchema,
+  modifierPointOrdreJourSchema,
   modifierReunionSchema,
 } from '../schemas/reunion.schemas.js';
 import { PERMISSIONS } from '../utils/permissions.js';
+import { z } from 'zod';
 
 /**
  * Routes Réunions — /api/reunions
@@ -91,4 +94,32 @@ reunionsRouter.put(
   validateParams(idParamSchema),
   validateBody(gererOrdreJourSchema),
   asyncHandler((req, res) => reunionController.gererOrdreJour(req, res)),
+);
+
+const pointParamSchema = z.object({
+  id: idParamSchema.shape.id,
+  pointId: idParamSchema.shape.id,
+});
+
+const participantParamSchema = z.object({
+  id: idParamSchema.shape.id,
+  participantId: idParamSchema.shape.id,
+});
+
+reunionsRouter.patch(
+  '/:id/ordre-du-jour/:pointId',
+  requireAuth,
+  requirePermission(PERMISSIONS.REUNIONS_MODIFIER),
+  validateParams(pointParamSchema),
+  validateBody(modifierPointOrdreJourSchema),
+  asyncHandler((req, res) => reunionController.modifierPoint(req, res)),
+);
+
+reunionsRouter.patch(
+  '/:id/participants/:participantId',
+  requireAuth,
+  requirePermission(PERMISSIONS.REUNIONS_MODIFIER),
+  validateParams(participantParamSchema),
+  validateBody(modifierParticipantSchema),
+  asyncHandler((req, res) => reunionController.modifierParticipant(req, res)),
 );

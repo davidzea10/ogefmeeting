@@ -9,6 +9,7 @@
 | [environment.md](./environment.md) | Variables d'environnement |
 | [supabase-setup.md](./supabase-setup.md) | **Étape 2 — Guide Supabase pas à pas** |
 | [schema-erd.md](./schema-erd.md) | Schéma de données et ERD |
+| [accessibility.md](./accessibility.md) | **Étape 5.6 — Accessibilité & responsive** |
 
 ## Références projet
 

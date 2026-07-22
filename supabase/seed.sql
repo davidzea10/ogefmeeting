@@ -40,6 +40,7 @@ INSERT INTO public.modeles_compte_rendu (nom, identifiant, description, sections
     ]'::jsonb,
     false
   ),
+
   (
     'Point opérationnel',
     'operationnel',
@@ -52,6 +53,7 @@ INSERT INTO public.modeles_compte_rendu (nom, identifiant, description, sections
     ]'::jsonb,
     false
   ),
+
   (
     'Réunion partenaires / mandataires',
     'partenaire',
@@ -66,3 +68,4 @@ INSERT INTO public.modeles_compte_rendu (nom, identifiant, description, sections
     false
   )
 ON CONFLICT (identifiant) DO NOTHING;
+  

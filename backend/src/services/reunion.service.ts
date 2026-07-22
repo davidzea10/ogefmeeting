@@ -46,27 +46,67 @@ export class ReunionService {
 
   async lister(query: ListerReunionsQuery): Promise<PaginatedResult<Reunion>> {
     const supabase = requireSupabaseAdmin();
-    const { page, limite, tri, ordre, statut, type_reunion, direction_id, recherche } =
-      query;
+    const {
+      page,
+      limite,
+      tri,
+      ordre,
+      statut,
+      type_reunion,
+      direction_id,
+      participant_id,
+      date_apres,
+      date_avant,
+      recherche,
+    } = query;
     const from = (page - 1) * limite;
     const to = from + limite - 1;
 
-    let builder = supabase
-      .from(TABLES.reunions)
-      .select('*', { count: 'exact' })
-      .neq('statut', 'archivee');
+    let idsParticipant: string[] | null = null;
+    if (participant_id) {
+      const { data: liens, error: liensError } = await supabase
+        .from(TABLES.participantsReunion)
+        .select('reunion_id')
+        .eq('profil_id', participant_id);
+
+      if (liensError) {
+        handleSupabaseError(liensError, 'Impossible de filtrer par participant.');
+      }
+
+      idsParticipant = (liens ?? []).map((l) => l.reunion_id as string);
+      if (idsParticipant.length === 0) {
+        return {
+          items: [],
+          pagination: { page, limite, total: 0, total_pages: 1 },
+        };
+      }
+    }
+
+    let builder = supabase.from(TABLES.reunions).select('*', { count: 'exact' });
 
     if (statut) {
       builder = builder.eq('statut', statut);
+    } else {
+      builder = builder.neq('statut', 'archivee');
     }
+
     if (type_reunion) {
       builder = builder.eq('type_reunion', type_reunion);
     }
     if (direction_id) {
       builder = builder.eq('direction_id', direction_id);
     }
+    if (date_apres) {
+      builder = builder.gte('date_prevue', date_apres);
+    }
+    if (date_avant) {
+      builder = builder.lte('date_prevue', date_avant);
+    }
     if (recherche) {
       builder = builder.ilike('titre', `%${recherche}%`);
+    }
+    if (idsParticipant) {
+      builder = builder.in('id', idsParticipant);
     }
 
     builder = builder.order(tri, { ascending: ordre === 'asc' }).range(from, to);
@@ -230,7 +270,7 @@ export class ReunionService {
     id: string,
     input: GererParticipantsInput,
   ): Promise<ParticipantReunion[]> {
-    await this.assurerExiste(id);
+    const reunion = await this.assurerExiste(id);
     const supabase = requireSupabaseAdmin();
 
     const { error: deleteError } = await supabase
@@ -240,6 +280,10 @@ export class ReunionService {
 
     if (deleteError) {
       handleSupabaseError(deleteError, 'Impossible de mettre à jour les participants.');
+    }
+
+    if (input.participants.length === 0) {
+      return [];
     }
 
     const rows = input.participants.map((p) => ({
@@ -256,6 +300,18 @@ export class ReunionService {
     if (error) {
       handleSupabaseError(error, 'Impossible d’ajouter les participants.');
     }
+
+    // Notifications d'invitation (best-effort)
+    const notifications = input.participants.map((p) => ({
+      profil_id: p.profil_id,
+      type: 'invitation_reunion',
+      titre: 'Invitation à une réunion',
+      message: `Vous êtes invité(e) à « ${reunion.titre} ».`,
+      lien: `/reunions/${id}`,
+      metadonnees: { reunion_id: id },
+    }));
+
+    await supabase.from(TABLES.notifications).insert(notifications);
 
     return (data ?? []) as ParticipantReunion[];
   }
@@ -274,6 +330,10 @@ export class ReunionService {
 
     if (deleteError) {
       handleSupabaseError(deleteError, "Impossible de mettre à jour l'ordre du jour.");
+    }
+
+    if (input.points.length === 0) {
+      return [];
     }
 
     const rows = input.points.map((point, index) => ({
@@ -296,6 +356,52 @@ export class ReunionService {
     }
 
     return (data ?? []) as PointOrdreJour[];
+  }
+
+  async modifierPoint(
+    reunionId: string,
+    pointId: string,
+    estTraite: boolean,
+  ): Promise<PointOrdreJour> {
+    await this.assurerExiste(reunionId);
+    const supabase = requireSupabaseAdmin();
+
+    const { data, error } = await supabase
+      .from(TABLES.pointsOrdreJour)
+      .update({ est_traite: estTraite })
+      .eq('id', pointId)
+      .eq('reunion_id', reunionId)
+      .select('*')
+      .single();
+
+    if (error) {
+      handleSupabaseError(error, 'Impossible de mettre à jour le point.');
+    }
+
+    return data as PointOrdreJour;
+  }
+
+  async modifierParticipant(
+    reunionId: string,
+    participantId: string,
+    statut: string,
+  ): Promise<ParticipantReunion> {
+    await this.assurerExiste(reunionId);
+    const supabase = requireSupabaseAdmin();
+
+    const { data, error } = await supabase
+      .from(TABLES.participantsReunion)
+      .update({ statut })
+      .eq('id', participantId)
+      .eq('reunion_id', reunionId)
+      .select('*')
+      .single();
+
+    if (error) {
+      handleSupabaseError(error, 'Impossible de mettre à jour le participant.');
+    }
+
+    return data as ParticipantReunion;
   }
 
   private async assurerExiste(id: string): Promise<Reunion> {

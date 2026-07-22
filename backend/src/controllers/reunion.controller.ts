@@ -71,6 +71,24 @@ export class ReunionController {
     );
     res.status(200).json({ success: true, data });
   }
+
+  async modifierPoint(req: Request, res: Response): Promise<void> {
+    const data = await reunionService.modifierPoint(
+      req.params.id as string,
+      req.params.pointId as string,
+      (req.body as { est_traite: boolean }).est_traite,
+    );
+    res.status(200).json({ success: true, data });
+  }
+
+  async modifierParticipant(req: Request, res: Response): Promise<void> {
+    const data = await reunionService.modifierParticipant(
+      req.params.id as string,
+      req.params.participantId as string,
+      (req.body as { statut: string }).statut,
+    );
+    res.status(200).json({ success: true, data });
+  }
 }
 
 export const reunionController = new ReunionController();

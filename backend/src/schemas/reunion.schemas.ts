@@ -43,6 +43,9 @@ export const listerReunionsQuerySchema = paginationQuerySchema.extend({
   statut: z.enum(STATUTS_REUNION).optional(),
   type_reunion: z.enum(TYPES_REUNION).optional(),
   direction_id: uuidSchema.optional(),
+  participant_id: uuidSchema.optional(),
+  date_apres: z.string().datetime({ message: 'date_apres doit être une date ISO valide.' }).optional(),
+  date_avant: z.string().datetime({ message: 'date_avant doit être une date ISO valide.' }).optional(),
   recherche: z.string().trim().optional(),
   tri: z
     .enum(['date_prevue', 'titre', 'statut', 'cree_le'])
@@ -57,9 +60,7 @@ export const participantInputSchema = z.object({
 });
 
 export const gererParticipantsSchema = z.object({
-  participants: z
-    .array(participantInputSchema)
-    .min(1, 'Au moins un participant est requis.'),
+  participants: z.array(participantInputSchema).default([]),
 });
 
 export type GererParticipantsInput = z.infer<typeof gererParticipantsSchema>;
@@ -72,7 +73,19 @@ export const pointOrdreJourInputSchema = z.object({
 });
 
 export const gererOrdreJourSchema = z.object({
-  points: z.array(pointOrdreJourInputSchema).min(1, 'Au moins un point est requis.'),
+  points: z.array(pointOrdreJourInputSchema).default([]),
 });
 
 export type GererOrdreJourInput = z.infer<typeof gererOrdreJourSchema>;
+
+export const modifierPointOrdreJourSchema = z.object({
+  est_traite: z.boolean(),
+});
+
+export type ModifierPointOrdreJourInput = z.infer<typeof modifierPointOrdreJourSchema>;
+
+export const modifierParticipantSchema = z.object({
+  statut: z.enum(STATUTS_PARTICIPANT),
+});
+
+export type ModifierParticipantInput = z.infer<typeof modifierParticipantSchema>;
