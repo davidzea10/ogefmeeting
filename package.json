@@ -13,6 +13,7 @@
     "dev:frontend": "npm run dev -w frontend",
     "dev:backend": "npm run dev -w backend",
     "build": "npm run build -w shared && npm run build -w backend && npm run build -w frontend",
+    "build:frontend:vercel": "npm run build -w shared && npm run build -w @ogefmeeting/frontend",
     "lint": "npm run lint -w frontend && npm run lint -w backend",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md,css}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md,css}\""
