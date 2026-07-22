@@ -8,18 +8,21 @@ let supabaseAdmin: SupabaseClient | null = null;
 let supabaseAuth: SupabaseClient | null = null;
 
 /**
- * Options communes — transport WebSocket explicite pour Node < 22
- * (sinon supabase-js lève : "native WebSocket not found").
+ * Options communes.
+ * `realtime.transport = ws` : obligatoire sur Node < 22
+ * (sinon : "native WebSocket not found").
  */
-const supabaseClientOptions = {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-  realtime: {
-    transport: ws as unknown as typeof WebSocket,
-  },
-} as const;
+function clientOptions() {
+  return {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+    realtime: {
+      transport: ws,
+    },
+  };
+}
 
 /**
  * Indique si les variables Supabase admin sont présentes.
@@ -45,7 +48,7 @@ export function getSupabaseAdmin(): SupabaseClient | null {
     supabaseAdmin = createClient(
       env.SUPABASE_URL!,
       env.SUPABASE_SERVICE_ROLE_KEY!,
-      supabaseClientOptions,
+      clientOptions() as Parameters<typeof createClient>[2],
     );
 
     logger.info('Client Supabase (service_role) initialisé');
@@ -67,7 +70,7 @@ export function getSupabaseAuth(): SupabaseClient | null {
     supabaseAuth = createClient(
       env.SUPABASE_URL!,
       env.SUPABASE_ANON_KEY!,
-      supabaseClientOptions,
+      clientOptions() as Parameters<typeof createClient>[2],
     );
 
     logger.info('Client Supabase Auth (anon) initialisé');
