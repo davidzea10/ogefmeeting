@@ -20,19 +20,23 @@ export class HealthService {
       const supabase = getSupabaseAdmin();
 
       if (supabase) {
-        const [directionsResult, templatesResult] = await Promise.all([
-          supabase.from(TABLES.directions).select('id', { count: 'exact', head: true }),
-          supabase.from(TABLES.modelesCompteRendu).select('id', { count: 'exact', head: true }),
-        ]);
+        try {
+          const [directionsResult, templatesResult] = await Promise.all([
+            supabase.from(TABLES.directions).select('id', { count: 'exact', head: true }),
+            supabase.from(TABLES.modelesCompteRendu).select('id', { count: 'exact', head: true }),
+          ]);
 
-        if (directionsResult.error || templatesResult.error) {
+          if (directionsResult.error || templatesResult.error) {
+            supabaseStatus = 'error';
+          } else {
+            supabaseStatus = 'connected';
+            database = {
+              directions: directionsResult.count ?? 0,
+              templates: templatesResult.count ?? 0,
+            };
+          }
+        } catch {
           supabaseStatus = 'error';
-        } else {
-          supabaseStatus = 'connected';
-          database = {
-            directions: directionsResult.count ?? 0,
-            templates: templatesResult.count ?? 0,
-          };
         }
       }
     }

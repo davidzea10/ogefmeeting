@@ -114,10 +114,17 @@ export class AuthService {
   async connexion(input: ConnexionInput): Promise<SessionAuth> {
     const authClient = requireSupabaseAuth();
 
-    const { data, error } = await authClient.auth.signInWithPassword({
-      email: input.email,
-      password: input.password,
-    });
+    let data;
+    let error;
+    try {
+      ({ data, error } = await authClient.auth.signInWithPassword({
+        email: input.email,
+        password: input.password,
+      }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erreur Auth Supabase';
+      throw new AppError(503, `Connexion Auth impossible : ${message}`);
+    }
 
     if (error) {
       throw new AppError(401, 'Email ou mot de passe incorrect.');

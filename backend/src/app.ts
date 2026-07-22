@@ -18,7 +18,12 @@ export function createApp(): Express {
   const app = express();
 
   // --- Sécurité & performance ---
-  app.use(helmet());
+  app.use(
+    helmet({
+      // API appelée depuis Vercel (origine différente) : ne pas bloquer la lecture des réponses
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
   app.use(
     cors({
       origin(origin, callback) {

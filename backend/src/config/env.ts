@@ -9,6 +9,14 @@ function normaliserOrigin(value: string): string {
   return `https://${trimmed}`;
 }
 
+/** URL projet Supabase (sans /rest/v1 ni slash final). */
+function normaliserSupabaseUrl(value: string): string {
+  return value
+    .trim()
+    .replace(/\/rest\/v1\/?$/i, '')
+    .replace(/\/$/, '');
+}
+
 /** Une ou plusieurs origines séparées par des virgules. */
 const originsFromEnv = z.preprocess((value) => {
   if (typeof value !== 'string' || value.trim() === '') return ['http://localhost:5173'];
@@ -22,6 +30,11 @@ const originFromEnv = z.preprocess((value) => {
   if (typeof value !== 'string' || value.trim() === '') return value;
   return normaliserOrigin(value);
 }, z.string());
+
+const supabaseUrlFromEnv = z.preprocess((value) => {
+  if (typeof value !== 'string' || value.trim() === '') return undefined;
+  return normaliserSupabaseUrl(value);
+}, z.string().url().optional());
 
 const booleanFromEnv = z.preprocess((value) => {
   if (value === undefined || value === null || value === '') return false;
@@ -38,14 +51,13 @@ const envSchema = z.object({
   /** Origines autorisées (séparées par des virgules). */
   CORS_ORIGIN: originsFromEnv.default(['http://localhost:5173']),
   FRONTEND_URL: originFromEnv.default('http://localhost:5173'),
-  SUPABASE_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
+  SUPABASE_URL: supabaseUrlFromEnv,
   SUPABASE_SERVICE_ROLE_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   /** Clé anon — login/signup utilisateur (jamais service_role côté auth password) */
   SUPABASE_ANON_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   /**
    * Si false (défaut) : JWT reconnu s'il est présent, mais jamais bloquant.
    * Si true : requireAuth / requireRoles refusent les requêtes non authentifiées.
-   * → Déploiement et usage libres tant que AUTH_ENFORCED=false.
    */
   AUTH_ENFORCED: booleanFromEnv.default(false),
 });
