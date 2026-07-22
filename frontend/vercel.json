@@ -3,5 +3,11 @@
   "framework": "vite",
   "installCommand": "cd .. && npm install",
   "buildCommand": "cd .. && npm run build -w shared && npm run build -w @ogefmeeting/frontend",
-  "outputDirectory": "dist"
+  "outputDirectory": "dist",
+  "rewrites": [
+    {
+      "source": "/((?!assets/).*)",
+      "destination": "/index.html"
+    }
+  ]
 }
