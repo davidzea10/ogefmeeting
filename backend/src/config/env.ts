@@ -2,6 +2,14 @@ import { z } from 'zod';
 
 const emptyToUndefined = (value: unknown) => (value === '' ? undefined : value);
 
+/** Normalise une origine CORS / URL front (ajoute https:// si protocole manquant). */
+const originFromEnv = z.preprocess((value) => {
+  if (typeof value !== 'string' || value.trim() === '') return value;
+  const trimmed = value.trim().replace(/\/$/, '');
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}, z.string());
+
 const booleanFromEnv = z.preprocess((value) => {
   if (value === undefined || value === null || value === '') return false;
   if (typeof value === 'boolean') return value;
@@ -14,8 +22,8 @@ const booleanFromEnv = z.preprocess((value) => {
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().default(4000),
-  CORS_ORIGIN: z.string().default('http://localhost:5173'),
-  FRONTEND_URL: z.string().default('http://localhost:5173'),
+  CORS_ORIGIN: originFromEnv.default('http://localhost:5173'),
+  FRONTEND_URL: originFromEnv.default('http://localhost:5173'),
   SUPABASE_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
   SUPABASE_SERVICE_ROLE_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   /** Clé anon — login/signup utilisateur (jamais service_role côté auth password) */
