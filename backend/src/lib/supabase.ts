@@ -1,10 +1,25 @@
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
+import ws from 'ws';
 import { env } from '../config/env.js';
 import { AppError } from '../utils/errors.js';
 import { logger } from './logger.js';
 
 let supabaseAdmin: SupabaseClient | null = null;
 let supabaseAuth: SupabaseClient | null = null;
+
+/**
+ * Options communes — transport WebSocket explicite pour Node < 22
+ * (sinon supabase-js lève : "native WebSocket not found").
+ */
+const supabaseClientOptions = {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false,
+  },
+  realtime: {
+    transport: ws as unknown as typeof WebSocket,
+  },
+} as const;
 
 /**
  * Indique si les variables Supabase admin sont présentes.
@@ -27,12 +42,11 @@ export function getSupabaseAdmin(): SupabaseClient | null {
   }
 
   if (!supabaseAdmin) {
-    supabaseAdmin = createClient(env.SUPABASE_URL!, env.SUPABASE_SERVICE_ROLE_KEY!, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
+    supabaseAdmin = createClient(
+      env.SUPABASE_URL!,
+      env.SUPABASE_SERVICE_ROLE_KEY!,
+      supabaseClientOptions,
+    );
 
     logger.info('Client Supabase (service_role) initialisé');
   }
@@ -50,12 +64,11 @@ export function getSupabaseAuth(): SupabaseClient | null {
   }
 
   if (!supabaseAuth) {
-    supabaseAuth = createClient(env.SUPABASE_URL!, env.SUPABASE_ANON_KEY!, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
+    supabaseAuth = createClient(
+      env.SUPABASE_URL!,
+      env.SUPABASE_ANON_KEY!,
+      supabaseClientOptions,
+    );
 
     logger.info('Client Supabase Auth (anon) initialisé');
   }

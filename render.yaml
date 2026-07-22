@@ -8,6 +8,8 @@ services:
     buildCommand: npm install && npm run build -w @ogefmeeting/shared && npm run build -w @ogefmeeting/backend
     startCommand: npm run start -w @ogefmeeting/backend
     envVars:
+      - key: NODE_VERSION
+        value: "22"
       - key: NODE_ENV
         value: production
       - key: AUTH_ENFORCED
