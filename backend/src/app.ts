@@ -1,0 +1,62 @@
+import compression from 'compression';
+import cors from 'cors';
+import express, { type Express } from 'express';
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+import { pinoHttp } from 'pino-http';
+import { env } from './config/env.js';
+import { logger } from './lib/logger.js';
+import { errorHandler } from './middleware/error-handler.js';
+import { notFoundHandler } from './middleware/not-found.js';
+import { apiRouter } from './routes/index.js';
+
+/**
+ * Fabrique l'application Express (MVC).
+ * Middlewares globaux → routes → 404 → erreurs.
+ */
+export function createApp(): Express {
+  const app = express();
+
+  // --- Sécurité & performance ---
+  app.use(helmet());
+  app.use(
+    cors({
+      origin: env.CORS_ORIGIN,
+      credentials: true,
+    }),
+  );
+  app.use(compression());
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ extended: true }));
+
+  // --- Limitation de débit ---
+  app.use(
+    rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: 300,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: {
+        success: false,
+        error: { message: 'Trop de requêtes, réessayez plus tard.' },
+      },
+    }),
+  );
+
+  // --- Logger HTTP (Pino) ---
+  app.use(
+    pinoHttp({
+      logger,
+      autoLogging: env.NODE_ENV !== 'test',
+    }),
+  );
+
+  // --- Routes API (MVC) ---
+  app.use('/api', apiRouter);
+
+  // --- 404 & erreurs (toujours en dernier) ---
+  app.use(notFoundHandler);
+  app.use(errorHandler);
+
+  return app;
+}
