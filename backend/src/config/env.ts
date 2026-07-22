@@ -2,12 +2,25 @@ import { z } from 'zod';
 
 const emptyToUndefined = (value: unknown) => (value === '' ? undefined : value);
 
-/** Normalise une origine CORS / URL front (ajoute https:// si protocole manquant). */
-const originFromEnv = z.preprocess((value) => {
-  if (typeof value !== 'string' || value.trim() === '') return value;
+function normaliserOrigin(value: string): string {
   const trimmed = value.trim().replace(/\/$/, '');
+  if (!trimmed) return trimmed;
   if (/^https?:\/\//i.test(trimmed)) return trimmed;
   return `https://${trimmed}`;
+}
+
+/** Une ou plusieurs origines séparées par des virgules. */
+const originsFromEnv = z.preprocess((value) => {
+  if (typeof value !== 'string' || value.trim() === '') return ['http://localhost:5173'];
+  return value
+    .split(',')
+    .map((part) => normaliserOrigin(part))
+    .filter(Boolean);
+}, z.array(z.string()).min(1));
+
+const originFromEnv = z.preprocess((value) => {
+  if (typeof value !== 'string' || value.trim() === '') return value;
+  return normaliserOrigin(value);
 }, z.string());
 
 const booleanFromEnv = z.preprocess((value) => {
@@ -22,7 +35,8 @@ const booleanFromEnv = z.preprocess((value) => {
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().default(4000),
-  CORS_ORIGIN: originFromEnv.default('http://localhost:5173'),
+  /** Origines autorisées (séparées par des virgules). */
+  CORS_ORIGIN: originsFromEnv.default(['http://localhost:5173']),
   FRONTEND_URL: originFromEnv.default('http://localhost:5173'),
   SUPABASE_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
   SUPABASE_SERVICE_ROLE_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
@@ -36,6 +50,37 @@ const envSchema = z.object({
   AUTH_ENFORCED: booleanFromEnv.default(false),
 });
 
-export const env = envSchema.parse(process.env);
+const parsed = envSchema.parse(process.env);
 
-export type Env = z.infer<typeof envSchema>;
+/** Liste unique : CORS_ORIGIN + FRONTEND_URL */
+export const corsOrigins = Array.from(
+  new Set([...parsed.CORS_ORIGIN, parsed.FRONTEND_URL].filter(Boolean)),
+);
+
+export const env = {
+  ...parsed,
+  /** Première origine (rétrocompat) */
+  CORS_ORIGIN: corsOrigins[0] ?? 'http://localhost:5173',
+};
+
+export type Env = typeof env;
+
+/** Autorise l’origine exacte, ou les previews Vercel si une URL *.vercel.app est déjà listée. */
+export function isCorsOriginAllowed(origin: string | undefined): boolean {
+  if (!origin) return true;
+  if (corsOrigins.includes(origin)) return true;
+
+  const allowVercelPreviews = corsOrigins.some((o) => o.includes('.vercel.app'));
+  if (allowVercelPreviews) {
+    try {
+      const host = new URL(origin).hostname;
+      if (host.endsWith('.vercel.app') && host.includes('ogefmeeting')) {
+        return true;
+      }
+    } catch {
+      return false;
+    }
+  }
+
+  return false;
+}

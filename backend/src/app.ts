@@ -4,7 +4,7 @@ import express, { type Express } from 'express';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
-import { env } from './config/env.js';
+import { env, isCorsOriginAllowed } from './config/env.js';
 import { logger } from './lib/logger.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { notFoundHandler } from './middleware/not-found.js';
@@ -21,7 +21,13 @@ export function createApp(): Express {
   app.use(helmet());
   app.use(
     cors({
-      origin: env.CORS_ORIGIN,
+      origin(origin, callback) {
+        if (isCorsOriginAllowed(origin)) {
+          callback(null, origin ?? true);
+          return;
+        }
+        callback(null, false);
+      },
       credentials: true,
     }),
   );
