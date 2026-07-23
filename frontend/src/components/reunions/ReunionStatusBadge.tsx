@@ -6,10 +6,12 @@ const variantByStatut: Record<
   StatutReunion,
   'default' | 'yellow' | 'success' | 'warning' | 'neutral' | 'danger'
 > = {
+  en_attente_validation: 'warning',
   planifiee: 'default',
   en_cours: 'yellow',
   cloturee: 'success',
   archivee: 'neutral',
+  refusee: 'danger',
 };
 
 type Props = {

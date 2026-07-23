@@ -1,6 +1,12 @@
-import { ROLES_UTILISATEUR } from '@ogefmeeting/shared';
+import {
+  FONCTIONS_ORGANISATION,
+  ROLES_UTILISATEUR,
+} from '@ogefmeeting/shared';
 import { z } from 'zod';
 import { paginationQuerySchema, uuidSchema } from './common.schemas.js';
+
+const fonctionSchema = z.enum(FONCTIONS_ORGANISATION).optional().nullable();
+const nomOptionnelSchema = z.string().trim().max(100).optional();
 
 export const creerDirectionSchema = z.object({
   nom: z.string().trim().min(2),
@@ -24,10 +30,11 @@ export type ModifierDirectionInput = z.infer<typeof modifierDirectionSchema>;
 
 export const modifierProfilSchema = z
   .object({
-    prenom: z.string().trim().min(1).optional(),
-    nom: z.string().trim().min(1).optional(),
+    prenom: nomOptionnelSchema,
+    nom: nomOptionnelSchema,
     direction_id: uuidSchema.optional().nullable(),
-    fonction: z.string().trim().optional().nullable(),
+    fonction: fonctionSchema,
+    matricule: z.string().trim().max(40).optional().nullable(),
     url_avatar: z.string().url().optional().nullable(),
     role: z.enum(ROLES_UTILISATEUR).optional(),
     est_actif: z.boolean().optional(),

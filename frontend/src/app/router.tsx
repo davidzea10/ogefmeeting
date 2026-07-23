@@ -6,6 +6,10 @@ import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage';
 import { HomePage } from '@/pages/HomePage';
 import { InvitationPage } from '@/pages/InvitationPage';
 import { LoginPage } from '@/pages/LoginPage';
+import { AdministrationPage } from '@/pages/admin/AdministrationPage';
+import { ActionsListPage } from '@/pages/actions/ActionsListPage';
+import { ArchivesPage } from '@/pages/archives/ArchivesPage';
+import { RecherchePage } from '@/pages/recherche/RecherchePage';
 import { CompteRenduEditorPage } from '@/pages/comptes-rendus/CompteRenduEditorPage';
 import { ComptesRendusListPage } from '@/pages/comptes-rendus/ComptesRendusListPage';
 import { ReunionCreatePage } from '@/pages/reunions/ReunionCreatePage';
@@ -14,7 +18,7 @@ import { ReunionEditPage } from '@/pages/reunions/ReunionEditPage';
 import { ReunionLivePage } from '@/pages/reunions/ReunionLivePage';
 import { ReunionsListPage } from '@/pages/reunions/ReunionsListPage';
 import { ResetPasswordPage } from '@/pages/ResetPasswordPage';
-import { createBrowserRouter } from 'react-router-dom';
+import { Navigate, createBrowserRouter } from 'react-router-dom';
 
 export const router = createBrowserRouter([
   {
@@ -31,9 +35,11 @@ export const router = createBrowserRouter([
           { path: 'reunions/:id', element: <ReunionDetailPage /> },
           { path: 'comptes-rendus/:id', element: <CompteRenduEditorPage /> },
           { path: 'comptes-rendus', element: <ComptesRendusListPage /> },
-          { path: 'actions', element: <PlaceholderPage title="Actions" /> },
-          { path: 'utilisateurs', element: <PlaceholderPage title="Utilisateurs" /> },
-          { path: 'administration', element: <PlaceholderPage title="Administration" /> },
+          { path: 'actions', element: <ActionsListPage /> },
+          { path: 'recherche', element: <RecherchePage /> },
+          { path: 'archives', element: <ArchivesPage /> },
+          { path: 'administration', element: <AdministrationPage /> },
+          { path: 'utilisateurs', element: <Navigate to="/administration?tab=utilisateurs" replace /> },
           { path: 'profil', element: <PlaceholderPage title="Mon profil" /> },
         ],
       },

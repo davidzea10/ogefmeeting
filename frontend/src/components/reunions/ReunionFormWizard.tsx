@@ -198,9 +198,11 @@ export function ReunionFormWizard({ mode, reunionId }: Props) {
       };
 
       let id = reunionId;
+      let createdStatut: string | null = null;
       if (mode === 'create') {
         const created = await creerReunion(payload);
         id = created.id;
+        createdStatut = created.statut;
       } else if (reunionId) {
         await modifierReunion(reunionId, payload);
       }
@@ -228,9 +230,13 @@ export function ReunionFormWizard({ mode, reunionId }: Props) {
       clearDraft(reunionId);
       if (mode === 'create') clearDraft();
 
+      const besoinValidation =
+        mode === 'create' && createdStatut === 'en_attente_validation';
       announce(
         mode === 'create'
-          ? 'Réunion créée. Les participants ont été notifiés.'
+          ? besoinValidation
+            ? 'Proposition envoyée. Un directeur doit valider avant planification.'
+            : 'Réunion créée. Les participants ont été notifiés.'
           : 'Réunion mise à jour.',
       );
       navigate(`/reunions/${id}`);

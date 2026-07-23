@@ -1,13 +1,22 @@
-import { ROLES_UTILISATEUR } from '@ogefmeeting/shared';
+import {
+  FONCTIONS_ORGANISATION,
+  MOT_DE_PASSE_DEFAUT,
+  ROLES_ASSIGNABLES_ADMIN,
+  roleDepuisFonction,
+} from '@ogefmeeting/shared';
 import { z } from 'zod';
 import { paginationQuerySchema, uuidSchema } from './common.schemas.js';
 
+const fonctionSchema = z.enum(FONCTIONS_ORGANISATION).optional().nullable();
+const nomOptionnelSchema = z.string().trim().max(100).optional().default('');
+
 export const modifierMonProfilSchema = z
   .object({
-    prenom: z.string().trim().min(1).optional(),
-    nom: z.string().trim().min(1).optional(),
+    prenom: nomOptionnelSchema,
+    nom: nomOptionnelSchema,
     direction_id: uuidSchema.optional().nullable(),
-    fonction: z.string().trim().optional().nullable(),
+    fonction: fonctionSchema,
+    matricule: z.string().trim().max(40).optional().nullable(),
     url_avatar: z.string().url().optional().nullable(),
   })
   .refine((data) => Object.keys(data).length > 0, {
@@ -16,18 +25,26 @@ export const modifierMonProfilSchema = z
 
 export type ModifierMonProfilInput = z.infer<typeof modifierMonProfilSchema>;
 
-export const inviterUtilisateurSchema = z.object({
-  email: z.string().email('Email invalide.'),
-  password: z
-    .string()
-    .min(8, 'Le mot de passe temporaire doit contenir au moins 8 caractères.')
-    .optional(),
-  prenom: z.string().trim().min(1),
-  nom: z.string().trim().min(1),
-  role: z.enum(ROLES_UTILISATEUR).default('participant'),
-  direction_id: uuidSchema.optional().nullable(),
-  fonction: z.string().trim().optional().nullable(),
-});
+export const inviterUtilisateurSchema = z
+  .object({
+    email: z.string().email('Email invalide.'),
+    /** Si omis → mot de passe par défaut Ogefrem123! */
+    password: z
+      .string()
+      .min(8, 'Le mot de passe doit contenir au moins 8 caractères.')
+      .optional(),
+    prenom: nomOptionnelSchema,
+    nom: nomOptionnelSchema,
+    /** Si omis → dérivé de la fonction (agent → membre, chef/dir → directeur) */
+    role: z.enum(ROLES_ASSIGNABLES_ADMIN).optional(),
+    direction_id: uuidSchema.optional().nullable(),
+    fonction: fonctionSchema,
+    matricule: z.string().trim().max(40).optional().nullable(),
+  })
+  .transform((data) => ({
+    ...data,
+    role: data.role ?? roleDepuisFonction(data.fonction),
+  }));
 
 export type InviterUtilisateurInput = z.infer<typeof inviterUtilisateurSchema>;
 
@@ -52,3 +69,5 @@ export const listerAuditQuerySchema = paginationQuerySchema.extend({
 });
 
 export type ListerAuditQuery = z.infer<typeof listerAuditQuerySchema>;
+
+export { MOT_DE_PASSE_DEFAUT };

@@ -211,20 +211,89 @@ export class ModeleCompteRenduService {
 }
 
 export class RechercheService {
-  async rechercher(query: RechercheQuery): Promise<ResultatRecherche> {
+  async rechercher(
+    query: RechercheQuery,
+    options: { limiterReunionsAuProfilId?: string | null } = {},
+  ): Promise<ResultatRecherche> {
     const supabase = requireSupabaseAdmin();
     const { q, limite } = query;
-    const motif = `%${q}%`;
+    const safe = q.replace(/[%_,()"]/g, ' ').replace(/\s+/g, ' ').trim();
+    const motif = `%${safe}%`;
+
+    let idsReunions: string[] | null = null;
+    if (options.limiterReunionsAuProfilId) {
+      const [{ data: liens, error: liensError }, { data: creees, error: creeesError }] =
+        await Promise.all([
+          supabase
+            .from(TABLES.participantsReunion)
+            .select('reunion_id')
+            .eq('profil_id', options.limiterReunionsAuProfilId),
+          supabase
+            .from(TABLES.reunions)
+            .select('id')
+            .eq('cree_par', options.limiterReunionsAuProfilId),
+        ]);
+      if (liensError) {
+        handleSupabaseError(liensError, 'Impossible de charger vos réunions.');
+      }
+      if (creeesError) {
+        handleSupabaseError(creeesError, 'Impossible de charger vos propositions.');
+      }
+      const set = new Set<string>();
+      for (const l of liens ?? []) set.add(l.reunion_id as string);
+      for (const r of creees ?? []) set.add(r.id as string);
+      idsReunions = [...set];
+      if (idsReunions.length === 0) {
+        return {
+          comptes_rendus: [],
+          reunions: [],
+          decisions: [],
+          actions: [],
+        };
+      }
+    }
+
+    let reunionsQuery = supabase
+      .from(TABLES.reunions)
+      .select('*')
+      .or(`titre.ilike.${motif},description.ilike.${motif},lieu.ilike.${motif}`)
+      .limit(limite);
+    if (idsReunions) {
+      reunionsQuery = reunionsQuery.in('id', idsReunions);
+    }
+
+    let crQuery = supabase
+      .from(TABLES.comptesRendus)
+      .select('*')
+      .ilike('contenu_html', motif)
+      .limit(limite);
+    if (idsReunions) {
+      crQuery = crQuery.in('reunion_id', idsReunions);
+    }
+
+    let decisionsQuery = supabase
+      .from(TABLES.decisions)
+      .select('*')
+      .or(`titre.ilike.${motif},description.ilike.${motif}`)
+      .limit(limite);
+    if (idsReunions) {
+      decisionsQuery = decisionsQuery.in('reunion_id', idsReunions);
+    }
+
+    let actionsQuery = supabase
+      .from(TABLES.actions)
+      .select('*')
+      .or(`titre.ilike.${motif},description.ilike.${motif}`)
+      .limit(limite);
+    if (idsReunions) {
+      actionsQuery = actionsQuery.in('reunion_id', idsReunions);
+    }
 
     const [cr, reunions, decisions, actions] = await Promise.all([
-      supabase
-        .from(TABLES.comptesRendus)
-        .select('*')
-        .ilike('contenu_html', motif)
-        .limit(limite),
-      supabase.from(TABLES.reunions).select('*').ilike('titre', motif).limit(limite),
-      supabase.from(TABLES.decisions).select('*').ilike('titre', motif).limit(limite),
-      supabase.from(TABLES.actions).select('*').ilike('titre', motif).limit(limite),
+      crQuery,
+      reunionsQuery,
+      decisionsQuery,
+      actionsQuery,
     ]);
 
     if (cr.error) handleSupabaseError(cr.error, 'Erreur recherche comptes rendus.');

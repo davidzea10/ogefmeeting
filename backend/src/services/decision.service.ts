@@ -34,13 +34,14 @@ export class DecisionService {
 
   async lister(query: ListerDecisionsQuery): Promise<PaginatedResult<Decision>> {
     const supabase = requireSupabaseAdmin();
-    const { page, limite, tri, ordre, reunion_id } = query;
+    const { page, limite, tri, ordre, reunion_id, compte_rendu_id } = query;
     const from = (page - 1) * limite;
     const to = from + limite - 1;
 
     let builder = supabase.from(TABLES.decisions).select('*', { count: 'exact' });
 
     if (reunion_id) builder = builder.eq('reunion_id', reunion_id);
+    if (compte_rendu_id) builder = builder.eq('compte_rendu_id', compte_rendu_id);
 
     const { data, error, count } = await builder
       .order(tri, { ascending: ordre === 'asc' })

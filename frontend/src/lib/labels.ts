@@ -1,10 +1,12 @@
 import type { Direction, StatutReunion, TypeReunion } from '@ogefmeeting/shared';
 
 export const LIBELLES_STATUT: Record<StatutReunion, string> = {
+  en_attente_validation: 'En attente de validation',
   planifiee: 'Planifiée',
   en_cours: 'En cours',
   cloturee: 'Clôturée',
   archivee: 'Archivée',
+  refusee: 'Refusée',
 };
 
 export const LIBELLES_TYPE: Record<TypeReunion, string> = {

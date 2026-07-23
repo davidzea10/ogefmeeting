@@ -6,7 +6,7 @@ import { getSupabaseAdmin, verifyAccessToken } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import type { AuthUser } from '../types/auth.types.js';
 import { AppError } from '../utils/errors.js';
-import { roleAutorise, type Permission } from '../utils/permissions.js';
+import { autorisePermission, type Permission } from '../utils/permissions.js';
 
 function extractBearerToken(req: Request): string | null {
   const header = req.headers.authorization;
@@ -46,6 +46,7 @@ export const attachAuth: RequestHandler = async (req, _res, next) => {
       prenom: string;
       nom: string;
       direction_id: string | null;
+      fonction: string | null;
       email: string;
       est_actif: boolean;
     };
@@ -55,7 +56,7 @@ export const attachAuth: RequestHandler = async (req, _res, next) => {
     if (supabase) {
       const { data } = await supabase
         .from(TABLES.profils)
-        .select('role, prenom, nom, direction_id, email, est_actif')
+        .select('role, prenom, nom, direction_id, fonction, email, est_actif')
         .eq('id', authUser.id)
         .maybeSingle();
 
@@ -75,6 +76,7 @@ export const attachAuth: RequestHandler = async (req, _res, next) => {
       prenom: profil?.prenom ?? 'Utilisateur',
       nom: profil?.nom ?? 'OGEFREM',
       direction_id: profil?.direction_id ?? null,
+      fonction: profil?.fonction ?? null,
       auth: authUser,
     };
 
@@ -150,7 +152,9 @@ export function requirePermission(...permissions: Permission[]) {
       return;
     }
 
-    const autorise = permissions.every((permission) => roleAutorise(req.user!.role, permission));
+    const autorise = permissions.every((permission) =>
+      autorisePermission(req.user!.role, permission, req.user!.fonction),
+    );
 
     if (!autorise) {
       next(

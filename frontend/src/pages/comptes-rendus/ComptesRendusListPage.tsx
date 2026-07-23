@@ -1,7 +1,8 @@
 import { Breadcrumbs } from '@/components/layout/Breadcrumbs';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { listerComptesRendus } from '@/lib/comptes-rendus-api';
+import { listerComptesRendus, telechargerPdfCompteRendu } from '@/lib/comptes-rendus-api';
+import { LIBELLES_STATUT_CR } from '@/lib/cr-workflow';
 import { formatDateHeure } from '@/lib/labels';
 import { listerReunions } from '@/lib/reunions-api';
 import { useQuery } from '@tanstack/react-query';
@@ -9,21 +10,21 @@ import { FileText } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-const LIBELLES_STATUT: Record<string, string> = {
-  brouillon: 'Brouillon',
-  soumis: 'Soumis',
-  en_revision: 'En révision',
-  valide: 'Validé',
-  archive: 'Archivé',
-};
-
 const FILTRES_STATUT = [
   { value: '', label: 'Tous les statuts' },
   { value: 'brouillon', label: 'Brouillon' },
   { value: 'soumis', label: 'Soumis' },
   { value: 'en_revision', label: 'En révision' },
   { value: 'valide', label: 'Validé' },
+  { value: 'archive', label: 'Archivé' },
 ] as const;
+
+function badgeVariantPourStatut(statut: string): 'neutral' | 'warning' | 'success' | 'default' {
+  if (statut === 'valide') return 'success';
+  if (statut === 'soumis') return 'warning';
+  if (statut === 'en_revision') return 'default';
+  return 'neutral';
+}
 
 export function ComptesRendusListPage() {
   const [statut, setStatut] = useState('');
@@ -135,12 +136,34 @@ export function ComptesRendusListPage() {
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    <Badge variant="neutral">
-                      {LIBELLES_STATUT[cr.statut] ?? cr.statut}
+                    <Badge variant={badgeVariantPourStatut(cr.statut)}>
+                      {LIBELLES_STATUT_CR[cr.statut as keyof typeof LIBELLES_STATUT_CR] ??
+                        cr.statut}
                     </Badge>
                     <Link to={`/comptes-rendus/${cr.id}`}>
                       <Button size="sm">Ouvrir</Button>
                     </Link>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={async () => {
+                        try {
+                          const { blob, filename } = await telechargerPdfCompteRendu(cr.id);
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = filename;
+                          document.body.appendChild(a);
+                          a.click();
+                          a.remove();
+                          URL.revokeObjectURL(url);
+                        } catch {
+                          /* ignore */
+                        }
+                      }}
+                    >
+                      PDF
+                    </Button>
                     <Link to={`/reunions/${cr.reunion_id}?tab=compte-rendu`}>
                       <Button size="sm" variant="ghost">
                         Réunion

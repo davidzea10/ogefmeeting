@@ -26,6 +26,7 @@ export type ModifierDecisionInput = z.infer<typeof modifierDecisionSchema>;
 
 export const listerDecisionsQuerySchema = paginationQuerySchema.extend({
   reunion_id: uuidSchema.optional(),
+  compte_rendu_id: uuidSchema.optional(),
   tri: z.enum(['decide_le', 'cree_le', 'titre']).default('decide_le'),
 });
 

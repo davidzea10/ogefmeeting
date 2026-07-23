@@ -1,5 +1,5 @@
 import type { PaginatedResult, Profil } from '@ogefmeeting/shared';
-import { TABLES } from '@ogefmeeting/shared';
+import { MOT_DE_PASSE_DEFAUT, TABLES } from '@ogefmeeting/shared';
 import { env } from '../config/env.js';
 import {
   requireSupabaseAdmin,
@@ -48,10 +48,10 @@ export class UtilisateurService {
   async inviter(input: InviterUtilisateurInput, invitePar?: string): Promise<{
     utilisateur: { id: string; email: string };
     profil: Profil;
-    mot_de_passe_temporaire?: string;
+    mot_de_passe_temporaire: string;
   }> {
     const admin = requireSupabaseAdmin();
-    const motDePasse = input.password ?? this.genererMotDePasseTemporaire();
+    const motDePasse = input.password?.trim() || MOT_DE_PASSE_DEFAUT;
 
     const { data: created, error } = await admin.auth.admin.createUser({
       email: input.email,
@@ -81,6 +81,7 @@ export class UtilisateurService {
         role: input.role,
         direction_id: input.direction_id ?? null,
         fonction: input.fonction ?? null,
+        matricule: input.matricule?.trim() || null,
         email: input.email,
         est_actif: true,
       })
@@ -97,13 +98,18 @@ export class UtilisateurService {
       profil_id: invitePar ?? null,
       type_entite: 'profil',
       entite_id: created.user.id,
-      metadonnees: { email: input.email, role: input.role },
+      metadonnees: {
+        email: input.email,
+        role: input.role,
+        fonction: input.fonction ?? null,
+        matricule: input.matricule ?? null,
+      },
     });
 
     return {
       utilisateur: { id: created.user.id, email: input.email },
       profil: profil as Profil,
-      ...(input.password ? {} : { mot_de_passe_temporaire: motDePasse }),
+      mot_de_passe_temporaire: motDePasse,
     };
   }
 
@@ -158,6 +164,30 @@ export class UtilisateurService {
 
     await enregistrerAudit({
       action: 'profil.desactive',
+      profil_id: modifiePar ?? null,
+      type_entite: 'profil',
+      entite_id: id,
+    });
+
+    return data as Profil;
+  }
+
+  async reactiverProfil(id: string, modifiePar?: string): Promise<Profil> {
+    const admin = requireSupabaseAdmin();
+
+    const { data, error } = await admin
+      .from(TABLES.profils)
+      .update({ est_actif: true })
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (error) {
+      handleSupabaseError(error, 'Impossible de réactiver le profil.');
+    }
+
+    await enregistrerAudit({
+      action: 'profil.reactive',
       profil_id: modifiePar ?? null,
       type_entite: 'profil',
       entite_id: id,
@@ -227,10 +257,6 @@ export class UtilisateurService {
         total_pages: Math.max(1, Math.ceil(total / limite)),
       },
     };
-  }
-
-  private genererMotDePasseTemporaire(): string {
-    return `Ogefrem${Math.random().toString(36).slice(2, 10)}!`;
   }
 }
 

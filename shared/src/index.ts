@@ -16,15 +16,101 @@ export const ROLES_UTILISATEUR = [
 ] as const;
 export type RoleUtilisateur = (typeof ROLES_UTILISATEUR)[number];
 
+/**
+ * Rôles proposés à la création / édition admin.
+ * « participant » et « lecteur » ne sont plus assignés manuellement.
+ */
+export const ROLES_ASSIGNABLES_ADMIN = [
+  'administrateur',
+  'secretaire',
+  'directeur',
+] as const;
+export type RoleAssignableAdmin = (typeof ROLES_ASSIGNABLES_ADMIN)[number];
+
+/** Fonctions organiques OGEFREM (distinctes du rôle applicatif) */
+export const FONCTIONS_ORGANISATION = [
+  'agent',
+  'chef_service',
+  'sous_directeur',
+  'directeur',
+] as const;
+export type FonctionOrganisation = (typeof FONCTIONS_ORGANISATION)[number];
+
+/** Fonctions autorisées à créer une réunion déjà planifiée (sans validation) */
+export const FONCTIONS_CREATION_REUNION = [
+  'chef_service',
+  'sous_directeur',
+  'directeur',
+] as const;
+
+/** Mot de passe par défaut à la création d’un membre (admin) */
+export const MOT_DE_PASSE_DEFAUT = 'Ogefrem123!';
+
+/** Rôle applicatif dérivé de la fonction si aucun rôle spécial n’est choisi */
+export function roleDepuisFonction(
+  fonction: FonctionOrganisation | string | null | undefined,
+): RoleUtilisateur {
+  if (
+    fonction &&
+    (FONCTIONS_CREATION_REUNION as readonly string[]).includes(fonction)
+  ) {
+    return 'directeur';
+  }
+  return 'participant';
+}
+
+/**
+ * Tous les membres authentifiés peuvent proposer / créer une réunion.
+ * (L’approbation directeur s’applique aux agents — voir reunionDirectementPlanifiee.)
+ */
+export function peutCreerReunion(
+  _role?: RoleUtilisateur | null,
+  _fonction?: string | null,
+): boolean {
+  return true;
+}
+
+/** Secrétaire, direction, admin : réunion créée directement « planifiée » */
+export function reunionDirectementPlanifiee(
+  role: RoleUtilisateur | null | undefined,
+  fonction?: string | null,
+): boolean {
+  if (role === 'administrateur' || role === 'secretaire' || role === 'directeur') {
+    return true;
+  }
+  return Boolean(
+    fonction && (FONCTIONS_CREATION_REUNION as readonly string[]).includes(fonction),
+  );
+}
+
+/** Voit le catalogue complet des réunions (sinon : ses invitations + ses créations) */
+export function voitToutesLesReunions(
+  role: RoleUtilisateur | null | undefined,
+  fonction?: string | null,
+): boolean {
+  return reunionDirectementPlanifiee(role, fonction);
+}
+
+/** Directeur / sous-directeur / admin : valide ou refuse une proposition */
+export function peutApprouverReunion(
+  role: RoleUtilisateur | null | undefined,
+  fonction?: string | null,
+): boolean {
+  if (role === 'administrateur' || role === 'directeur') return true;
+  return fonction === 'directeur' || fonction === 'sous_directeur';
+}
+
 /** @deprecated Utiliser ROLES_UTILISATEUR */
 export const USER_ROLES = ROLES_UTILISATEUR;
 export type UserRole = RoleUtilisateur;
 
 export const STATUTS_REUNION = [
+  'en_attente_validation',
   'planifiee',
   'en_cours',
   'cloturee',
   'archivee',
+  'refusee',
 ] as const;
 export type StatutReunion = (typeof STATUTS_REUNION)[number];
 
@@ -123,6 +209,8 @@ export const TABLES = {
   empreintesVocales: 'empreintes_vocales',
   notifications: 'notifications',
   journauxAudit: 'journaux_audit',
+  commentairesCompteRendu: 'commentaires_compte_rendu',
+  parametresApplication: 'parametres_application',
 } as const;
 
 // =============================================================================
@@ -181,6 +269,7 @@ export type Profil = {
   nom: string;
   direction_id: string | null;
   fonction: string | null;
+  matricule: string | null;
   url_avatar: string | null;
   role: RoleUtilisateur;
   est_actif: boolean;
@@ -293,6 +382,25 @@ export type VersionCompteRendu = {
   cree_le: string;
 };
 
+export const TYPES_COMMENTAIRE_CR = [
+  'note',
+  'soumission',
+  'validation',
+  'rejet',
+] as const;
+export type TypeCommentaireCr = (typeof TYPES_COMMENTAIRE_CR)[number];
+
+export type CommentaireCompteRendu = {
+  id: string;
+  compte_rendu_id: string;
+  auteur_id: string | null;
+  type: TypeCommentaireCr;
+  contenu: string;
+  cree_le: string;
+  /** Enrichi côté API (optionnel) */
+  auteur_nom?: string | null;
+};
+
 export type Decision = {
   id: string;
   reunion_id: string;
@@ -326,4 +434,67 @@ export type ResultatRecherche = {
   reunions: Reunion[];
   decisions: Decision[];
   actions: ActionSuivi[];
+};
+
+/** Agrégats du tableau de bord (étape 9.1) */
+export type DashboardResume = {
+  reunions_a_venir: number;
+  reunions_en_cours: number;
+  reunions_mois: number;
+  cr_brouillons: number;
+  cr_soumis: number;
+  cr_valides_mois: number;
+  cr_crees_mois: number;
+  taux_validation_mois: number | null;
+  actions_ouvertes: number;
+  actions_en_retard: number;
+  mes_actions_ouvertes: number;
+  mois_libelle: string;
+};
+
+export type ParametresApplication = {
+  id: number;
+  logo_url: string | null;
+  en_tete_pdf: string;
+  sous_titre_pdf: string;
+  duree_retention_jours: number;
+  modifie_le: string;
+  modifie_par: string | null;
+};
+
+export const TYPES_NOTIFICATION = [
+  'invitation_reunion',
+  'reunion_approuvee',
+  'reunion_refusee',
+  'cr_soumis',
+  'cr_a_valider',
+  'cr_en_revision',
+  'cr_valide',
+  'cr_publie',
+  'cr_archive',
+  'action_en_retard',
+] as const;
+export type TypeNotification = (typeof TYPES_NOTIFICATION)[number];
+
+export type NotificationApp = {
+  id: string;
+  profil_id: string;
+  type: string;
+  titre: string;
+  message: string;
+  lien: string | null;
+  est_lu: boolean;
+  metadonnees: Record<string, unknown>;
+  cree_le: string;
+};
+
+export type JournalAudit = {
+  id: string;
+  profil_id: string | null;
+  action: string;
+  type_entite: string | null;
+  entite_id: string | null;
+  metadonnees: Record<string, unknown>;
+  adresse_ip: string | null;
+  cree_le: string;
 };

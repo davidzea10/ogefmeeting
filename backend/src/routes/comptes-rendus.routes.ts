@@ -5,9 +5,12 @@ import { requireAuth, requirePermission } from '../middleware/auth.js';
 import { validateBody, validateParams, validateQuery } from '../middleware/validate.js';
 import { idParamSchema } from '../schemas/common.schemas.js';
 import {
+  creerCommentaireCrSchema,
   creerCompteRenduSchema,
   listerComptesRendusQuerySchema,
   modifierCompteRenduSchema,
+  rejeterCompteRenduSchema,
+  soumettreCompteRenduSchema,
   validerCompteRenduSchema,
 } from '../schemas/compte-rendu.schemas.js';
 import { PERMISSIONS } from '../utils/permissions.js';
@@ -52,6 +55,7 @@ comptesRendusRouter.post(
   requireAuth,
   requirePermission(PERMISSIONS.CR_MODIFIER),
   validateParams(idParamSchema),
+  validateBody(soumettreCompteRenduSchema),
   asyncHandler((req, res) => compteRenduController.soumettre(req, res)),
 );
 
@@ -69,7 +73,33 @@ comptesRendusRouter.post(
   requireAuth,
   requirePermission(PERMISSIONS.CR_VALIDER),
   validateParams(idParamSchema),
+  validateBody(rejeterCompteRenduSchema),
   asyncHandler((req, res) => compteRenduController.rejeter(req, res)),
+);
+
+comptesRendusRouter.post(
+  '/:id/archiver',
+  requireAuth,
+  requirePermission(PERMISSIONS.CR_VALIDER),
+  validateParams(idParamSchema),
+  asyncHandler((req, res) => compteRenduController.archiver(req, res)),
+);
+
+comptesRendusRouter.get(
+  '/:id/commentaires',
+  requireAuth,
+  requirePermission(PERMISSIONS.CR_LIRE),
+  validateParams(idParamSchema),
+  asyncHandler((req, res) => compteRenduController.listerCommentaires(req, res)),
+);
+
+comptesRendusRouter.post(
+  '/:id/commentaires',
+  requireAuth,
+  requirePermission(PERMISSIONS.CR_VALIDER),
+  validateParams(idParamSchema),
+  validateBody(creerCommentaireCrSchema),
+  asyncHandler((req, res) => compteRenduController.ajouterCommentaire(req, res)),
 );
 
 comptesRendusRouter.get(
@@ -93,5 +123,5 @@ comptesRendusRouter.get(
   requireAuth,
   requirePermission(PERMISSIONS.CR_LIRE),
   validateParams(idParamSchema),
-  asyncHandler((req, res) => compteRenduController.exporter(req, res)),
+  asyncHandler((req, res) => compteRenduController.exporterPdf(req, res)),
 );

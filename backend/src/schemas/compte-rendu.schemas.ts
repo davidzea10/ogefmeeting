@@ -1,4 +1,4 @@
-import { STATUTS_COMPTE_RENDU } from '@ogefmeeting/shared';
+import { STATUTS_COMPTE_RENDU, TYPES_COMMENTAIRE_CR } from '@ogefmeeting/shared';
 import { z } from 'zod';
 import { paginationQuerySchema, uuidSchema } from './common.schemas.js';
 
@@ -33,8 +33,36 @@ export const listerComptesRendusQuerySchema = paginationQuerySchema.extend({
 
 export type ListerComptesRendusQuery = z.infer<typeof listerComptesRendusQuerySchema>;
 
+export const soumettreCompteRenduSchema = z.object({
+  commentaire: z.string().trim().max(4000).optional().nullable(),
+  auteur_id: uuidSchema.optional().nullable(),
+});
+
+export type SoumettreCompteRenduInput = z.infer<typeof soumettreCompteRenduSchema>;
+
 export const validerCompteRenduSchema = z.object({
   valide_par: uuidSchema.optional().nullable(),
+  commentaire: z.string().trim().max(4000).optional().nullable(),
 });
 
 export type ValiderCompteRenduInput = z.infer<typeof validerCompteRenduSchema>;
+
+export const rejeterCompteRenduSchema = z.object({
+  /** Motif obligatoire pour le renvoi en révision */
+  commentaire: z
+    .string()
+    .trim()
+    .min(5, 'Indiquez un motif d’au moins 5 caractères.')
+    .max(4000),
+  auteur_id: uuidSchema.optional().nullable(),
+});
+
+export type RejeterCompteRenduInput = z.infer<typeof rejeterCompteRenduSchema>;
+
+export const creerCommentaireCrSchema = z.object({
+  contenu: z.string().trim().min(1).max(4000),
+  type: z.enum(TYPES_COMMENTAIRE_CR).default('note'),
+  auteur_id: uuidSchema.optional().nullable(),
+});
+
+export type CreerCommentaireCrInput = z.infer<typeof creerCommentaireCrSchema>;

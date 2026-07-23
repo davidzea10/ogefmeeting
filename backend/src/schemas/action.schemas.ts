@@ -45,6 +45,7 @@ export const listerActionsQuerySchema = paginationQuerySchema.extend({
   statut: z.enum(STATUTS_ACTION).optional(),
   priorite: z.enum(PRIORITES_ACTION).optional(),
   reunion_id: uuidSchema.optional(),
+  compte_rendu_id: uuidSchema.optional(),
   responsable_id: uuidSchema.optional(),
   tri: z.enum(['date_echeance', 'cree_le', 'priorite', 'statut']).default('date_echeance'),
 });

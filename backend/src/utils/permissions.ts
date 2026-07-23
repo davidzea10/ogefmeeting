@@ -1,4 +1,5 @@
-import type { RoleUtilisateur } from '@ogefmeeting/shared';
+import type { FonctionOrganisation, RoleUtilisateur } from '@ogefmeeting/shared';
+import { FONCTIONS_CREATION_REUNION, peutCreerReunion } from '@ogefmeeting/shared';
 
 /**
  * Permissions fines — utilisées quand AUTH_ENFORCED=true.
@@ -28,11 +29,19 @@ export const PERMISSIONS = {
 
   DIRECTIONS_GERER: 'directions:gerer',
   MODELES_GERER: 'modeles:gerer',
+  PARAMETRES_GERER: 'parametres:gerer',
   RECHERCHE: 'recherche:utiliser',
   AUDIT_LIRE: 'audit:lire',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
+
+/** Permissions accordées via fonction organique (chef / sous-dir / dir) */
+const PERMISSIONS_FONCTION_GESTION: Permission[] = [
+  PERMISSIONS.REUNIONS_CREER,
+  PERMISSIONS.REUNIONS_MODIFIER,
+  PERMISSIONS.REUNIONS_DEMARRER,
+];
 
 const MATRICE: Record<RoleUtilisateur, Permission[]> = {
   administrateur: Object.values(PERMISSIONS),
@@ -74,6 +83,8 @@ const MATRICE: Record<RoleUtilisateur, Permission[]> = {
 
   participant: [
     PERMISSIONS.REUNIONS_LIRE,
+    PERMISSIONS.REUNIONS_CREER,
+    PERMISSIONS.REUNIONS_MODIFIER,
     PERMISSIONS.CR_LIRE,
     PERMISSIONS.ACTIONS_LIRE,
     PERMISSIONS.ACTIONS_GERER,
@@ -96,6 +107,39 @@ export function roleAutorise(role: RoleUtilisateur, permission: Permission): boo
   return MATRICE[role].includes(permission);
 }
 
-export function permissionsPourRole(role: RoleUtilisateur): Permission[] {
-  return [...MATRICE[role]];
+export function autorisePermission(
+  role: RoleUtilisateur,
+  permission: Permission,
+  fonction?: string | null,
+): boolean {
+  if (roleAutorise(role, permission)) return true;
+
+  const fonctionGestion =
+    Boolean(fonction) &&
+    (FONCTIONS_CREATION_REUNION as readonly string[]).includes(fonction!);
+
+  if (fonctionGestion && PERMISSIONS_FONCTION_GESTION.includes(permission)) {
+    return true;
+  }
+
+  return false;
 }
+
+export function permissionsPourRole(
+  role: RoleUtilisateur,
+  fonction?: string | null,
+): Permission[] {
+  const base = [...MATRICE[role]];
+  if (
+    fonction &&
+    (FONCTIONS_CREATION_REUNION as readonly string[]).includes(fonction)
+  ) {
+    for (const p of PERMISSIONS_FONCTION_GESTION) {
+      if (!base.includes(p)) base.push(p);
+    }
+  }
+  return base;
+}
+
+export { peutCreerReunion };
+export type { FonctionOrganisation };

@@ -78,6 +78,22 @@ reunionsRouter.post(
   asyncHandler((req, res) => reunionController.cloturer(req, res)),
 );
 
+reunionsRouter.post(
+  '/:id/approuver',
+  requireAuth,
+  requirePermission(PERMISSIONS.REUNIONS_LIRE),
+  validateParams(idParamSchema),
+  asyncHandler((req, res) => reunionController.approuver(req, res)),
+);
+
+reunionsRouter.post(
+  '/:id/refuser',
+  requireAuth,
+  requirePermission(PERMISSIONS.REUNIONS_LIRE),
+  validateParams(idParamSchema),
+  asyncHandler((req, res) => reunionController.refuser(req, res)),
+);
+
 reunionsRouter.put(
   '/:id/participants',
   requireAuth,

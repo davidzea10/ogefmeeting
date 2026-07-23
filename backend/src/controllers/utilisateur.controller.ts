@@ -36,7 +36,7 @@ export class UtilisateurController {
       data: {
         authentifie: true,
         profil,
-        permissions: permissionsPourRole(req.user.role),
+        permissions: permissionsPourRole(req.user.role, req.user.fonction),
       },
     });
   }
@@ -72,6 +72,14 @@ export class UtilisateurController {
 
   async desactiverProfil(req: Request, res: Response): Promise<void> {
     const data = await utilisateurService.desactiverProfil(
+      req.params.id as string,
+      req.user?.id,
+    );
+    res.status(200).json({ success: true, data });
+  }
+
+  async reactiverProfil(req: Request, res: Response): Promise<void> {
+    const data = await utilisateurService.reactiverProfil(
       req.params.id as string,
       req.user?.id,
     );

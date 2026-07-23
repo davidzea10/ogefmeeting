@@ -10,6 +10,7 @@ import { ReunionPagination } from '@/components/reunions/ReunionPagination';
 import { ReunionTable } from '@/components/reunions/ReunionTable';
 import { Button } from '@/components/ui/Button';
 import { debutJourneeISO, finJourneeISO } from '@/lib/labels';
+import { peutCreerReunionRole } from '@/lib/roles';
 import {
   archiverReunion,
   demarrerReunion,
@@ -17,6 +18,7 @@ import {
   listerProfils,
   listerReunions,
 } from '@/lib/reunions-api';
+import { useAuthStore } from '@/stores/auth.store';
 import type { Direction, Profil, StatutReunion, TypeReunion } from '@ogefmeeting/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarDays, LayoutList, Plus } from 'lucide-react';
@@ -37,6 +39,9 @@ export function ReunionsListPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const announce = useAnnouncerStore((s) => s.announce);
+  const profil = useAuthStore((s) => s.profil);
+  const role = useAuthStore((s) => s.role ?? s.profil?.role ?? null);
+  const peutCreer = peutCreerReunionRole(role, profil?.fonction);
 
   const [vue, setVue] = useState<VueMode>('tableau');
   const [filtres, setFiltres] = useState<ReunionFiltersState>(FILTRES_VIDES);
@@ -177,12 +182,14 @@ export function ReunionsListPage() {
               Calendrier
             </Button>
           </div>
-          <Link to="/reunions/nouvelle" className="min-w-0 flex-1 sm:flex-none">
-            <Button className="w-full sm:w-auto">
-              <Plus className="h-4 w-4" aria-hidden />
-              Nouvelle
-            </Button>
-          </Link>
+          {peutCreer && (
+            <Link to="/reunions/nouvelle" className="min-w-0 flex-1 sm:flex-none">
+              <Button className="w-full sm:w-auto">
+                <Plus className="h-4 w-4" aria-hidden />
+                Nouvelle
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -214,14 +221,18 @@ export function ReunionsListPage() {
         <div className="rounded-xl border border-dashed border-border bg-surface p-10 text-center">
           <h3 className="text-lg font-semibold text-text">Aucune réunion</h3>
           <p className="mt-2 text-sm text-text-muted">
-            Modifiez les filtres ou créez une nouvelle réunion.
+            {peutCreer
+              ? 'Modifiez les filtres ou créez une nouvelle réunion.'
+              : 'Vous voyez vos invitations et vos propositions (en attente ou planifiées).'}
           </p>
-          <Link to="/reunions/nouvelle" className="mt-4 inline-block">
-            <Button>
-              <Plus className="h-4 w-4" aria-hidden />
-              Créer une réunion
-            </Button>
-          </Link>
+          {peutCreer && (
+            <Link to="/reunions/nouvelle" className="mt-4 inline-block">
+              <Button>
+                <Plus className="h-4 w-4" aria-hidden />
+                Nouvelle réunion
+              </Button>
+            </Link>
+          )}
         </div>
       )}
 

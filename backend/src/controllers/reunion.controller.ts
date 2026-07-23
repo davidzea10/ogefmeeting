@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { reunionDirectementPlanifiee } from '@ogefmeeting/shared';
 import type {
   CreerReunionInput,
   GererOrdreJourInput,
@@ -7,6 +8,11 @@ import type {
   ModifierReunionInput,
 } from '../schemas/reunion.schemas.js';
 import { reunionService } from '../services/reunion.service.js';
+import { AppError } from '../utils/errors.js';
+import {
+  profilLimiteAuxParticipations,
+  utilisateurPeutApprouver,
+} from '../utils/reunion-acces.js';
 
 /**
  * Contrôleur Réunions — couche HTTP (MVC).
@@ -14,22 +20,32 @@ import { reunionService } from '../services/reunion.service.js';
 export class ReunionController {
   async creer(req: Request, res: Response): Promise<void> {
     const body = req.body as CreerReunionInput;
-    const data = await reunionService.creer({
-      ...body,
-      // Si JWT présent, on rattache le créateur automatiquement (sans forcer le login)
-      cree_par: body.cree_par ?? req.user?.id ?? null,
-    });
+    const directementPlanifiee = reunionDirectementPlanifiee(
+      req.user?.role,
+      req.user?.fonction,
+    );
+    const data = await reunionService.creer(
+      {
+        ...body,
+        cree_par: body.cree_par ?? req.user?.id ?? null,
+      },
+      { directementPlanifiee },
+    );
     res.status(201).json({ success: true, data });
   }
 
   async lister(req: Request, res: Response): Promise<void> {
     const query = (req.validated?.query ?? req.query) as ListerReunionsQuery;
-    const data = await reunionService.lister(query);
+    const data = await reunionService.lister(query, {
+      limiterAuProfilId: profilLimiteAuxParticipations(req.user),
+    });
     res.status(200).json({ success: true, data });
   }
 
   async obtenirParId(req: Request, res: Response): Promise<void> {
-    const data = await reunionService.obtenirParId(req.params.id as string);
+    const data = await reunionService.obtenirParId(req.params.id as string, {
+      limiterAuProfilId: profilLimiteAuxParticipations(req.user),
+    });
     res.status(200).json({ success: true, data });
   }
 
@@ -53,6 +69,28 @@ export class ReunionController {
 
   async cloturer(req: Request, res: Response): Promise<void> {
     const data = await reunionService.cloturer(req.params.id as string);
+    res.status(200).json({ success: true, data });
+  }
+
+  async approuver(req: Request, res: Response): Promise<void> {
+    if (!utilisateurPeutApprouver(req.user)) {
+      throw new AppError(403, 'Seul un directeur peut valider une réunion.');
+    }
+    const data = await reunionService.approuver(
+      req.params.id as string,
+      req.user?.id,
+    );
+    res.status(200).json({ success: true, data });
+  }
+
+  async refuser(req: Request, res: Response): Promise<void> {
+    if (!utilisateurPeutApprouver(req.user)) {
+      throw new AppError(403, 'Seul un directeur peut refuser une réunion.');
+    }
+    const data = await reunionService.refuser(
+      req.params.id as string,
+      req.user?.id,
+    );
     res.status(200).json({ success: true, data });
   }
 

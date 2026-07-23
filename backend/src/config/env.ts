@@ -60,6 +60,13 @@ const envSchema = z.object({
    * Si true : requireAuth / requireRoles refusent les requêtes non authentifiées.
    */
   AUTH_ENFORCED: booleanFromEnv.default(false),
+  /** Clé API Resend — si absente, les emails sont journalisés (dev) sans envoi réel. */
+  RESEND_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  /** Expéditeur Resend, ex. Ogefmeeting <noreply@votredomaine.com> */
+  EMAIL_FROM: z.preprocess(
+    emptyToUndefined,
+    z.string().min(3).optional(),
+  ).default('Ogefmeeting <onboarding@resend.dev>'),
 });
 
 const parsed = envSchema.parse(process.env);

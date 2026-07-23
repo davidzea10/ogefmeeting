@@ -38,7 +38,8 @@ export class ActionService {
 
   async lister(query: ListerActionsQuery): Promise<PaginatedResult<ActionSuivi>> {
     const supabase = requireSupabaseAdmin();
-    const { page, limite, tri, ordre, statut, priorite, reunion_id, responsable_id } = query;
+    const { page, limite, tri, ordre, statut, priorite, reunion_id, responsable_id, compte_rendu_id } =
+      query;
     const from = (page - 1) * limite;
     const to = from + limite - 1;
 
@@ -47,6 +48,7 @@ export class ActionService {
     if (statut) builder = builder.eq('statut', statut);
     if (priorite) builder = builder.eq('priorite', priorite);
     if (reunion_id) builder = builder.eq('reunion_id', reunion_id);
+    if (compte_rendu_id) builder = builder.eq('compte_rendu_id', compte_rendu_id);
     if (responsable_id) builder = builder.eq('responsable_id', responsable_id);
 
     const { data, error, count } = await builder

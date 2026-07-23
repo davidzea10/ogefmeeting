@@ -56,6 +56,14 @@ utilisateursRouter.post(
   asyncHandler((req, res) => utilisateurController.desactiverProfil(req, res)),
 );
 
+utilisateursRouter.post(
+  '/:id/reactiver',
+  requireAuth,
+  requirePermission(PERMISSIONS.UTILISATEURS_INVITER),
+  validateParams(idParamSchema),
+  asyncHandler((req, res) => utilisateurController.reactiverProfil(req, res)),
+);
+
 /** Journal d'audit — /api/audit */
 export const auditRouter = Router();
 

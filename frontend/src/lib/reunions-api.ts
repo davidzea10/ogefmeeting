@@ -64,6 +64,14 @@ export function demarrerReunion(id: string) {
   return apiFetch<Reunion>(`/api/reunions/${id}/demarrer`, { method: 'POST' });
 }
 
+export function approuverReunion(id: string) {
+  return apiFetch<Reunion>(`/api/reunions/${id}/approuver`, { method: 'POST' });
+}
+
+export function refuserReunion(id: string) {
+  return apiFetch<Reunion>(`/api/reunions/${id}/refuser`, { method: 'POST' });
+}
+
 export function archiverReunion(id: string) {
   return apiFetch<Reunion>(`/api/reunions/${id}`, { method: 'DELETE' });
 }

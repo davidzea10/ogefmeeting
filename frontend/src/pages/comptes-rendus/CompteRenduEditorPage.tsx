@@ -1,13 +1,21 @@
 import { useAnnouncerStore } from '@/components/a11y/LiveAnnouncer';
 import { Breadcrumbs } from '@/components/layout/Breadcrumbs';
+import { CrDecisionsActionsPanel } from '@/components/comptes-rendus/CrDecisionsActionsPanel';
 import { CrSectionEditor } from '@/components/comptes-rendus/CrSectionEditor';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import {
+  ajouterCommentaireCompteRendu,
+  archiverCompteRendu,
+  listerCommentairesCompteRendu,
   listerVersionsCompteRendu,
   modifierCompteRendu,
   obtenirCompteRendu,
   listerModelesCompteRendu,
+  rejeterCompteRendu,
+  soumettreCompteRendu,
+  telechargerPdfCompteRendu,
+  validerCompteRendu,
 } from '@/lib/comptes-rendus-api';
 import {
   contenuEstVide,
@@ -16,27 +24,53 @@ import {
   sectionsDepuisModele,
   type ContenuCr,
 } from '@/lib/cr-prefill';
+import {
+  LIBELLES_STATUT_CR,
+  messageWorkflowCr,
+  peutApprouverCr,
+  peutArchiverCr,
+  peutModifierCr,
+  peutSoumettreCr,
+  peutValiderCr,
+} from '@/lib/cr-workflow';
 import { formatDateHeure } from '@/lib/labels';
 import { listerProfils, obtenirReunion } from '@/lib/reunions-api';
 import { useAuthStore } from '@/stores/auth.store';
 import type { SectionCompteRendu } from '@ogefmeeting/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { History, Save } from 'lucide-react';
+import {
+  Archive,
+  CheckCircle2,
+  Download,
+  History,
+  MessageSquare,
+  RotateCcw,
+  Save,
+  Send,
+} from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
-const LIBELLES_STATUT_CR: Record<string, string> = {
-  brouillon: 'Brouillon',
-  soumis: 'Soumis',
-  en_revision: 'En révision',
-  valide: 'Validé',
-  archive: 'Archivé',
+function badgeVariantPourStatut(statut: string): 'neutral' | 'warning' | 'success' | 'default' {
+  if (statut === 'valide') return 'success';
+  if (statut === 'soumis') return 'warning';
+  if (statut === 'en_revision') return 'default';
+  if (statut === 'archive') return 'neutral';
+  return 'neutral';
+}
+
+const LIBELLES_TYPE_COMMENTAIRE: Record<string, string> = {
+  note: 'Note',
+  soumission: 'Soumission',
+  validation: 'Validation',
+  rejet: 'Rejet',
 };
 
 export function CompteRenduEditorPage() {
   const { id } = useParams<{ id: string }>();
   const announce = useAnnouncerStore((s) => s.announce);
   const profilId = useAuthStore((s) => s.profil?.id);
+  const role = useAuthStore((s) => s.role ?? s.profil?.role ?? null);
   const queryClient = useQueryClient();
 
   const [contenu, setContenu] = useState<ContenuCr>({});
@@ -44,6 +78,8 @@ export function CompteRenduEditorPage() {
   const [dirty, setDirty] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [showVersions, setShowVersions] = useState(false);
+  const [commentaireAction, setCommentaireAction] = useState('');
+  const [noteLibre, setNoteLibre] = useState('');
   const initDone = useRef(false);
 
   const crQuery = useQuery({
@@ -74,17 +110,26 @@ export function CompteRenduEditorPage() {
     enabled: Boolean(id) && showVersions,
   });
 
+  const commentairesQuery = useQuery({
+    queryKey: ['compte-rendu-commentaires', id],
+    queryFn: () => listerCommentairesCompteRendu(id!),
+    enabled: Boolean(id),
+  });
+
+  const statut = crQuery.data?.statut;
   const editable =
-    crQuery.data?.statut === 'brouillon' || crQuery.data?.statut === 'en_revision';
+    Boolean(statut) &&
+    peutModifierCr(role) &&
+    (statut === 'brouillon' || statut === 'en_revision');
 
   const optsHistoriserRef = useRef(false);
 
-  // Initialisation contenu + sections (attendre modèles + profils pour un préremplissage complet)
   useEffect(() => {
     if (!crQuery.data || !reunionQuery.data || initDone.current) return;
     if (!modelesQuery.isFetched || !profilsQuery.isFetched) return;
 
-    const modele = modelesQuery.data?.find((m) => m.id === reunionQuery.data!.modele_id) ??
+    const modele =
+      modelesQuery.data?.find((m) => m.id === reunionQuery.data!.modele_id) ??
       modelesQuery.data?.find((m) => m.est_par_defaut) ??
       null;
 
@@ -119,6 +164,16 @@ export function CompteRenduEditorPage() {
     profilsQuery.isFetched,
   ]);
 
+  const invalidateCr = async (reunionId?: string) => {
+    await queryClient.invalidateQueries({ queryKey: ['compte-rendu', id] });
+    await queryClient.invalidateQueries({ queryKey: ['compte-rendu-versions', id] });
+    await queryClient.invalidateQueries({ queryKey: ['compte-rendu-commentaires', id] });
+    await queryClient.invalidateQueries({ queryKey: ['comptes-rendus'] });
+    if (reunionId) {
+      await queryClient.invalidateQueries({ queryKey: ['comptes-rendus', reunionId] });
+    }
+  };
+
   const saveMut = useMutation({
     mutationFn: (opts: { historiser: boolean }) =>
       modifierCompteRendu(id!, {
@@ -130,11 +185,7 @@ export function CompteRenduEditorPage() {
     onSuccess: async (data) => {
       setDirty(false);
       setLastSavedAt(new Date());
-      await queryClient.invalidateQueries({ queryKey: ['compte-rendu', id] });
-      await queryClient.invalidateQueries({ queryKey: ['compte-rendu-versions', id] });
-      await queryClient.invalidateQueries({
-        queryKey: ['comptes-rendus', data.reunion_id],
-      });
+      await invalidateCr(data.reunion_id);
       if (optsHistoriserRef.current) {
         announce(`Version ${data.version} enregistrée.`);
       }
@@ -142,7 +193,98 @@ export function CompteRenduEditorPage() {
     onError: (e: Error) => announce(e.message),
   });
 
-  // Auto-save 30s
+  const soumettreMut = useMutation({
+    mutationFn: async () => {
+      if (dirty) {
+        await modifierCompteRendu(id!, {
+          contenu,
+          contenu_html: contenuVersHtml(sections, contenu),
+          modifie_par: profilId ?? null,
+          historiser: true,
+        });
+        setDirty(false);
+      }
+      return soumettreCompteRendu(id!, {
+        commentaire: commentaireAction.trim() || null,
+        auteur_id: profilId ?? null,
+      });
+    },
+    onSuccess: async (data) => {
+      setCommentaireAction('');
+      await invalidateCr(data.reunion_id);
+      announce('Compte rendu soumis. Les directeurs ont été notifiés.');
+    },
+    onError: (e: Error) => announce(e.message),
+  });
+
+  const validerMut = useMutation({
+    mutationFn: () =>
+      validerCompteRendu(id!, {
+        valide_par: profilId ?? null,
+        commentaire: commentaireAction.trim() || null,
+      }),
+    onSuccess: async (data) => {
+      setCommentaireAction('');
+      await invalidateCr(data.reunion_id);
+      announce('Compte rendu validé. Le rédacteur a été notifié.');
+    },
+    onError: (e: Error) => announce(e.message),
+  });
+
+  const rejeterMut = useMutation({
+    mutationFn: () =>
+      rejeterCompteRendu(id!, {
+        commentaire: commentaireAction.trim(),
+        auteur_id: profilId ?? null,
+      }),
+    onSuccess: async (data) => {
+      setCommentaireAction('');
+      await invalidateCr(data.reunion_id);
+      announce('Compte rendu renvoyé en révision. Le rédacteur a été notifié.');
+    },
+    onError: (e: Error) => announce(e.message),
+  });
+
+  const archiverMut = useMutation({
+    mutationFn: () => archiverCompteRendu(id!),
+    onSuccess: async (data) => {
+      await invalidateCr(data.reunion_id);
+      announce('Compte rendu archivé.');
+    },
+    onError: (e: Error) => announce(e.message),
+  });
+
+  const pdfMut = useMutation({
+    mutationFn: () => telechargerPdfCompteRendu(id!),
+    onSuccess: ({ blob, filename }) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      announce('PDF téléchargé.');
+    },
+    onError: (e: Error) => announce(e.message),
+  });
+
+  const noteMut = useMutation({
+    mutationFn: () =>
+      ajouterCommentaireCompteRendu(id!, {
+        contenu: noteLibre.trim(),
+        type: 'note',
+        auteur_id: profilId ?? null,
+      }),
+    onSuccess: async () => {
+      setNoteLibre('');
+      await queryClient.invalidateQueries({ queryKey: ['compte-rendu-commentaires', id] });
+      announce('Commentaire ajouté.');
+    },
+    onError: (e: Error) => announce(e.message),
+  });
+
   useEffect(() => {
     if (!editable || !dirty || !initDone.current) return;
     const t = window.setTimeout(() => {
@@ -153,11 +295,20 @@ export function CompteRenduEditorPage() {
   }, [contenu, dirty, editable]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const statusLabel = useMemo(() => {
-    if (saveMut.isPending) return 'Enregistrement…';
+    if (saveMut.isPending || soumettreMut.isPending) return 'Enregistrement…';
     if (dirty) return 'Modifications non enregistrées';
     if (lastSavedAt) return `Enregistré à ${lastSavedAt.toLocaleTimeString('fr-FR')}`;
     return 'À jour';
-  }, [saveMut.isPending, dirty, lastSavedAt]);
+  }, [saveMut.isPending, soumettreMut.isPending, dirty, lastSavedAt]);
+
+  const workflowBusy =
+    saveMut.isPending ||
+    soumettreMut.isPending ||
+    validerMut.isPending ||
+    rejeterMut.isPending ||
+    archiverMut.isPending ||
+    pdfMut.isPending ||
+    noteMut.isPending;
 
   if (!id) {
     return <p className="text-danger">Identifiant manquant.</p>;
@@ -186,20 +337,26 @@ export function CompteRenduEditorPage() {
 
   const cr = crQuery.data;
   const reunion = reunionQuery.data;
+  const showSoumettre = peutSoumettreCr(role, cr.statut);
+  const showValidation = peutApprouverCr(role, cr.statut);
+  const showArchiver = peutArchiverCr(role, cr.statut);
+  const showNoteDirecteur = peutValiderCr(role) && cr.statut === 'soumis';
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">
       <Breadcrumbs
         items={[
-          { label: 'Réunions', href: '/reunions' },
+          { label: 'Comptes rendus', href: '/comptes-rendus' },
           { label: reunion.titre, href: `/reunions/${reunion.id}?tab=compte-rendu` },
-          { label: 'Compte rendu' },
+          { label: 'Édition' },
         ]}
       />
 
       <header className="space-y-3 rounded-xl border border-border bg-surface p-4 shadow-sm sm:p-5">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="neutral">{LIBELLES_STATUT_CR[cr.statut] ?? cr.statut}</Badge>
+          <Badge variant={badgeVariantPourStatut(cr.statut)}>
+            {LIBELLES_STATUT_CR[cr.statut] ?? cr.statut}
+          </Badge>
           <Badge variant="default">v{cr.version}</Badge>
           <span className="text-xs text-text-muted">{statusLabel}</span>
         </div>
@@ -211,12 +368,42 @@ export function CompteRenduEditorPage() {
           {reunion.lieu ? ` · ${reunion.lieu}` : ''}
         </p>
 
+        <p
+          className="rounded-lg border border-border bg-surface-muted/70 px-3 py-2 text-sm text-text"
+          role="status"
+        >
+          {messageWorkflowCr(cr.statut)}
+          {cr.soumis_le ? ` · Soumis le ${formatDateHeure(cr.soumis_le)}` : ''}
+          {cr.valide_le ? ` · Validé le ${formatDateHeure(cr.valide_le)}` : ''}
+        </p>
+
+        {(showSoumettre || showValidation) && (
+          <label className="block space-y-1 text-sm">
+            <span className="font-medium text-text">
+              {showValidation
+                ? 'Commentaire / motif (obligatoire pour renvoyer en révision)'
+                : 'Message optionnel à la soumission'}
+            </span>
+            <textarea
+              className="min-h-[4.5rem] w-full rounded-lg border border-border bg-surface px-3 py-2 text-text"
+              value={commentaireAction}
+              onChange={(e) => setCommentaireAction(e.target.value)}
+              placeholder={
+                showValidation
+                  ? 'Ex. Merci de préciser la décision sur le point 3…'
+                  : 'Ex. CR prêt pour relecture…'
+              }
+            />
+          </label>
+        )}
+
         <div className="flex flex-wrap gap-2">
           {editable && (
             <>
               <Button
                 size="sm"
                 loading={saveMut.isPending}
+                disabled={workflowBusy}
                 onClick={() => {
                   optsHistoriserRef.current = false;
                   saveMut.mutate({ historiser: false });
@@ -230,6 +417,7 @@ export function CompteRenduEditorPage() {
                 size="sm"
                 variant="outline"
                 loading={saveMut.isPending}
+                disabled={workflowBusy}
                 onClick={() => {
                   optsHistoriserRef.current = true;
                   saveMut.mutate({ historiser: true });
@@ -239,6 +427,96 @@ export function CompteRenduEditorPage() {
               </Button>
             </>
           )}
+
+          {showSoumettre && (
+            <Button
+              size="sm"
+              variant="outline"
+              loading={soumettreMut.isPending}
+              disabled={workflowBusy}
+              onClick={() => {
+                if (
+                  window.confirm(
+                    'Soumettre ce compte rendu pour validation ? Les directeurs seront notifiés.',
+                  )
+                ) {
+                  soumettreMut.mutate();
+                }
+              }}
+            >
+              <Send className="h-4 w-4" aria-hidden />
+              Soumettre pour validation
+            </Button>
+          )}
+
+          {showValidation && (
+            <>
+              <Button
+                size="sm"
+                loading={validerMut.isPending}
+                disabled={workflowBusy}
+                onClick={() => {
+                  if (window.confirm('Valider définitivement ce compte rendu ?')) {
+                    validerMut.mutate();
+                  }
+                }}
+              >
+                <CheckCircle2 className="h-4 w-4" aria-hidden />
+                Approuver
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                loading={rejeterMut.isPending}
+                disabled={workflowBusy || commentaireAction.trim().length < 5}
+                onClick={() => {
+                  if (commentaireAction.trim().length < 5) {
+                    announce('Indiquez un motif d’au moins 5 caractères.');
+                    return;
+                  }
+                  if (
+                    window.confirm(
+                      'Renvoyer ce compte rendu en révision avec ce motif ?',
+                    )
+                  ) {
+                    rejeterMut.mutate();
+                  }
+                }}
+              >
+                <RotateCcw className="h-4 w-4" aria-hidden />
+                Rejeter / révision
+              </Button>
+            </>
+          )}
+
+          {showArchiver && (
+            <Button
+              size="sm"
+              variant="outline"
+              loading={archiverMut.isPending}
+              disabled={workflowBusy}
+              onClick={() => {
+                if (window.confirm('Archiver ce compte rendu validé ?')) {
+                  archiverMut.mutate();
+                }
+              }}
+            >
+              <Archive className="h-4 w-4" aria-hidden />
+              Archiver
+            </Button>
+          )}
+
+          <Button
+            size="sm"
+            variant="outline"
+            loading={pdfMut.isPending}
+            disabled={workflowBusy}
+            onClick={() => pdfMut.mutate()}
+          >
+            <Download className="h-4 w-4" aria-hidden />
+            Télécharger PDF
+          </Button>
+
           <Button
             size="sm"
             variant="ghost"
@@ -254,13 +532,79 @@ export function CompteRenduEditorPage() {
           </Link>
         </div>
 
-        {!editable && (
+        {!editable && cr.statut !== 'soumis' && (
           <p className="rounded-lg bg-surface-muted px-3 py-2 text-sm text-text-muted">
             Ce compte rendu est en lecture seule (statut :{' '}
             {LIBELLES_STATUT_CR[cr.statut] ?? cr.statut}).
           </p>
         )}
       </header>
+
+      <section className="rounded-xl border border-border bg-surface p-4 shadow-sm">
+        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text">
+          <MessageSquare className="h-4 w-4 text-ogefrem-blue" aria-hidden />
+          Commentaires de validation
+        </h3>
+
+        {commentairesQuery.isLoading && (
+          <p className="text-sm text-text-muted">Chargement des commentaires…</p>
+        )}
+        {commentairesQuery.isError && (
+          <p className="text-sm text-danger">
+            Impossible de charger les commentaires. Vérifiez que la migration SQL a été
+            appliquée sur Supabase.
+          </p>
+        )}
+        {commentairesQuery.isSuccess && commentairesQuery.data.length === 0 && (
+          <p className="text-sm text-text-muted">Aucun commentaire pour l’instant.</p>
+        )}
+        {commentairesQuery.isSuccess && commentairesQuery.data.length > 0 && (
+          <ul className="mb-4 space-y-3">
+            {commentairesQuery.data.map((c) => (
+              <li
+                key={c.id}
+                className="rounded-lg border border-border bg-surface-muted/50 px-3 py-2 text-sm"
+              >
+                <div className="mb-1 flex flex-wrap items-center gap-2">
+                  <Badge variant={c.type === 'rejet' ? 'warning' : 'neutral'}>
+                    {LIBELLES_TYPE_COMMENTAIRE[c.type] ?? c.type}
+                  </Badge>
+                  <span className="font-medium text-text">
+                    {c.auteur_nom ?? 'Utilisateur'}
+                  </span>
+                  <span className="text-xs text-text-muted">
+                    {formatDateHeure(c.cree_le)}
+                  </span>
+                </div>
+                <p className="whitespace-pre-wrap text-text">{c.contenu}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {showNoteDirecteur && (
+          <div className="space-y-2 border-t border-border pt-3">
+            <label className="block text-sm font-medium text-text">
+              Ajouter une note (sans changer le statut)
+            </label>
+            <textarea
+              className="min-h-[3.5rem] w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text"
+              value={noteLibre}
+              onChange={(e) => setNoteLibre(e.target.value)}
+              placeholder="Observation pour le secrétaire…"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={workflowBusy || noteLibre.trim().length === 0}
+              loading={noteMut.isPending}
+              onClick={() => noteMut.mutate()}
+            >
+              Publier la note
+            </Button>
+          </div>
+        )}
+      </section>
 
       {showVersions && (
         <aside className="rounded-xl border border-border bg-surface p-4 text-sm">
@@ -283,6 +627,13 @@ export function CompteRenduEditorPage() {
           )}
         </aside>
       )}
+
+      <CrDecisionsActionsPanel
+        reunionId={reunion.id}
+        compteRenduId={cr.id}
+        profils={profilsQuery.data?.items ?? []}
+        editable={cr.statut !== 'archive'}
+      />
 
       <div className="space-y-3">
         {sections.map((section, index) => (

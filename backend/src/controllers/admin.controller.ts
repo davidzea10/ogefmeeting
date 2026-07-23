@@ -14,6 +14,7 @@ import {
   profilService,
   rechercheService,
 } from '../services/admin.service.js';
+import { profilLimiteAuxParticipations } from '../utils/reunion-acces.js';
 
 export class DirectionController {
   async lister(_req: Request, res: Response): Promise<void> {
@@ -79,7 +80,9 @@ export class ModeleController {
 export class RechercheController {
   async rechercher(req: Request, res: Response): Promise<void> {
     const query = (req.validated?.query ?? req.query) as RechercheQuery;
-    const data = await rechercheService.rechercher(query);
+    const data = await rechercheService.rechercher(query, {
+      limiterReunionsAuProfilId: profilLimiteAuxParticipations(req.user),
+    });
     res.status(200).json({ success: true, data });
   }
 }

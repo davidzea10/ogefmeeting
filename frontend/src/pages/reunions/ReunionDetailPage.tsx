@@ -5,6 +5,7 @@ import { ReunionTabs, type TabId } from '@/components/reunions/ReunionTabs';
 import { ReunionTimeline } from '@/components/reunions/ReunionTimeline';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { listerActions, listerDecisions } from '@/lib/actions-decisions-api';
 import {
   formatDateHeure,
   formatDirection,
@@ -13,17 +14,20 @@ import {
 } from '@/lib/labels';
 import {
   archiverReunion,
+  approuverReunion,
   cloturerReunion,
   creerCompteRendu,
   demarrerReunion,
-  listerActionsReunion,
   listerComptesRendusReunion,
   listerDirections,
   listerProfils,
   modifierParticipantStatut,
   modifierPointOrdreJour,
   obtenirReunion,
+  refuserReunion,
 } from '@/lib/reunions-api';
+import { peutApprouverReunionRole } from '@/lib/roles';
+import { useAuthStore } from '@/stores/auth.store';
 import {
   STATUTS_PARTICIPANT,
   type Profil,
@@ -32,12 +36,14 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Archive,
+  Check,
   CheckSquare,
   Mic,
   Pencil,
   Play,
   Radio,
   Square,
+  X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -48,6 +54,9 @@ export function ReunionDetailPage() {
   const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const announce = useAnnouncerStore((s) => s.announce);
+  const profil = useAuthStore((s) => s.profil);
+  const role = useAuthStore((s) => s.role ?? s.profil?.role ?? null);
+  const peutApprouver = peutApprouverReunionRole(role, profil?.fonction);
   const [tab, setTab] = useState<TabId>('informations');
 
   useEffect(() => {
@@ -81,8 +90,14 @@ export function ReunionDetailPage() {
   });
 
   const actionsQuery = useQuery({
-    queryKey: ['actions', id],
-    queryFn: () => listerActionsReunion(id!),
+    queryKey: ['actions-reunion', id],
+    queryFn: () => listerActions({ reunion_id: id!, limite: 50 }),
+    enabled: Boolean(id) && tab === 'actions',
+  });
+
+  const decisionsQuery = useQuery({
+    queryKey: ['decisions-reunion', id],
+    queryFn: () => listerDecisions({ reunion_id: id!, limite: 50 }),
     enabled: Boolean(id) && tab === 'actions',
   });
 
@@ -138,6 +153,24 @@ export function ReunionDetailPage() {
     onSuccess: async () => {
       announce('Réunion archivée.');
       navigate('/reunions');
+    },
+    onError: (e: Error) => announce(e.message),
+  });
+
+  const approuverMut = useMutation({
+    mutationFn: () => approuverReunion(id!),
+    onSuccess: async () => {
+      announce('Réunion validée et planifiée.');
+      await invalidate();
+    },
+    onError: (e: Error) => announce(e.message),
+  });
+
+  const refuserMut = useMutation({
+    mutationFn: () => refuserReunion(id!),
+    onSuccess: async () => {
+      announce('Proposition de réunion refusée.');
+      await invalidate();
     },
     onError: (e: Error) => announce(e.message),
   });
@@ -249,6 +282,36 @@ export function ReunionDetailPage() {
           </div>
 
           <div className="flex flex-wrap gap-2" role="group" aria-label="Actions réunion">
+            {reunion.statut === 'en_attente_validation' && peutApprouver && (
+              <>
+                <Button
+                  size="sm"
+                  loading={approuverMut.isPending}
+                  onClick={() => approuverMut.mutate()}
+                >
+                  <Check className="h-4 w-4" aria-hidden />
+                  Approuver
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  loading={refuserMut.isPending}
+                  onClick={() => {
+                    if (window.confirm('Refuser cette proposition de réunion ?')) {
+                      refuserMut.mutate();
+                    }
+                  }}
+                >
+                  <X className="h-4 w-4" aria-hidden />
+                  Refuser
+                </Button>
+              </>
+            )}
+            {reunion.statut === 'en_attente_validation' && !peutApprouver && (
+              <p className="text-sm text-ogefrem-navy/80">
+                En attente de validation par un directeur.
+              </p>
+            )}
             <Link to={`/reunions/${id}/modifier`}>
               <Button variant="outline" size="sm">
                 <Pencil className="h-4 w-4" aria-hidden />
@@ -487,23 +550,74 @@ export function ReunionDetailPage() {
         )}
 
         {tab === 'actions' && (
-          <div className="space-y-3">
-            {actionsQuery.isLoading && <p className="text-text-muted">Chargement…</p>}
-            {actionsQuery.isSuccess && (actionsQuery.data.items.length === 0 ? (
-              <Empty hint="Aucune action de suivi liée." />
-            ) : (
-              <ul className="divide-y divide-border rounded-xl border border-border">
-                {actionsQuery.data.items.map((action) => (
-                  <li key={action.id} className="px-4 py-3">
-                    <p className="font-semibold text-text">{action.titre}</p>
-                    <p className="text-xs text-text-muted">
-                      {action.statut} · {action.priorite}
-                      {action.date_echeance ? ` · échéance ${action.date_echeance}` : ''}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            ))}
+          <div className="space-y-6">
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-text">
+                Décisions ({decisionsQuery.data?.items.length ?? 0})
+              </h3>
+              {decisionsQuery.isLoading && <p className="text-text-muted">Chargement…</p>}
+              {decisionsQuery.isSuccess && (decisionsQuery.data.items.length === 0 ? (
+                <Empty hint="Aucune décision. Créez-en depuis le compte rendu." />
+              ) : (
+                <ul className="divide-y divide-border rounded-xl border border-border">
+                  {decisionsQuery.data.items.map((d) => (
+                    <li key={d.id} className="px-4 py-3">
+                      <p className="font-semibold text-text">{d.titre}</p>
+                      {d.description && (
+                        <p className="mt-0.5 text-sm text-text-muted">{d.description}</p>
+                      )}
+                      {d.compte_rendu_id && (
+                        <Link
+                          to={`/comptes-rendus/${d.compte_rendu_id}`}
+                          className="mt-1 inline-block text-xs font-semibold text-ogefrem-blue hover:underline"
+                        >
+                          Voir le CR lié
+                        </Link>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ))}
+            </div>
+
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-text">
+                Actions de suivi ({actionsQuery.data?.items.length ?? 0})
+              </h3>
+              {actionsQuery.isLoading && <p className="text-text-muted">Chargement…</p>}
+              {actionsQuery.isSuccess && (actionsQuery.data.items.length === 0 ? (
+                <Empty hint="Aucune action de suivi. Créez-en depuis le compte rendu." />
+              ) : (
+                <ul className="divide-y divide-border rounded-xl border border-border">
+                  {actionsQuery.data.items.map((action) => {
+                    const resp = action.responsable_id
+                      ? profilMap.get(action.responsable_id)
+                      : null;
+                    return (
+                      <li key={action.id} className="px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-semibold text-text">{action.titre}</p>
+                          <Badge variant="neutral">{action.statut}</Badge>
+                          <Badge variant="default">{action.priorite}</Badge>
+                        </div>
+                        <p className="mt-1 text-xs text-text-muted">
+                          {resp ? `${resp.prenom} ${resp.nom}` : 'Non assigné'}
+                          {action.date_echeance ? ` · échéance ${action.date_echeance}` : ''}
+                        </p>
+                        {action.compte_rendu_id && (
+                          <Link
+                            to={`/comptes-rendus/${action.compte_rendu_id}`}
+                            className="mt-1 inline-block text-xs font-semibold text-ogefrem-blue hover:underline"
+                          >
+                            Voir le CR lié
+                          </Link>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ))}
+            </div>
           </div>
         )}
       </ReunionTabs>

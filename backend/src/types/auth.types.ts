@@ -11,5 +11,6 @@ export type AuthUser = {
   prenom: string;
   nom: string;
   direction_id: string | null;
+  fonction: string | null;
   auth: User;
 };

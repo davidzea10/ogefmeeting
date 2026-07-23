@@ -1,7 +1,7 @@
 import { cn } from '@/lib/cn';
 import { formatDateHeure } from '@/lib/labels';
 import type { Reunion } from '@ogefmeeting/shared';
-import { CheckCircle2, Circle, PlayCircle, Archive } from 'lucide-react';
+import { CheckCircle2, Circle, PlayCircle, Archive, Hourglass, XCircle } from 'lucide-react';
 
 type Props = {
   reunion: Reunion;
@@ -17,14 +17,17 @@ type Step = {
 };
 
 export function ReunionTimeline({ reunion }: Props) {
+  const refusee = reunion.statut === 'refusee';
+  const enAttente = reunion.statut === 'en_attente_validation';
+
   const steps: Step[] = [
     {
-      key: 'planifiee',
-      label: 'Planifiée',
+      key: 'proposition',
+      label: enAttente || refusee ? 'Proposition' : 'Planifiée',
       done: true,
-      active: reunion.statut === 'planifiee',
+      active: enAttente || reunion.statut === 'planifiee',
       date: reunion.cree_le,
-      icon: Circle,
+      icon: enAttente ? Hourglass : Circle,
     },
     {
       key: 'en_cours',
@@ -36,11 +39,11 @@ export function ReunionTimeline({ reunion }: Props) {
     },
     {
       key: 'cloturee',
-      label: 'Clôturée',
-      done: ['cloturee', 'archivee'].includes(reunion.statut),
-      active: reunion.statut === 'cloturee',
+      label: refusee ? 'Refusée' : 'Clôturée',
+      done: ['cloturee', 'archivee', 'refusee'].includes(reunion.statut),
+      active: reunion.statut === 'cloturee' || refusee,
       date: reunion.date_fin,
-      icon: CheckCircle2,
+      icon: refusee ? XCircle : CheckCircle2,
     },
     {
       key: 'archivee',

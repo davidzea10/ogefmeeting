@@ -8,6 +8,7 @@ import {
 import { actionsRouter } from './actions.routes.js';
 import { authRouter } from './auth.routes.js';
 import { comptesRendusRouter } from './comptes-rendus.routes.js';
+import { dashboardRouter } from './dashboard.routes.js';
 import { decisionsRouter } from './decisions.routes.js';
 import { healthRouter } from './health.routes.js';
 import { reunionsRouter } from './reunions.routes.js';
@@ -16,6 +17,10 @@ import {
   profilRouter,
   utilisateursRouter,
 } from './utilisateur.routes.js';
+import {
+  notificationsRouter,
+  parametresRouter,
+} from './parametres.routes.js';
 import { attachAuth } from '../middleware/auth.js';
 
 /**
@@ -33,6 +38,7 @@ apiRouter.use('/auth', authRouter);
 apiRouter.use('/profil', profilRouter);
 apiRouter.use('/utilisateurs', utilisateursRouter);
 apiRouter.use('/audit', auditRouter);
+apiRouter.use('/dashboard', dashboardRouter);
 apiRouter.use('/reunions', reunionsRouter);
 apiRouter.use('/comptes-rendus', comptesRendusRouter);
 apiRouter.use('/actions', actionsRouter);
@@ -41,3 +47,5 @@ apiRouter.use('/directions', directionsRouter);
 apiRouter.use('/profils', profilsRouter);
 apiRouter.use('/modeles-compte-rendu', modelesRouter);
 apiRouter.use('/recherche', rechercheRouter);
+apiRouter.use('/parametres', parametresRouter);
+apiRouter.use('/notifications', notificationsRouter);
