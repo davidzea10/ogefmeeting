@@ -29,7 +29,7 @@ import {
   messageWorkflowCr,
   peutApprouverCr,
   peutArchiverCr,
-  peutModifierCr,
+  peutModifierContenuCr,
   peutSoumettreCr,
   peutValiderCr,
 } from '@/lib/cr-workflow';
@@ -117,10 +117,7 @@ export function CompteRenduEditorPage() {
   });
 
   const statut = crQuery.data?.statut;
-  const editable =
-    Boolean(statut) &&
-    peutModifierCr(role) &&
-    (statut === 'brouillon' || statut === 'en_revision');
+  const editable = Boolean(statut && peutModifierContenuCr(role, statut));
 
   const optsHistoriserRef = useRef(false);
 
@@ -532,10 +529,18 @@ export function CompteRenduEditorPage() {
           </Link>
         </div>
 
-        {!editable && cr.statut !== 'soumis' && (
+        {!editable && (
           <p className="rounded-lg bg-surface-muted px-3 py-2 text-sm text-text-muted">
-            Ce compte rendu est en lecture seule (statut :{' '}
-            {LIBELLES_STATUT_CR[cr.statut] ?? cr.statut}).
+            {cr.statut === 'soumis'
+              ? 'Compte rendu soumis — en attente de validation. Seul un directeur peut encore ajuster le contenu.'
+              : `Ce compte rendu est en lecture seule (statut : ${
+                  LIBELLES_STATUT_CR[cr.statut] ?? cr.statut
+                }).`}
+          </p>
+        )}
+        {editable && cr.statut === 'soumis' && (
+          <p className="rounded-lg border border-ogefrem-blue/20 bg-ogefrem-blue/5 px-3 py-2 text-sm text-ogefrem-blue">
+            Vous pouvez ajuster le contenu avant de valider ou de renvoyer en révision.
           </p>
         )}
       </header>

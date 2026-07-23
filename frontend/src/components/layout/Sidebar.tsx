@@ -6,12 +6,12 @@ import { useUiStore } from '@/stores/ui.store';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Archive,
+  Bell,
   CalendarDays,
   CheckSquare,
   ChevronLeft,
   FileText,
   LayoutDashboard,
-  Palette,
   Search,
   Settings,
   Users,
@@ -25,10 +25,10 @@ const navItems = [
   { to: '/reunions', label: 'Réunions', icon: CalendarDays },
   { to: '/comptes-rendus', label: 'Comptes rendus', icon: FileText },
   { to: '/actions', label: 'Actions', icon: CheckSquare },
+  { to: '/notifications', label: 'Notifications', icon: Bell },
   { to: '/recherche', label: 'Recherche', icon: Search },
   { to: '/archives', label: 'Archives', icon: Archive },
   { to: '/utilisateurs', label: 'Utilisateurs', icon: Users },
-  { to: '/design-system', label: 'Design system', icon: Palette },
   { to: '/administration', label: 'Administration', icon: Settings },
 ];
 

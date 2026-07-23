@@ -1,11 +1,11 @@
 import { GuestOnly, RequireAuth } from '@/components/auth/AuthGuards';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AuthLayout } from '@/components/layout/AuthLayout';
-import { DesignSystemPage } from '@/pages/DesignSystemPage';
 import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage';
 import { HomePage } from '@/pages/HomePage';
 import { InvitationPage } from '@/pages/InvitationPage';
 import { LoginPage } from '@/pages/LoginPage';
+import { NotificationsPage } from '@/pages/NotificationsPage';
 import { AdministrationPage } from '@/pages/admin/AdministrationPage';
 import { ActionsListPage } from '@/pages/actions/ActionsListPage';
 import { ArchivesPage } from '@/pages/archives/ArchivesPage';
@@ -28,7 +28,8 @@ export const router = createBrowserRouter([
         element: <AppLayout />,
         children: [
           { index: true, element: <HomePage /> },
-          { path: 'design-system', element: <DesignSystemPage /> },
+          { path: 'notifications', element: <NotificationsPage /> },
+          { path: 'design-system', element: <Navigate to="/notifications" replace /> },
           { path: 'reunions', element: <ReunionsListPage /> },
           { path: 'reunions/nouvelle', element: <ReunionCreatePage /> },
           { path: 'reunions/:id/modifier', element: <ReunionEditPage /> },

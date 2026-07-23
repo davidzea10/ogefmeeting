@@ -130,17 +130,21 @@ export class CompteRenduService {
     return cr;
   }
 
-  async modifier(id: string, input: ModifierCompteRenduInput): Promise<CompteRendu> {
+  async modifier(
+    id: string,
+    input: ModifierCompteRenduInput,
+    options: { ajustementDirecteur?: boolean } = {},
+  ): Promise<CompteRendu> {
     const actuel = await this.assurerExiste(id);
 
     if (actuel.statut === 'valide' || actuel.statut === 'archive') {
       throw new AppError(400, 'Un compte rendu validé ou archivé ne peut plus être modifié.');
     }
 
-    if (actuel.statut === 'soumis') {
+    if (actuel.statut === 'soumis' && !options.ajustementDirecteur) {
       throw new AppError(
         400,
-        'Un compte rendu soumis est en attente de validation et ne peut plus être modifié.',
+        'Un compte rendu soumis est en attente de validation. Seul un directeur peut encore l’ajuster.',
       );
     }
 

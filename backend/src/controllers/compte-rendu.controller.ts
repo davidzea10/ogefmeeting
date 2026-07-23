@@ -10,6 +10,7 @@ import type {
 } from '../schemas/compte-rendu.schemas.js';
 import { compteRenduService } from '../services/compte-rendu.service.js';
 import { profilLimiteAuxParticipations } from '../utils/reunion-acces.js';
+import { PERMISSIONS, roleAutorise } from '../utils/permissions.js';
 
 export class CompteRenduController {
   async creer(req: Request, res: Response): Promise<void> {
@@ -33,9 +34,13 @@ export class CompteRenduController {
   }
 
   async modifier(req: Request, res: Response): Promise<void> {
+    const ajustementDirecteur = Boolean(
+      req.user && roleAutorise(req.user.role, PERMISSIONS.CR_VALIDER),
+    );
     const data = await compteRenduService.modifier(
       req.params.id as string,
       req.body as ModifierCompteRenduInput,
+      { ajustementDirecteur },
     );
     res.status(200).json({ success: true, data });
   }
