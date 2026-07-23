@@ -33,6 +33,7 @@ export function AppHeader({ title = 'Tableau de bord' }: AppHeaderProps) {
   return (
     <header
       className="sticky top-0 z-30 flex h-[var(--header-height)] items-center gap-2 border-b border-border bg-surface/95 px-3 backdrop-blur-md sm:gap-4 sm:px-4 lg:px-6"
+      style={{ paddingTop: 'env(safe-area-inset-top)' }}
       role="banner"
     >
       <button
@@ -47,7 +48,9 @@ export function AppHeader({ title = 'Tableau de bord' }: AppHeaderProps) {
       </button>
 
       <div className="min-w-0 flex-1">
-        <h1 className="truncate text-base font-semibold text-text sm:text-lg">{title}</h1>
+        <h1 className="truncate text-[15px] font-semibold leading-tight text-text sm:text-lg">
+          {title}
+        </h1>
       </div>
 
       <div className="hidden max-w-md flex-1 md:block">

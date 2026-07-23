@@ -6,6 +6,8 @@ import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage';
 import { HomePage } from '@/pages/HomePage';
 import { InvitationPage } from '@/pages/InvitationPage';
 import { LoginPage } from '@/pages/LoginPage';
+import { CompteRenduEditorPage } from '@/pages/comptes-rendus/CompteRenduEditorPage';
+import { ComptesRendusListPage } from '@/pages/comptes-rendus/ComptesRendusListPage';
 import { ReunionCreatePage } from '@/pages/reunions/ReunionCreatePage';
 import { ReunionDetailPage } from '@/pages/reunions/ReunionDetailPage';
 import { ReunionEditPage } from '@/pages/reunions/ReunionEditPage';
@@ -27,7 +29,8 @@ export const router = createBrowserRouter([
           { path: 'reunions/nouvelle', element: <ReunionCreatePage /> },
           { path: 'reunions/:id/modifier', element: <ReunionEditPage /> },
           { path: 'reunions/:id', element: <ReunionDetailPage /> },
-          { path: 'comptes-rendus', element: <PlaceholderPage title="Comptes rendus" /> },
+          { path: 'comptes-rendus/:id', element: <CompteRenduEditorPage /> },
+          { path: 'comptes-rendus', element: <ComptesRendusListPage /> },
           { path: 'actions', element: <PlaceholderPage title="Actions" /> },
           { path: 'utilisateurs', element: <PlaceholderPage title="Utilisateurs" /> },
           { path: 'administration', element: <PlaceholderPage title="Administration" /> },

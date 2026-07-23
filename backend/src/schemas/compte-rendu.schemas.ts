@@ -16,6 +16,8 @@ export const modifierCompteRenduSchema = z
     contenu: z.record(z.string(), z.unknown()).optional(),
     contenu_html: z.string().optional().nullable(),
     modifie_par: uuidSchema.optional().nullable(),
+    /** true = historiser la version précédente (sauvegarde manuelle). false = auto-save silencieux */
+    historiser: z.boolean().optional().default(false),
   })
   .refine((data) => data.contenu !== undefined || data.contenu_html !== undefined, {
     message: 'Au moins contenu ou contenu_html doit être fourni.',

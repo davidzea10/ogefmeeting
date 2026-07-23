@@ -16,6 +16,9 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     scroll-behavior: smooth;
+    /* Empêche le bounce / débordement horizontal type “site web étroit” */
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -28,10 +31,24 @@
     margin: 0;
     min-width: 320px;
     min-height: 100vh;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
   }
 
   #root {
     min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  /* Champs iOS : évite le zoom auto (font-size < 16px) */
+  @media (max-width: 640px) {
+    input,
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
   }
 
   a {
@@ -111,5 +128,19 @@
     left: 0.75rem;
     outline: 2px solid var(--color-ogefrem-navy);
     outline-offset: 2px;
+  }
+
+  .ProseMirror {
+    outline: none;
+  }
+
+  .ProseMirror p {
+    margin: 0.4rem 0;
+  }
+
+  .ProseMirror ul,
+  .ProseMirror ol {
+    margin: 0.4rem 0;
+    padding-left: 1.25rem;
   }
 }

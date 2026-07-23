@@ -146,27 +146,29 @@ export function ReunionsListPage() {
     <div className="mx-auto max-w-7xl space-y-6">
       <Breadcrumbs items={[{ label: 'Réunions' }]} />
 
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-2xl font-bold text-text">Réunions</h2>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-xl font-bold text-text sm:text-2xl">Réunions</h2>
         <div className="flex flex-wrap items-center gap-2">
           <div
-            className="inline-flex rounded-lg border border-border bg-surface p-1"
+            className="inline-flex flex-1 rounded-lg border border-border bg-surface p-1 sm:flex-none"
             role="group"
             aria-label="Mode d'affichage"
           >
             <Button
               type="button"
               size="sm"
+              className="flex-1 sm:flex-none"
               variant={vue === 'tableau' ? 'primary' : 'ghost'}
               aria-pressed={vue === 'tableau'}
               onClick={() => setVue('tableau')}
             >
               <LayoutList className="h-4 w-4" aria-hidden />
-              Tableau
+              Liste
             </Button>
             <Button
               type="button"
               size="sm"
+              className="flex-1 sm:flex-none"
               variant={vue === 'calendrier' ? 'primary' : 'ghost'}
               aria-pressed={vue === 'calendrier'}
               onClick={() => setVue('calendrier')}
@@ -175,10 +177,10 @@ export function ReunionsListPage() {
               Calendrier
             </Button>
           </div>
-          <Link to="/reunions/nouvelle">
-            <Button>
+          <Link to="/reunions/nouvelle" className="min-w-0 flex-1 sm:flex-none">
+            <Button className="w-full sm:w-auto">
               <Plus className="h-4 w-4" aria-hidden />
-              Nouvelle réunion
+              Nouvelle
             </Button>
           </Link>
         </div>

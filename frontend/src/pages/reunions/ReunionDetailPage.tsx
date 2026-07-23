@@ -14,6 +14,7 @@ import {
 import {
   archiverReunion,
   cloturerReunion,
+  creerCompteRendu,
   demarrerReunion,
   listerActionsReunion,
   listerComptesRendusReunion,
@@ -115,10 +116,18 @@ export function ReunionDetailPage() {
   });
 
   const cloturerMut = useMutation({
-    mutationFn: () => cloturerReunion(id!),
+    mutationFn: async () => {
+      const cloturee = await cloturerReunion(id!);
+      const existants = await listerComptesRendusReunion(id!);
+      if (existants.items.length === 0) {
+        await creerCompteRendu(id!);
+      }
+      return cloturee;
+    },
     onSuccess: async () => {
-      announce('Réunion clôturée.');
+      announce('Réunion clôturée. Compte rendu brouillon prêt.');
       await invalidate();
+      await queryClient.invalidateQueries({ queryKey: ['comptes-rendus', id] });
       setTab('compte-rendu');
     },
     onError: (e: Error) => announce(e.message),
@@ -448,16 +457,28 @@ export function ReunionDetailPage() {
             )}
             {crQuery.isLoading && <p className="text-text-muted">Chargement…</p>}
             {crQuery.isSuccess && (crQuery.data.items.length === 0 ? (
-              <Empty hint="Aucun compte rendu pour cette réunion." />
+              <Empty hint="Aucun compte rendu pour cette réunion. Clôturez-la (mode live ou bouton Clôturer) pour créer un brouillon." />
             ) : (
               <ul className="divide-y divide-border rounded-xl border border-border">
                 {crQuery.data.items.map((cr) => (
-                  <li key={cr.id} className="flex items-center justify-between px-4 py-3">
-                    <div>
-                      <p className="font-semibold text-text">Version {cr.version}</p>
+                  <li key={cr.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                    <div className="min-w-0">
+                      <Link
+                        to={`/comptes-rendus/${cr.id}`}
+                        className="font-semibold text-ogefrem-blue hover:underline"
+                      >
+                        Compte rendu · v{cr.version}
+                      </Link>
                       <p className="text-xs text-text-muted">Statut : {cr.statut}</p>
                     </div>
-                    <Badge variant="neutral">{cr.statut}</Badge>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Badge variant="neutral">{cr.statut}</Badge>
+                      <Link to={`/comptes-rendus/${cr.id}`}>
+                        <Button size="sm" variant="outline">
+                          Ouvrir
+                        </Button>
+                      </Link>
+                    </div>
                   </li>
                 ))}
               </ul>

@@ -84,18 +84,20 @@ export class CompteRenduService {
     }
 
     const supabase = requireSupabaseAdmin();
-    const nouvelleVersion = actuel.version + 1;
+    const historiser = Boolean(input.historiser);
+    const nouvelleVersion = historiser ? actuel.version + 1 : actuel.version;
 
-    // Historiser la version précédente
-    const { error: versionError } = await supabase.from(TABLES.versionsCompteRendu).insert({
-      compte_rendu_id: id,
-      version: actuel.version,
-      contenu: actuel.contenu,
-      modifie_par: input.modifie_par ?? null,
-    });
+    if (historiser) {
+      const { error: versionError } = await supabase.from(TABLES.versionsCompteRendu).insert({
+        compte_rendu_id: id,
+        version: actuel.version,
+        contenu: actuel.contenu,
+        modifie_par: input.modifie_par ?? null,
+      });
 
-    if (versionError) {
-      handleSupabaseError(versionError, 'Impossible d’enregistrer la version précédente.');
+      if (versionError) {
+        handleSupabaseError(versionError, 'Impossible d’enregistrer la version précédente.');
+      }
     }
 
     const { data, error } = await supabase
@@ -105,7 +107,10 @@ export class CompteRenduService {
         contenu_html:
           input.contenu_html !== undefined ? input.contenu_html : actuel.contenu_html,
         version: nouvelleVersion,
-        statut: actuel.statut === 'soumis' || actuel.statut === 'en_revision' ? 'brouillon' : actuel.statut,
+        statut:
+          actuel.statut === 'soumis' || actuel.statut === 'en_revision'
+            ? 'brouillon'
+            : actuel.statut,
       })
       .eq('id', id)
       .select('*')

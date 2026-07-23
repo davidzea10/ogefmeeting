@@ -12,7 +12,7 @@ export function AuthLayout() {
   return (
     <PageBackground overlay="gradient">
       <SkipLink />
-      <div className="grid min-h-screen lg:grid-cols-2">
+      <div className="grid min-h-dvh lg:grid-cols-2">
         <motion.div
           className="relative hidden flex-col justify-between p-8 xl:p-12 text-white lg:flex"
           initial={motionSafe ? { opacity: 0, x: -24 } : false}
@@ -36,7 +36,13 @@ export function AuthLayout() {
           <p className="text-sm text-white/75">Kinshasa · République Démocratique du Congo</p>
         </motion.div>
 
-        <div className="flex items-center justify-center p-4 sm:p-6 md:p-10">
+        <div
+          className="flex items-center justify-center px-4 py-6 sm:p-6 md:p-10"
+          style={{
+            paddingTop: 'max(1.5rem, env(safe-area-inset-top))',
+            paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))',
+          }}
+        >
           <div
             id="contenu-principal"
             tabIndex={-1}
