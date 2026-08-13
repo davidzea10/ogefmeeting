@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { formatDirection, LIBELLES_TYPE } from '@/lib/labels';
 import { TYPES_REUNION, type Direction } from '@ogefmeeting/shared';
-import type { UseFormRegister, FieldErrors } from 'react-hook-form';
+import type { FieldErrors, UseFormRegister, UseFormSetValue, UseFormWatch } from 'react-hook-form';
 import type { ReunionFormValues } from '@/schemas/reunion-form.schema';
 
 const selectClass =
@@ -10,11 +10,19 @@ const selectClass =
 
 type Props = {
   register: UseFormRegister<ReunionFormValues>;
+  watch: UseFormWatch<ReunionFormValues>;
+  setValue: UseFormSetValue<ReunionFormValues>;
   errors: FieldErrors<ReunionFormValues>;
   directions: Direction[];
 };
 
-export function StepInfos({ register, errors, directions }: Props) {
+export function StepInfos({ register, watch, setValue, errors, directions }: Props) {
+  const multiDirection = watch('multi_direction');
+  const selectedDirections = watch('direction_ids');
+
+  const directionMultiError =
+    typeof errors.direction_ids?.message === 'string' ? errors.direction_ids.message : undefined;
+
   return (
     <div className="space-y-4">
       <Input
@@ -52,14 +60,62 @@ export function StepInfos({ register, errors, directions }: Props) {
 
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="font-medium text-text">Direction</span>
-          <select className={selectClass} {...register('direction_id')}>
-            <option value="">— Aucune —</option>
-            {directions.map((d) => (
-              <option key={d.id} value={d.id}>
-                {formatDirection(d)}
-              </option>
-            ))}
-          </select>
+          <div className="rounded-lg border border-border p-3">
+            <label className="mb-3 flex items-center gap-2 text-sm text-text">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-ogefrem-blue"
+                checked={multiDirection}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setValue('multi_direction', checked, { shouldDirty: true });
+                  if (checked) {
+                    const single = watch('direction_id');
+                    setValue('direction_ids', single ? [single] : [], { shouldDirty: true });
+                  } else {
+                    const first = selectedDirections[0] ?? '';
+                    setValue('direction_id', first, { shouldDirty: true });
+                  }
+                }}
+              />
+              Réunion multi-direction
+            </label>
+
+            {!multiDirection ? (
+              <select className={selectClass} {...register('direction_id')}>
+                <option value="">— Aucune —</option>
+                {directions.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {formatDirection(d)}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <>
+                <select
+                  className={selectClass}
+                  multiple
+                  value={selectedDirections}
+                  onChange={(e) => {
+                    const ids = Array.from(e.target.selectedOptions).map((o) => o.value);
+                    setValue('direction_ids', ids, { shouldDirty: true, shouldValidate: true });
+                  }}
+                >
+                  {directions.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {formatDirection(d)}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-text-muted">
+                  Astuce: Ctrl/Cmd + clic pour sélectionner plusieurs directions.
+                </p>
+                {directionMultiError && (
+                  <p className="mt-1 text-xs text-danger">{directionMultiError}</p>
+                )}
+              </>
+            )}
+          </div>
         </label>
 
         <Input

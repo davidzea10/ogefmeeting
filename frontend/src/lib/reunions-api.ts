@@ -33,6 +33,7 @@ export type CreerReunionPayload = {
   date_prevue: string;
   lieu?: string | null;
   direction_id?: string | null;
+  direction_ids?: string[];
   modele_id?: string | null;
 };
 
@@ -147,6 +148,20 @@ export function modifierParticipantStatut(
     {
       method: 'PATCH',
       body: JSON.stringify({ statut }),
+    },
+  );
+}
+
+/** Confirmer ou décliner sa propre invitation (depuis le mail / notif). */
+export function repondreInvitationReunion(
+  reunionId: string,
+  reponse: 'confirme' | 'absent',
+) {
+  return apiFetch<ParticipantReunion>(
+    `/api/reunions/${reunionId}/invitation/repondre`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ reponse }),
     },
   );
 }

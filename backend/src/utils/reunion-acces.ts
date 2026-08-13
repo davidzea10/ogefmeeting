@@ -1,5 +1,6 @@
 import {
   peutApprouverReunion,
+  peutApprouverReunionPourDirections,
   voitToutesLesReunions,
   type RoleUtilisateur,
 } from '@ogefmeeting/shared';
@@ -7,7 +8,7 @@ import type { AuthUser } from '../types/auth.types.js';
 
 /**
  * Membres « normaux » : uniquement réunions où ils sont participants
- * ou qu’ils ont créées. Direction / secrétaire / admin : tout.
+ * ou qu’ils ont créées. Validateurs / secrétaire / admin : tout.
  */
 export function profilLimiteAuxParticipations(
   user: AuthUser | undefined,
@@ -22,4 +23,17 @@ export function profilLimiteAuxParticipations(
 export function utilisateurPeutApprouver(user: AuthUser | undefined): boolean {
   if (!user) return false;
   return peutApprouverReunion(user.role as RoleUtilisateur, user.fonction);
+}
+
+export function utilisateurPeutApprouverReunion(
+  user: AuthUser | undefined,
+  directionIds: string[],
+): boolean {
+  if (!user) return false;
+  return peutApprouverReunionPourDirections(
+    user.role as RoleUtilisateur,
+    user.fonction,
+    directionIds,
+    user.direction_id,
+  );
 }

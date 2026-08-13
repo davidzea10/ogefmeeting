@@ -7,7 +7,9 @@ import type {
 import { apiFetch, toQueryString } from '@/lib/api-client';
 
 export function obtenirParametres() {
-  return apiFetch<ParametresApplication>('/api/parametres');
+  return apiFetch<ParametresApplication & { email_configure?: boolean }>(
+    '/api/parametres',
+  );
 }
 
 export function modifierParametres(payload: {
@@ -20,6 +22,16 @@ export function modifierParametres(payload: {
     method: 'PUT',
     body: JSON.stringify(payload),
   });
+}
+
+export function testerEmail(email: string) {
+  return apiFetch<{ envoye: boolean; destinataire: string }>(
+    '/api/parametres/tester-email',
+    {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    },
+  );
 }
 
 export function listerAudit(params: {

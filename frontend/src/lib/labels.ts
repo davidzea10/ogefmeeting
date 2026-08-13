@@ -51,6 +51,17 @@ export function formatDirection(direction: Pick<Direction, 'nom' | 'code'>): str
   return direction.code ? `${direction.code} — ${direction.nom}` : direction.nom;
 }
 
+export function formatDirectionsListe(
+  directions: Pick<Direction, 'id' | 'nom' | 'code'>[],
+  ids: string[],
+): string {
+  if (ids.length === 0) return '—';
+  const labels = directions
+    .filter((d) => ids.includes(d.id))
+    .map(formatDirection);
+  return labels.length > 0 ? labels.join(' · ') : '—';
+}
+
 /** Début/fin de journée en ISO pour filtres API */
 export function debutJourneeISO(dateLocal: string): string {
   return new Date(`${dateLocal}T00:00:00`).toISOString();

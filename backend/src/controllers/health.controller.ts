@@ -8,7 +8,7 @@ import {
 import { healthService } from '../services/health.service.js';
 
 /** Marqueur de déploiement — pour vérifier que Render a bien la dernière version */
-export const BUILD_MARKER = '2026-07-23-dashboard-notifs';
+export const BUILD_MARKER = '2026-07-24-invitation-email';
 
 /**
  * Contrôleur Health — reçoit la requête HTTP, appelle le service, renvoie la réponse.
@@ -27,6 +27,8 @@ export class HealthController {
         cors_origins: corsOrigins,
         supabase_url_configured: isSupabaseConfigured(),
         supabase_anon_configured: isSupabaseAuthConfigured(),
+        email_resend_configured: Boolean(env.RESEND_API_KEY),
+        email_from: env.EMAIL_FROM,
         supabase_url_host: env.SUPABASE_URL
           ? new URL(env.SUPABASE_URL).host
           : null,

@@ -6,6 +6,7 @@ import type {
   GererParticipantsInput,
   ListerReunionsQuery,
   ModifierReunionInput,
+  RepondreInvitationInput,
 } from '../schemas/reunion.schemas.js';
 import { reunionService } from '../services/reunion.service.js';
 import { AppError } from '../utils/errors.js';
@@ -74,18 +75,23 @@ export class ReunionController {
 
   async approuver(req: Request, res: Response): Promise<void> {
     if (!utilisateurPeutApprouver(req.user)) {
-      throw new AppError(403, 'Seul un directeur peut valider une réunion.');
+      throw new AppError(403, 'Vous n’avez pas le droit de valider une réunion.');
     }
     const data = await reunionService.approuver(
       req.params.id as string,
       req.user?.id,
+      {
+        role: req.user?.role,
+        fonction: req.user?.fonction,
+        direction_id: req.user?.direction_id,
+      },
     );
     res.status(200).json({ success: true, data });
   }
 
   async refuser(req: Request, res: Response): Promise<void> {
     if (!utilisateurPeutApprouver(req.user)) {
-      throw new AppError(403, 'Seul un directeur peut refuser une réunion.');
+      throw new AppError(403, 'Vous n’avez pas le droit de refuser une réunion.');
     }
     const data = await reunionService.refuser(
       req.params.id as string,
@@ -124,6 +130,17 @@ export class ReunionController {
       req.params.id as string,
       req.params.participantId as string,
       (req.body as { statut: string }).statut,
+    );
+    res.status(200).json({ success: true, data });
+  }
+
+  async repondreInvitation(req: Request, res: Response): Promise<void> {
+    if (!req.user) throw new AppError(401, 'Authentification requise.');
+    const { reponse } = req.body as RepondreInvitationInput;
+    const data = await reunionService.repondreInvitation(
+      req.params.id as string,
+      req.user.id,
+      reponse,
     );
     res.status(200).json({ success: true, data });
   }

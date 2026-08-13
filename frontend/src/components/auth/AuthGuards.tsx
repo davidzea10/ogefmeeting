@@ -1,4 +1,5 @@
 import { useAuthStore } from '@/stores/auth.store';
+import { peutAccederAdministration } from '@/lib/roles';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 
 /**
@@ -12,7 +13,13 @@ export function RequireAuth() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   if (AUTH_REQUIRED && !isAuthenticated()) {
-    return <Navigate to="/connexion" replace state={{ from: location.pathname }} />;
+    return (
+      <Navigate
+        to="/connexion"
+        replace
+        state={{ from: `${location.pathname}${location.search}` }}
+      />
+    );
   }
 
   return <Outlet />;
@@ -26,5 +33,14 @@ export function GuestOnly() {
     return <Navigate to="/" replace />;
   }
 
+  return <Outlet />;
+}
+
+/** Accès Administration / Utilisateurs — admin uniquement */
+export function RequireAdmin() {
+  const role = useAuthStore((s) => s.role ?? s.profil?.role ?? null);
+  if (!peutAccederAdministration(role)) {
+    return <Navigate to="/" replace />;
+  }
   return <Outlet />;
 }

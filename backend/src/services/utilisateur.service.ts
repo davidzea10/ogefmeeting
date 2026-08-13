@@ -15,6 +15,7 @@ import type {
 import { AppError } from '../utils/errors.js';
 import { handleSupabaseError } from '../utils/supabase-error.js';
 import { enregistrerAudit } from './audit.service.js';
+import { envoyerEmailOgefmeeting } from './email.service.js';
 
 export type JournalAudit = {
   id: string;
@@ -104,6 +105,20 @@ export class UtilisateurService {
         fonction: input.fonction ?? null,
         matricule: input.matricule ?? null,
       },
+    });
+
+    // Email de bienvenue (best-effort) avec identifiants
+    await envoyerEmailOgefmeeting({
+      to: input.email,
+      subject: '[Ogefmeeting] Votre compte a été créé',
+      titre: 'Bienvenue sur Ogefmeeting',
+      message:
+        `Un compte Ogefmeeting a été créé pour vous.\n\n` +
+        `Email de connexion : ${input.email}\n` +
+        `Mot de passe temporaire : ${motDePasse}\n\n` +
+        `Connectez-vous puis changez votre mot de passe si possible.`,
+      lien: `${env.FRONTEND_URL}/connexion`,
+      boutonLibelle: 'Se connecter',
     });
 
     return {

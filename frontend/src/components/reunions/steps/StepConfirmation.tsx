@@ -17,6 +17,9 @@ type Props = {
 export function StepConfirmation({ watch, register, directions, modeles }: Props) {
   const values = watch();
   const direction = directions.find((d) => d.id === values.direction_id);
+  const directionsMultiples = directions.filter((d) =>
+    (values.direction_ids ?? []).includes(d.id),
+  );
 
   let dateLabel = '—';
   try {
@@ -68,7 +71,13 @@ export function StepConfirmation({ watch, register, directions, modeles }: Props
           <div>
             <dt className="text-text-muted">Direction</dt>
             <dd className="font-semibold text-text">
-              {direction ? formatDirection(direction) : '—'}
+              {values.multi_direction
+                ? directionsMultiples.length > 0
+                  ? directionsMultiples.map(formatDirection).join(' · ')
+                  : '—'
+                : direction
+                  ? formatDirection(direction)
+                  : '—'}
             </dd>
           </div>
           <div>

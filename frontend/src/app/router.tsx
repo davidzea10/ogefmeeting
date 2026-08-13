@@ -1,4 +1,4 @@
-import { GuestOnly, RequireAuth } from '@/components/auth/AuthGuards';
+import { GuestOnly, RequireAdmin, RequireAuth } from '@/components/auth/AuthGuards';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AuthLayout } from '@/components/layout/AuthLayout';
 import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage';
@@ -15,6 +15,7 @@ import { ComptesRendusListPage } from '@/pages/comptes-rendus/ComptesRendusListP
 import { ReunionCreatePage } from '@/pages/reunions/ReunionCreatePage';
 import { ReunionDetailPage } from '@/pages/reunions/ReunionDetailPage';
 import { ReunionEditPage } from '@/pages/reunions/ReunionEditPage';
+import { ReunionInvitationPage } from '@/pages/reunions/ReunionInvitationPage';
 import { ReunionLivePage } from '@/pages/reunions/ReunionLivePage';
 import { ReunionsListPage } from '@/pages/reunions/ReunionsListPage';
 import { ResetPasswordPage } from '@/pages/ResetPasswordPage';
@@ -33,18 +34,26 @@ export const router = createBrowserRouter([
           { path: 'reunions', element: <ReunionsListPage /> },
           { path: 'reunions/nouvelle', element: <ReunionCreatePage /> },
           { path: 'reunions/:id/modifier', element: <ReunionEditPage /> },
+          { path: 'reunions/:id/invitation', element: <ReunionInvitationPage /> },
           { path: 'reunions/:id', element: <ReunionDetailPage /> },
           { path: 'comptes-rendus/:id', element: <CompteRenduEditorPage /> },
           { path: 'comptes-rendus', element: <ComptesRendusListPage /> },
           { path: 'actions', element: <ActionsListPage /> },
           { path: 'recherche', element: <RecherchePage /> },
           { path: 'archives', element: <ArchivesPage /> },
-          { path: 'administration', element: <AdministrationPage /> },
-          { path: 'utilisateurs', element: <Navigate to="/administration?tab=utilisateurs" replace /> },
           { path: 'profil', element: <PlaceholderPage title="Mon profil" /> },
+          {
+            element: <RequireAdmin />,
+            children: [
+              { path: 'administration', element: <AdministrationPage /> },
+              {
+                path: 'utilisateurs',
+                element: <Navigate to="/administration?tab=utilisateurs" replace />,
+              },
+            ],
+          },
         ],
       },
-      /** Mode focus hors chrome (sans sidebar / header app) */
       { path: 'reunions/:id/live', element: <ReunionLivePage /> },
     ],
   },

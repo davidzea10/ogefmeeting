@@ -12,6 +12,7 @@ import {
   modifierParticipantSchema,
   modifierPointOrdreJourSchema,
   modifierReunionSchema,
+  repondreInvitationSchema,
 } from '../schemas/reunion.schemas.js';
 import { PERMISSIONS } from '../utils/permissions.js';
 import { z } from 'zod';
@@ -101,6 +102,16 @@ reunionsRouter.put(
   validateParams(idParamSchema),
   validateBody(gererParticipantsSchema),
   asyncHandler((req, res) => reunionController.gererParticipants(req, res)),
+);
+
+/** Invité : confirmer ou décliner sa propre invitation */
+reunionsRouter.post(
+  '/:id/invitation/repondre',
+  requireAuth,
+  requirePermission(PERMISSIONS.REUNIONS_LIRE),
+  validateParams(idParamSchema),
+  validateBody(repondreInvitationSchema),
+  asyncHandler((req, res) => reunionController.repondreInvitation(req, res)),
 );
 
 reunionsRouter.put(

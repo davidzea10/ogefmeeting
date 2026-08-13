@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { listerActions, listerDecisions } from '@/lib/actions-decisions-api';
 import {
   formatDateHeure,
-  formatDirection,
+  formatDirectionsListe,
   LIBELLES_PARTICIPANT,
   LIBELLES_TYPE,
 } from '@/lib/labels';
@@ -26,7 +26,7 @@ import {
   obtenirReunion,
   refuserReunion,
 } from '@/lib/reunions-api';
-import { peutApprouverReunionRole } from '@/lib/roles';
+import { peutApprouverReunionRole, peutApprouverReunionPourReunion } from '@/lib/roles';
 import { useAuthStore } from '@/stores/auth.store';
 import {
   STATUTS_PARTICIPANT,
@@ -56,6 +56,7 @@ export function ReunionDetailPage() {
   const announce = useAnnouncerStore((s) => s.announce);
   const profil = useAuthStore((s) => s.profil);
   const role = useAuthStore((s) => s.role ?? s.profil?.role ?? null);
+  const userId = useAuthStore((s) => s.user?.id ?? s.profil?.id);
   const peutApprouver = peutApprouverReunionRole(role, profil?.fonction);
   const [tab, setTab] = useState<TabId>('informations');
 
@@ -227,9 +228,31 @@ export function ReunionDetailPage() {
   }
 
   const reunion = reunionQuery.data;
-  const direction = directionsQuery.data?.find((d) => d.id === reunion.direction_id);
+  const directionIds =
+    reunion.direction_ids ??
+    (reunion.direction_id ? [reunion.direction_id] : []);
+  const directionsLiees = (directionsQuery.data ?? []).filter((d) =>
+    directionIds.includes(d.id),
+  );
+  const libelleDirections = formatDirectionsListe(directionsLiees, directionIds);
+  const peutValiderIci = peutApprouverReunionPourReunion(
+    role,
+    profil?.fonction ?? null,
+    profil?.direction_id,
+    reunion,
+  );
+  const nomValidateur =
+    reunion.valide_par_nom ??
+    (reunion.valide_par
+      ? (() => {
+          const p = profilMap.get(reunion.valide_par);
+          return p ? `${p.prenom} ${p.nom}`.trim() : null;
+        })()
+      : null);
   const points = [...reunion.points_ordre_jour].sort((a, b) => a.ordre - b.ordre);
   const traites = points.filter((p) => p.est_traite).length;
+  const monInvitation = reunion.participants.find((p) => p.profil_id === userId);
+  const invitationEnAttente = monInvitation?.statut === 'invite';
 
   const tabs = [
     { id: 'informations' as const, label: 'Informations' },
@@ -277,12 +300,12 @@ export function ReunionDetailPage() {
             <p className="text-sm text-text-muted">
               {formatDateHeure(reunion.date_prevue)}
               {reunion.lieu ? ` · ${reunion.lieu}` : ''}
-              {direction ? ` · ${direction.nom}` : ''}
+              {directionsLiees.length > 0 ? ` · ${libelleDirections}` : ''}
             </p>
           </div>
 
           <div className="flex flex-wrap gap-2" role="group" aria-label="Actions réunion">
-            {reunion.statut === 'en_attente_validation' && peutApprouver && (
+            {reunion.statut === 'en_attente_validation' && peutValiderIci && (
               <>
                 <Button
                   size="sm"
@@ -290,7 +313,7 @@ export function ReunionDetailPage() {
                   onClick={() => approuverMut.mutate()}
                 >
                   <Check className="h-4 w-4" aria-hidden />
-                  Approuver
+                  Valider / planifier
                 </Button>
                 <Button
                   size="sm"
@@ -307,9 +330,24 @@ export function ReunionDetailPage() {
                 </Button>
               </>
             )}
+            {reunion.statut === 'en_attente_validation' &&
+              peutApprouver &&
+              !peutValiderIci && (
+                <p className="text-sm text-text-muted">
+                  {directionIds.length > 1
+                    ? 'Validation réservée à un responsable d’une des directions concernées.'
+                    : 'Vous ne pouvez pas valider cette réunion (direction différente).'}
+                </p>
+              )}
             {reunion.statut === 'en_attente_validation' && !peutApprouver && (
               <p className="text-sm text-ogefrem-navy/80">
-                En attente de validation par un directeur.
+                En attente de validation par un secrétaire, chef de service, sous-directeur ou directeur.
+              </p>
+            )}
+            {reunion.statut === 'planifiee' && reunion.valide_par && (
+              <p className="text-sm text-success">
+                Validée{nomValidateur ? ` par ${nomValidateur}` : ''}
+                {reunion.valide_le ? ` le ${formatDateHeure(reunion.valide_le)}` : ''}.
               </p>
             )}
             <Link to={`/reunions/${id}/modifier`}>
@@ -366,6 +404,17 @@ export function ReunionDetailPage() {
         </div>
       </header>
 
+      {invitationEnAttente && (
+        <div className="flex flex-col gap-3 rounded-xl border border-ogefrem-blue/25 bg-ogefrem-blue/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-text">
+            Vous êtes invité(e) à cette réunion. Confirmez votre participation.
+          </p>
+          <Link to={`/reunions/${id}/invitation`}>
+            <Button size="sm">Confirmer l’invitation</Button>
+          </Link>
+        </div>
+      )}
+
       <ReunionTimeline reunion={reunion} />
 
       <ReunionTabs tabs={tabs} active={tab} onChange={setTab}>
@@ -376,8 +425,8 @@ export function ReunionDetailPage() {
             <InfoItem label="Date prévue" value={formatDateHeure(reunion.date_prevue)} />
             <InfoItem label="Lieu" value={reunion.lieu || '—'} />
             <InfoItem
-              label="Direction"
-              value={direction ? formatDirection(direction) : '—'}
+              label={directionIds.length > 1 ? 'Directions' : 'Direction'}
+              value={libelleDirections}
             />
             <InfoItem
               label="Début réel"

@@ -10,6 +10,7 @@ import { idParamSchema } from '../schemas/common.schemas.js';
 import {
   listerNotificationsQuerySchema,
   modifierParametresSchema,
+  testerEmailSchema,
 } from '../schemas/parametres.schemas.js';
 import { PERMISSIONS } from '../utils/permissions.js';
 
@@ -28,6 +29,14 @@ parametresRouter.put(
   requirePermission(PERMISSIONS.PARAMETRES_GERER),
   validateBody(modifierParametresSchema),
   asyncHandler((req, res) => parametresController.modifier(req, res)),
+);
+
+parametresRouter.post(
+  '/tester-email',
+  requireAuth,
+  requirePermission(PERMISSIONS.PARAMETRES_GERER),
+  validateBody(testerEmailSchema),
+  asyncHandler((req, res) => parametresController.testerEmail(req, res)),
 );
 
 /** Notifications — /api/notifications */

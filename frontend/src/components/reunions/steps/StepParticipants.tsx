@@ -14,22 +14,39 @@ type Props = {
 export function StepParticipants({ profils, watch, setValue }: Props) {
   const [q, setQ] = useState('');
   const selected = watch('participants');
+  const multiDirection = watch('multi_direction');
+  const directionId = watch('direction_id');
+  const directionIds = watch('direction_ids');
+  const inclureAutresDirections = watch('participants_autres_directions');
 
   const selectedIds = useMemo(
     () => new Set(selected.map((p) => p.profil_id)),
     [selected],
   );
 
+  const directionScopeIds = useMemo(
+    () => (multiDirection ? directionIds : (directionId ? [directionId] : [])),
+    [multiDirection, directionIds, directionId],
+  );
+
+  const annuaireFiltrable = useMemo(() => {
+    if (directionScopeIds.length === 0) return profils;
+    if (inclureAutresDirections) return profils;
+    return profils.filter(
+      (p) => p.direction_id && directionScopeIds.includes(p.direction_id),
+    );
+  }, [profils, directionScopeIds, inclureAutresDirections]);
+
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    if (!needle) return profils;
-    return profils.filter(
+    if (!needle) return annuaireFiltrable;
+    return annuaireFiltrable.filter(
       (p) =>
         p.prenom.toLowerCase().includes(needle) ||
         p.nom.toLowerCase().includes(needle) ||
         p.email.toLowerCase().includes(needle),
     );
-  }, [profils, q]);
+  }, [annuaireFiltrable, q]);
 
   function addProfil(p: Profil) {
     if (selectedIds.has(p.id)) return;
@@ -56,6 +73,28 @@ export function StepParticipants({ profils, watch, setValue }: Props) {
     );
   }
 
+  function addAllVisible() {
+    const toAdd = filtered.filter((p) => !selectedIds.has(p.id));
+    if (toAdd.length === 0) return;
+    setValue(
+      'participants',
+      [
+        ...selected,
+        ...toAdd.map((p) => ({
+          profil_id: p.id,
+          prenom: p.prenom,
+          nom: p.nom,
+          email: p.email,
+        })),
+      ],
+      { shouldDirty: true },
+    );
+  }
+
+  function clearAllSelected() {
+    setValue('participants', [], { shouldDirty: true });
+  }
+
   return (
     <div className="space-y-4">
       <div className="relative">
@@ -71,6 +110,32 @@ export function StepParticipants({ profils, watch, setValue }: Props) {
           className="h-11 w-full rounded-lg border border-border bg-surface pl-10 text-sm focus:border-ogefrem-blue focus:outline-none focus:ring-2 focus:ring-ogefrem-blue/25"
           aria-label="Rechercher un participant"
         />
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={addAllVisible}>
+            Sélectionner tout (résultats)
+          </Button>
+          <Button type="button" size="sm" variant="ghost" onClick={clearAllSelected}>
+            Vider la sélection
+          </Button>
+        </div>
+        {directionScopeIds.length > 0 && (
+          <label className="flex items-center gap-2 text-sm text-text">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-ogefrem-blue"
+              checked={inclureAutresDirections}
+              onChange={(e) =>
+                setValue('participants_autres_directions', e.target.checked, {
+                  shouldDirty: true,
+                })
+              }
+            />
+            Participants autres directions
+          </label>
+        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">

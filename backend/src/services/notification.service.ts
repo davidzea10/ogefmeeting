@@ -1,11 +1,11 @@
 import type { NotificationApp, PaginatedResult } from '@ogefmeeting/shared';
 import { TABLES } from '@ogefmeeting/shared';
-import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
 import { requireSupabaseAdmin } from '../lib/supabase.js';
 import type { ListerNotificationsQuery } from '../schemas/parametres.schemas.js';
 import { handleSupabaseError } from '../utils/supabase-error.js';
-import { envoyerEmail } from './email.service.js';
+import { isAppError } from '../utils/errors.js';
+import { envoyerEmailOgefmeeting } from './email.service.js';
 
 export type DestinataireNotif = {
   id: string;
@@ -20,8 +20,11 @@ export type CreerNotificationPayload = {
   message: string;
   lien?: string | null;
   metadonnees?: Record<string, unknown>;
-  /** Si fourni : envoie aussi un email (Resend / simulation) */
+  /** Si fourni : envoie aussi un email */
   emailSujet?: string;
+  emailBoutonLibelle?: string;
+  /** Invitations réunion : true — Resend obligatoire */
+  emailExigerReel?: boolean;
 };
 
 export class NotificationService {
@@ -139,26 +142,20 @@ export class NotificationService {
 
       if (!payload.emailSujet) return;
 
-      const lienAbsolu = payload.lien?.startsWith('http')
-        ? payload.lien
-        : `${env.FRONTEND_URL}${payload.lien ?? ''}`;
-
-      const html = `
-        <p>${escapeHtml(payload.message)}</p>
-        ${payload.lien ? `<p><a href="${lienAbsolu}">Ouvrir dans Ogefmeeting</a></p>` : ''}
-        <p style="color:#666;font-size:12px;">Ogefmeeting — OGEFREM</p>
-      `;
-
       for (const dest of list) {
         if (!dest.email) continue;
-        await envoyerEmail({
+        await envoyerEmailOgefmeeting({
           to: dest.email,
           subject: payload.emailSujet,
-          html,
-          text: `${payload.message}\n\n${lienAbsolu}`,
+          titre: payload.titre,
+          message: payload.message,
+          lien: payload.lien,
+          boutonLibelle: payload.emailBoutonLibelle,
+          exigerReel: payload.emailExigerReel,
         });
       }
     } catch (error) {
+      if (isAppError(error)) throw error;
       logger.warn({ err: error }, 'Échec notification');
     }
   }
@@ -217,14 +214,6 @@ export class NotificationService {
 
     return crees;
   }
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }
 
 export const notificationService = new NotificationService();

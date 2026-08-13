@@ -9,6 +9,9 @@ export const etapeInfosSchema = z.object({
   heure: z.string().min(1, 'L’heure est requise.'),
   lieu: z.string().trim().optional().or(z.literal('')),
   direction_id: z.string().uuid().optional().or(z.literal('')),
+  multi_direction: z.boolean().default(false),
+  direction_ids: z.array(z.string().uuid()).default([]),
+  participants_autres_directions: z.boolean().default(false),
 });
 
 export const participantDraftSchema = z.object({
@@ -46,7 +49,16 @@ export const etapeConfirmationSchema = z.object({
 export const reunionFormSchema = etapeInfosSchema
   .merge(etapeParticipantsSchema)
   .merge(etapeOrdreJourSchema)
-  .merge(etapeConfirmationSchema);
+  .merge(etapeConfirmationSchema)
+  .superRefine((values, ctx) => {
+    if (values.multi_direction && values.direction_ids.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['direction_ids'],
+        message: 'Sélectionnez au moins une direction pour une réunion multi-direction.',
+      });
+    }
+  });
 
 export type ReunionFormValues = z.infer<typeof reunionFormSchema>;
 
@@ -58,6 +70,9 @@ export const REUNION_FORM_DEFAULTS: ReunionFormValues = {
   heure: '09:00',
   lieu: '',
   direction_id: '',
+  multi_direction: false,
+  direction_ids: [],
+  participants_autres_directions: false,
   participants: [],
   points: [],
   modele_id: '',

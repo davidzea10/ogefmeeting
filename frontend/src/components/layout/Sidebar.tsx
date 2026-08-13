@@ -2,6 +2,8 @@ import { Logo } from '@/components/brand/Logo';
 import { cn } from '@/lib/cn';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { easeOutExpo, useMotionSafe } from '@/lib/motion';
+import { peutAccederAdministration } from '@/lib/roles';
+import { useAuthStore } from '@/stores/auth.store';
 import { useUiStore } from '@/stores/ui.store';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -14,13 +16,21 @@ import {
   LayoutDashboard,
   Search,
   Settings,
+  User,
   Users,
   X,
 } from 'lucide-react';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
 
-const navItems = [
+type NavItem = {
+  to: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  adminOnly?: boolean;
+};
+
+const navItems: NavItem[] = [
   { to: '/', label: 'Tableau de bord', icon: LayoutDashboard },
   { to: '/reunions', label: 'Réunions', icon: CalendarDays },
   { to: '/comptes-rendus', label: 'Comptes rendus', icon: FileText },
@@ -28,8 +38,9 @@ const navItems = [
   { to: '/notifications', label: 'Notifications', icon: Bell },
   { to: '/recherche', label: 'Recherche', icon: Search },
   { to: '/archives', label: 'Archives', icon: Archive },
-  { to: '/utilisateurs', label: 'Utilisateurs', icon: Users },
-  { to: '/administration', label: 'Administration', icon: Settings },
+  { to: '/profil', label: 'Mon profil', icon: User },
+  { to: '/utilisateurs', label: 'Utilisateurs', icon: Users, adminOnly: true },
+  { to: '/administration', label: 'Administration', icon: Settings, adminOnly: true },
 ];
 
 function SidebarContent({
@@ -41,6 +52,13 @@ function SidebarContent({
 }) {
   const { toggleSidebar, setMobileSidebarOpen } = useUiStore();
   const motionSafe = useMotionSafe();
+  const role = useAuthStore((s) => s.role ?? s.profil?.role ?? null);
+  const estAdmin = peutAccederAdministration(role);
+
+  const itemsVisibles = useMemo(
+    () => navItems.filter((item) => !item.adminOnly || estAdmin),
+    [estAdmin],
+  );
 
   return (
     <motion.aside
@@ -103,7 +121,7 @@ function SidebarContent({
         className="flex-1 space-y-1 overflow-y-auto p-3"
         aria-label="Navigation principale"
       >
-        {navItems.map(({ to, label, icon: Icon }) => (
+        {itemsVisibles.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}

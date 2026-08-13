@@ -19,6 +19,7 @@ import {
   listerAudit,
   modifierParametres,
   obtenirParametres,
+  testerEmail,
 } from '@/lib/notifications-api';
 import {
   estSuperAdmin,
@@ -747,6 +748,7 @@ function ParametresPanel() {
   const [enTete, setEnTete] = useState('');
   const [sousTitre, setSousTitre] = useState('');
   const [retention, setRetention] = useState(365);
+  const [testEmail, setTestEmail] = useState('');
 
   useEffect(() => {
     if (!query.data) return;
@@ -768,6 +770,12 @@ function ParametresPanel() {
       await queryClient.invalidateQueries({ queryKey: ['parametres'] });
       announce('Paramètres enregistrés.');
     },
+    onError: (e: Error) => announce(e.message),
+  });
+
+  const testEmailMut = useMutation({
+    mutationFn: () => testerEmail(testEmail.trim()),
+    onSuccess: () => announce(`Email de test envoyé à ${testEmail.trim()}.`),
     onError: (e: Error) => announce(e.message),
   });
 
@@ -829,6 +837,33 @@ function ParametresPanel() {
       <Button type="submit" size="sm" loading={saveMut.isPending}>
         Enregistrer
       </Button>
+
+      <div className="border-t border-border pt-4">
+        <h4 className="font-semibold text-text">Emails (Resend)</h4>
+        <p className="mt-1 text-xs text-text-muted">
+          {query.data && 'email_configure' in query.data && query.data.email_configure
+            ? 'Resend est configuré sur le serveur.'
+            : 'Resend non configuré — les mails sont seulement journalisés (simulation).'}
+        </p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <input
+            type="email"
+            className="h-10 min-w-[14rem] flex-1 rounded-lg border border-border px-3 text-sm"
+            placeholder="votre@email.com"
+            value={testEmail}
+            onChange={(e) => setTestEmail(e.target.value)}
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            loading={testEmailMut.isPending}
+            onClick={() => testEmailMut.mutate()}
+          >
+            Envoyer un mail de test
+          </Button>
+        </div>
+      </div>
     </form>
   );
 }

@@ -61,6 +61,9 @@ export function ReunionFormWizard({ mode, reunionId }: Props) {
   });
 
   const { register, handleSubmit, watch, setValue, reset, trigger, formState } = form;
+  const directionId = watch('direction_id');
+  const multiDirection = watch('multi_direction');
+  const directionIds = watch('direction_ids');
 
   const directionsQuery = useQuery({
     queryKey: ['directions'],
@@ -93,6 +96,9 @@ export function ReunionFormWizard({ mode, reunionId }: Props) {
           const detail = await obtenirReunion(reunionId);
           if (cancelled) return;
           const { date, heure } = fromDatePrevueISO(detail.date_prevue);
+          const directionIds =
+            detail.direction_ids ??
+            (detail.direction_id ? [detail.direction_id] : []);
           reset({
             titre: detail.titre,
             description: detail.description ?? '',
@@ -100,7 +106,10 @@ export function ReunionFormWizard({ mode, reunionId }: Props) {
             date,
             heure,
             lieu: detail.lieu ?? '',
-            direction_id: detail.direction_id ?? '',
+            direction_id: directionIds[0] ?? '',
+            multi_direction: directionIds.length > 1,
+            direction_ids: directionIds,
+            participants_autres_directions: false,
             modele_id: detail.modele_id ?? '',
             participants: detail.participants.map((p) => ({
               profil_id: p.profil_id,
@@ -170,6 +179,37 @@ export function ReunionFormWizard({ mode, reunionId }: Props) {
     return () => sub.unsubscribe();
   }, [watch, ready, reunionId]);
 
+  // Pré-remplir automatiquement les participants avec les membres des directions choisies.
+  useEffect(() => {
+    if (!ready || mode !== 'create') return;
+    const profils = profilsQuery.data?.items ?? [];
+    if (profils.length === 0) return;
+
+    const selectedDirectionIds = multiDirection
+      ? directionIds
+      : (directionId ? [directionId] : []);
+    if (selectedDirectionIds.length === 0) return;
+
+    const nextParticipants = profils
+      .filter((p) => p.direction_id && selectedDirectionIds.includes(p.direction_id))
+      .map((p) => ({
+        profil_id: p.id,
+        prenom: p.prenom,
+        nom: p.nom,
+        email: p.email,
+      }));
+
+    setValue('participants', nextParticipants, { shouldDirty: true });
+  }, [
+    ready,
+    mode,
+    profilsQuery.data,
+    directionId,
+    multiDirection,
+    directionIds,
+    setValue,
+  ]);
+
   async function goNext() {
     if (step === 0) {
       const ok = await trigger(['titre', 'type_reunion', 'date', 'heure']);
@@ -187,13 +227,20 @@ export function ReunionFormWizard({ mode, reunionId }: Props) {
     setSubmitting(true);
     setSubmitError(null);
     try {
+      const directionIds = values.multi_direction
+        ? values.direction_ids
+        : values.direction_id
+          ? [values.direction_id]
+          : [];
+
       const payload = {
         titre: values.titre,
         description: values.description || null,
         type_reunion: values.type_reunion,
         date_prevue: toDatePrevueISO(values.date, values.heure),
         lieu: values.lieu || null,
-        direction_id: values.direction_id || null,
+        direction_id: directionIds[0] ?? null,
+        direction_ids: directionIds,
         modele_id: values.modele_id || null,
       };
 
@@ -299,6 +346,8 @@ export function ReunionFormWizard({ mode, reunionId }: Props) {
             {step === 0 && (
               <StepInfos
                 register={register}
+                watch={watch}
+                setValue={setValue}
                 errors={formState.errors}
                 directions={directionsQuery.data ?? []}
               />

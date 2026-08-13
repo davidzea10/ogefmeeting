@@ -2,10 +2,11 @@ import type {
   PaginatedResult,
   ParticipantReunion,
   PointOrdreJour,
+  Profil,
   Reunion,
   ReunionDetail,
 } from '@ogefmeeting/shared';
-import { TABLES } from '@ogefmeeting/shared';
+import { peutApprouverReunionPourDirections, TABLES } from '@ogefmeeting/shared';
 import { requireSupabaseAdmin } from '../lib/supabase.js';
 import type {
   CreerReunionInput,
@@ -22,6 +23,29 @@ export type ScopeReunion = {
   /** Si défini : ne renvoyer que les réunions où ce profil est participant */
   limiterAuProfilId?: string | null;
 };
+
+function formaterDateFr(iso: string): string {
+  try {
+    return new Intl.DateTimeFormat('fr-FR', {
+      dateStyle: 'full',
+      timeStyle: 'short',
+      timeZone: 'Africa/Kinshasa',
+    }).format(new Date(iso));
+  } catch {
+    return iso;
+  }
+}
+
+function normaliserDirectionIds(input: {
+  direction_id?: string | null;
+  direction_ids?: string[];
+}): string[] {
+  if (input.direction_ids && input.direction_ids.length > 0) {
+    return [...new Set(input.direction_ids)];
+  }
+  if (input.direction_id) return [input.direction_id];
+  return [];
+}
 
 export class ReunionService {
   async idsReunionsVisiblesPourMembre(profilId: string): Promise<string[]> {
@@ -98,6 +122,8 @@ export class ReunionService {
       ? 'planifiee'
       : 'en_attente_validation';
 
+    const directionIds = normaliserDirectionIds(input);
+
     const { data, error } = await supabase
       .from(TABLES.reunions)
       .insert({
@@ -106,7 +132,7 @@ export class ReunionService {
         type_reunion: input.type_reunion,
         date_prevue: input.date_prevue,
         lieu: input.lieu ?? null,
-        direction_id: input.direction_id ?? null,
+        direction_id: directionIds[0] ?? null,
         modele_id: input.modele_id ?? null,
         cree_par: input.cree_par ?? null,
         statut,
@@ -120,6 +146,8 @@ export class ReunionService {
 
     const reunion = data as Reunion;
 
+    await this.synchroniserDirections(reunion.id, directionIds);
+
     // Le créateur est automatiquement participant
     if (input.cree_par) {
       await supabase.from(TABLES.participantsReunion).insert({
@@ -129,7 +157,11 @@ export class ReunionService {
       });
     }
 
-    return reunion;
+    if (statut === 'en_attente_validation') {
+      await this.notifierValidateurs(reunion, directionIds, input.cree_par ?? null);
+    }
+
+    return { ...reunion, direction_ids: directionIds };
   }
 
   async lister(
@@ -179,7 +211,23 @@ export class ReunionService {
       builder = builder.eq('type_reunion', type_reunion);
     }
     if (direction_id) {
-      builder = builder.eq('direction_id', direction_id);
+      const { data: links, error: linksError } = await supabase
+        .from(TABLES.reunionsDirections)
+        .select('reunion_id')
+        .eq('direction_id', direction_id);
+
+      if (linksError) {
+        handleSupabaseError(linksError, 'Impossible de filtrer par direction.');
+      }
+
+      const linkedIds = (links ?? []).map((l) => l.reunion_id as string);
+      if (linkedIds.length > 0) {
+        builder = builder.or(
+          `direction_id.eq.${direction_id},id.in.(${linkedIds.join(',')})`,
+        );
+      } else {
+        builder = builder.eq('direction_id', direction_id);
+      }
     }
     if (date_apres) {
       builder = builder.gte('date_prevue', date_apres);
@@ -203,9 +251,11 @@ export class ReunionService {
     }
 
     const total = count ?? 0;
+    const items = (data ?? []) as Reunion[];
+    const directionMap = await this.chargerDirectionIds(items.map((r) => r.id));
 
     return {
-      items: (data ?? []) as Reunion[],
+      items: items.map((r) => this.enrichirAvecDirections(r, directionMap)),
       pagination: {
         page,
         limite,
@@ -257,8 +307,13 @@ export class ReunionService {
       handleSupabaseError(pointsResult.error, "Impossible de charger l'ordre du jour.");
     }
 
+    const directionMap = await this.chargerDirectionIds([id]);
+    const base = reunion as Reunion;
+    const enrichie = this.enrichirAvecDirections(base, directionMap);
+    const avecValidateur = await this.enrichirValidateur(enrichie);
+
     return {
-      ...(reunion as Reunion),
+      ...avecValidateur,
       participants: (participantsResult.data ?? []) as ParticipantReunion[],
       points_ordre_jour: (pointsResult.data ?? []) as PointOrdreJour[],
     };
@@ -268,9 +323,21 @@ export class ReunionService {
     await this.assurerExiste(id);
     const supabase = requireSupabaseAdmin();
 
+    const { direction_ids, ...rest } = input;
+    const updatePayload: Record<string, unknown> = { ...rest };
+
+    if (direction_ids !== undefined || input.direction_id !== undefined) {
+      const ids = normaliserDirectionIds({
+        direction_id: input.direction_id,
+        direction_ids,
+      });
+      updatePayload.direction_id = ids[0] ?? null;
+      await this.synchroniserDirections(id, ids);
+    }
+
     const { data, error } = await supabase
       .from(TABLES.reunions)
-      .update(input)
+      .update(updatePayload)
       .eq('id', id)
       .select('*')
       .single();
@@ -279,7 +346,9 @@ export class ReunionService {
       handleSupabaseError(error, 'Impossible de modifier la réunion.');
     }
 
-    return data as Reunion;
+    const reunion = data as Reunion;
+    const directionMap = await this.chargerDirectionIds([id]);
+    return this.enrichirAvecDirections(reunion, directionMap);
   }
 
   /** Soft delete : passe le statut à archivee */
@@ -362,7 +431,9 @@ export class ReunionService {
   }
 
   /**
-   * Remplace la liste des participants (supprime les anciens, insère les nouveaux).
+   * Remplace la liste des participants.
+   * Nouveaux invités : statut « invite », notif in-app + email réel (Resend) avec lien de confirmation.
+   * Participants déjà présents : statut conservé (sauf créateur → confirme).
    */
   async gererParticipants(
     id: string,
@@ -370,6 +441,26 @@ export class ReunionService {
   ): Promise<ParticipantReunion[]> {
     const reunion = await this.assurerExiste(id);
     const supabase = requireSupabaseAdmin();
+
+    const { data: existants, error: existantsError } = await supabase
+      .from(TABLES.participantsReunion)
+      .select('*')
+      .eq('reunion_id', id);
+
+    if (existantsError) {
+      handleSupabaseError(existantsError, 'Impossible de charger les participants.');
+    }
+
+    const anciensParProfil = new Map(
+      ((existants ?? []) as ParticipantReunion[]).map((p) => [p.profil_id, p]),
+    );
+
+    const nouveauxIds = input.participants
+      .map((p) => p.profil_id)
+      .filter(
+        (profilId) =>
+          !anciensParProfil.has(profilId) && profilId !== reunion.cree_par,
+      );
 
     const { error: deleteError } = await supabase
       .from(TABLES.participantsReunion)
@@ -381,7 +472,6 @@ export class ReunionService {
     }
 
     if (input.participants.length === 0) {
-      // Conserver au moins le créateur s’il existe
       if (reunion.cree_par) {
         const { data: alone, error: aloneError } = await supabase
           .from(TABLES.participantsReunion)
@@ -400,11 +490,18 @@ export class ReunionService {
     }
 
     const profilIds = new Set(input.participants.map((p) => p.profil_id));
-    const rows = input.participants.map((p) => ({
-      reunion_id: id,
-      profil_id: p.profil_id,
-      statut: p.statut,
-    }));
+
+    const rows = input.participants.map((p) => {
+      const ancien = anciensParProfil.get(p.profil_id);
+      const estCreateur = reunion.cree_par === p.profil_id;
+      return {
+        reunion_id: id,
+        profil_id: p.profil_id,
+        statut: estCreateur
+          ? 'confirme'
+          : (ancien?.statut ?? p.statut ?? 'invite'),
+      };
+    });
 
     if (reunion.cree_par && !profilIds.has(reunion.cree_par)) {
       rows.push({
@@ -423,28 +520,79 @@ export class ReunionService {
       handleSupabaseError(error, 'Impossible d’ajouter les participants.');
     }
 
-    // Notifications d'invitation (in-app + email) — best-effort
-    if (input.participants.length > 0) {
-      const ids = input.participants.map((p) => p.profil_id);
+    // Nouveaux invités : notification in-app + email réel (Resend)
+    if (nouveauxIds.length > 0) {
       const { data: profils } = await supabase
         .from(TABLES.profils)
         .select('id, email, prenom, nom')
-        .in('id', ids);
+        .in('id', nouveauxIds);
+
+      const dateTxt = formaterDateFr(reunion.date_prevue);
+      const lieuTxt = reunion.lieu ? `\nLieu : ${reunion.lieu}` : '';
+      const lienConfirmation = `/reunions/${id}/invitation`;
 
       await notificationService.creerPourProfils(
         (profils ?? []) as { id: string; email: string; prenom: string; nom: string }[],
         {
           type: 'invitation_reunion',
           titre: 'Invitation à une réunion',
-          message: `Vous êtes invité(e) à « ${reunion.titre} ».`,
-          lien: `/reunions/${id}`,
+          message:
+            `Vous êtes invité(e) à la réunion « ${reunion.titre} ».\n` +
+            `Date : ${dateTxt}${lieuTxt}\n\n` +
+            `Merci de confirmer votre présence dans Ogefmeeting (bouton ci-dessous ou onglet Notifications).`,
+          lien: lienConfirmation,
           emailSujet: `[Ogefmeeting] Invitation — ${reunion.titre}`,
+          emailBoutonLibelle: 'Confirmer mon invitation',
           metadonnees: { reunion_id: id },
         },
       );
     }
 
     return (data ?? []) as ParticipantReunion[];
+  }
+
+  /**
+   * L’invité connecté confirme ou décline sa participation.
+   */
+  async repondreInvitation(
+    reunionId: string,
+    profilId: string,
+    reponse: 'confirme' | 'absent',
+  ): Promise<ParticipantReunion> {
+    await this.assurerExiste(reunionId);
+    const supabase = requireSupabaseAdmin();
+
+    const { data: participant, error: findError } = await supabase
+      .from(TABLES.participantsReunion)
+      .select('*')
+      .eq('reunion_id', reunionId)
+      .eq('profil_id', profilId)
+      .maybeSingle();
+
+    if (findError) {
+      handleSupabaseError(findError, 'Impossible de trouver votre invitation.');
+    }
+    if (!participant) {
+      throw new AppError(404, 'Vous n’êtes pas invité(e) à cette réunion.');
+    }
+
+    const actuel = participant as ParticipantReunion;
+    if (actuel.statut === 'present') {
+      throw new AppError(400, 'Votre présence est déjà enregistrée pour cette réunion.');
+    }
+
+    const { data, error } = await supabase
+      .from(TABLES.participantsReunion)
+      .update({ statut: reponse })
+      .eq('id', actuel.id)
+      .select('*')
+      .single();
+
+    if (error) {
+      handleSupabaseError(error, 'Impossible d’enregistrer votre réponse.');
+    }
+
+    return data as ParticipantReunion;
   }
 
   /**
@@ -535,39 +683,110 @@ export class ReunionService {
     return data as ParticipantReunion;
   }
 
-  async approuver(id: string, validePar?: string): Promise<Reunion> {
+  async approuver(
+    id: string,
+    validePar?: string,
+    contexte?: {
+      role?: string;
+      fonction?: string | null;
+      direction_id?: string | null;
+    },
+  ): Promise<Reunion> {
     const reunion = await this.assurerExiste(id);
     if (reunion.statut !== 'en_attente_validation') {
+      if (reunion.valide_par) {
+        const nom = await this.nomValidateur(reunion.valide_par);
+        throw new AppError(
+          409,
+          `Cette réunion a déjà été validée${nom ? ` par ${nom}` : ''}.`,
+        );
+      }
       throw new AppError(
         400,
         `Seule une réunion en attente de validation peut être approuvée (statut actuel : ${reunion.statut}).`,
       );
     }
 
+    const directionMap = await this.chargerDirectionIds([id]);
+    const directionIds =
+      directionMap.get(id) ??
+      (reunion.direction_id ? [reunion.direction_id] : []);
+
+    if (
+      contexte &&
+      !peutApprouverReunionPourDirections(
+        contexte.role as Parameters<typeof peutApprouverReunionPourDirections>[0],
+        contexte.fonction,
+        directionIds,
+        contexte.direction_id,
+      )
+    ) {
+      throw new AppError(
+        403,
+        'Vous ne pouvez valider que les réunions des directions dont vous relévez.',
+      );
+    }
+
     const supabase = requireSupabaseAdmin();
     const { data, error } = await supabase
       .from(TABLES.reunions)
-      .update({ statut: 'planifiee' })
+      .update({
+        statut: 'planifiee',
+        valide_par: validePar ?? null,
+        valide_le: new Date().toISOString(),
+      })
       .eq('id', id)
+      .eq('statut', 'en_attente_validation')
       .select('*')
-      .single();
+      .maybeSingle();
 
     if (error) {
       handleSupabaseError(error, 'Impossible d’approuver la réunion.');
     }
 
-    if (reunion.cree_par) {
-      await supabase.from(TABLES.notifications).insert({
-        profil_id: reunion.cree_par,
-        type: 'reunion_approuvee',
-        titre: 'Réunion approuvée',
-        message: `Votre réunion « ${reunion.titre} » a été planifiée.`,
-        lien: `/reunions/${id}`,
-        metadonnees: { reunion_id: id, valide_par: validePar ?? null },
-      });
+    if (!data) {
+      const actuelle = await this.assurerExiste(id);
+      if (actuelle.valide_par) {
+        const nom = await this.nomValidateur(actuelle.valide_par);
+        throw new AppError(
+          409,
+          `Cette réunion a déjà été validée${nom ? ` par ${nom}` : ''}.`,
+        );
+      }
+      throw new AppError(400, 'Impossible d’approuver cette réunion.');
     }
 
-    return data as Reunion;
+    const valideurNom = validePar ? await this.nomValidateur(validePar) : null;
+
+    if (reunion.cree_par) {
+      const { data: createur } = await supabase
+        .from(TABLES.profils)
+        .select('id, email, prenom, nom')
+        .eq('id', reunion.cree_par)
+        .maybeSingle();
+
+      if (createur) {
+        await notificationService.creerPourProfils(
+          [createur as { id: string; email: string; prenom: string; nom: string }],
+          {
+            type: 'reunion_approuvee',
+            titre: 'Réunion approuvée',
+            message:
+              `Votre réunion « ${reunion.titre} » a été planifiée` +
+              (valideurNom ? ` par ${valideurNom}.` : '.'),
+            lien: `/reunions/${id}`,
+            emailSujet: `[Ogefmeeting] Réunion planifiée — ${reunion.titre}`,
+            metadonnees: { reunion_id: id, valide_par: validePar ?? null },
+          },
+        );
+      }
+    }
+
+    const enrichie = this.enrichirAvecDirections(data as Reunion, directionMap);
+    return {
+      ...(await this.enrichirValidateur(enrichie)),
+      direction_ids: directionIds,
+    };
   }
 
   async refuser(id: string, refusePar?: string): Promise<Reunion> {
@@ -592,17 +811,177 @@ export class ReunionService {
     }
 
     if (reunion.cree_par) {
-      await supabase.from(TABLES.notifications).insert({
-        profil_id: reunion.cree_par,
-        type: 'reunion_refusee',
-        titre: 'Réunion refusée',
-        message: `Votre proposition « ${reunion.titre} » n’a pas été validée.`,
-        lien: `/reunions/${id}`,
-        metadonnees: { reunion_id: id, refuse_par: refusePar ?? null },
-      });
+      const { data: createur } = await supabase
+        .from(TABLES.profils)
+        .select('id, email, prenom, nom')
+        .eq('id', reunion.cree_par)
+        .maybeSingle();
+
+      if (createur) {
+        await notificationService.creerPourProfils(
+          [createur as { id: string; email: string; prenom: string; nom: string }],
+          {
+            type: 'reunion_refusee',
+            titre: 'Réunion refusée',
+            message: `Votre proposition « ${reunion.titre} » n’a pas été validée.`,
+            lien: `/reunions/${id}`,
+            emailSujet: `[Ogefmeeting] Réunion refusée — ${reunion.titre}`,
+            metadonnees: { reunion_id: id, refuse_par: refusePar ?? null },
+          },
+        );
+      }
     }
 
     return data as Reunion;
+  }
+
+  private async notifierValidateurs(
+    reunion: Reunion,
+    directionIds: string[],
+    createurId: string | null,
+  ): Promise<void> {
+    const supabase = requireSupabaseAdmin();
+    const { data: profils, error } = await supabase
+      .from(TABLES.profils)
+      .select('id, email, prenom, nom, role, fonction, direction_id')
+      .eq('est_actif', true);
+
+    if (error) {
+      handleSupabaseError(error, 'Impossible de notifier les validateurs.');
+    }
+
+    let createurNom = 'Un membre';
+    if (createurId) {
+      const { data: createur } = await supabase
+        .from(TABLES.profils)
+        .select('prenom, nom')
+        .eq('id', createurId)
+        .maybeSingle();
+      if (createur) {
+        createurNom = `${createur.prenom} ${createur.nom}`.trim();
+      }
+    }
+
+    const dateTxt = formaterDateFr(reunion.date_prevue);
+    const validateurs = ((profils ?? []) as Profil[]).filter((p) => {
+      if (p.id === createurId) return false;
+      return peutApprouverReunionPourDirections(
+        p.role,
+        p.fonction,
+        directionIds,
+        p.direction_id,
+      );
+    });
+
+    if (validateurs.length === 0) return;
+
+    await notificationService.creerPourProfils(
+      validateurs.map((p) => ({
+        id: p.id,
+        email: p.email,
+        prenom: p.prenom,
+        nom: p.nom,
+      })),
+      {
+        type: 'reunion_a_valider',
+        titre: 'Réunion à valider',
+        message:
+          `${createurNom} propose « ${reunion.titre} ».\n` +
+          `Date : ${dateTxt}\n\n` +
+          `Validez pour planifier cette réunion.`,
+        lien: `/reunions/${reunion.id}`,
+        emailSujet: `[Ogefmeeting] À valider — ${reunion.titre}`,
+        emailBoutonLibelle: 'Valider la réunion',
+        metadonnees: { reunion_id: reunion.id, cree_par: createurId },
+      },
+    );
+  }
+
+  private async nomValidateur(profilId: string): Promise<string | null> {
+    const supabase = requireSupabaseAdmin();
+    const { data } = await supabase
+      .from(TABLES.profils)
+      .select('prenom, nom')
+      .eq('id', profilId)
+      .maybeSingle();
+    if (!data) return null;
+    return `${data.prenom} ${data.nom}`.trim();
+  }
+
+  private async enrichirValidateur(reunion: Reunion): Promise<Reunion> {
+    if (!reunion.valide_par) return reunion;
+    const nom = await this.nomValidateur(reunion.valide_par);
+    return { ...reunion, valide_par_nom: nom };
+  }
+
+  private async synchroniserDirections(
+    reunionId: string,
+    directionIds: string[],
+  ): Promise<void> {
+    const supabase = requireSupabaseAdmin();
+    const unique = [...new Set(directionIds.filter(Boolean))];
+
+    const { error: deleteError } = await supabase
+      .from(TABLES.reunionsDirections)
+      .delete()
+      .eq('reunion_id', reunionId);
+
+    if (deleteError) {
+      handleSupabaseError(deleteError, 'Impossible de mettre à jour les directions.');
+    }
+
+    if (unique.length === 0) return;
+
+    const { error: insertError } = await supabase.from(TABLES.reunionsDirections).insert(
+      unique.map((direction_id) => ({
+        reunion_id: reunionId,
+        direction_id,
+      })),
+    );
+
+    if (insertError) {
+      handleSupabaseError(insertError, 'Impossible d’enregistrer les directions.');
+    }
+  }
+
+  private async chargerDirectionIds(
+    reunionIds: string[],
+  ): Promise<Map<string, string[]>> {
+    const map = new Map<string, string[]>();
+    if (reunionIds.length === 0) return map;
+
+    const supabase = requireSupabaseAdmin();
+    const { data, error } = await supabase
+      .from(TABLES.reunionsDirections)
+      .select('reunion_id, direction_id')
+      .in('reunion_id', reunionIds);
+
+    if (error) {
+      handleSupabaseError(error, 'Impossible de charger les directions.');
+    }
+
+    for (const row of data ?? []) {
+      const reunionId = row.reunion_id as string;
+      const list = map.get(reunionId) ?? [];
+      list.push(row.direction_id as string);
+      map.set(reunionId, list);
+    }
+
+    return map;
+  }
+
+  private enrichirAvecDirections(
+    reunion: Reunion,
+    map: Map<string, string[]>,
+  ): Reunion {
+    const ids = map.get(reunion.id);
+    const direction_ids =
+      ids && ids.length > 0
+        ? ids
+        : reunion.direction_id
+          ? [reunion.direction_id]
+          : [];
+    return { ...reunion, direction_ids };
   }
 
   private async assurerExiste(id: string): Promise<Reunion> {

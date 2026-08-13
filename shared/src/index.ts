@@ -36,6 +36,13 @@ export const FONCTIONS_ORGANISATION = [
 ] as const;
 export type FonctionOrganisation = (typeof FONCTIONS_ORGANISATION)[number];
 
+/** Fonctions autorisées à valider une réunion proposée */
+export const FONCTIONS_VALIDATION_REUNION = [
+  'chef_service',
+  'sous_directeur',
+  'directeur',
+] as const;
+
 /** Fonctions autorisées à créer une réunion déjà planifiée (sans validation) */
 export const FONCTIONS_CREATION_REUNION = [
   'chef_service',
@@ -75,12 +82,7 @@ export function reunionDirectementPlanifiee(
   role: RoleUtilisateur | null | undefined,
   fonction?: string | null,
 ): boolean {
-  if (role === 'administrateur' || role === 'secretaire' || role === 'directeur') {
-    return true;
-  }
-  return Boolean(
-    fonction && (FONCTIONS_CREATION_REUNION as readonly string[]).includes(fonction),
-  );
+  return peutApprouverReunion(role, fonction);
 }
 
 /** Voit le catalogue complet des réunions (sinon : ses invitations + ses créations) */
@@ -88,16 +90,43 @@ export function voitToutesLesReunions(
   role: RoleUtilisateur | null | undefined,
   fonction?: string | null,
 ): boolean {
-  return reunionDirectementPlanifiee(role, fonction);
+  return peutApprouverReunion(role, fonction);
 }
 
-/** Directeur / sous-directeur / admin : valide ou refuse une proposition */
+/**
+ * Secrétaire, chef de service, sous-directeur, directeur (+ admin) peuvent valider.
+ */
 export function peutApprouverReunion(
   role: RoleUtilisateur | null | undefined,
   fonction?: string | null,
 ): boolean {
-  if (role === 'administrateur' || role === 'directeur') return true;
-  return fonction === 'directeur' || fonction === 'sous_directeur';
+  if (role === 'administrateur' || role === 'secretaire' || role === 'directeur') {
+    return true;
+  }
+  return Boolean(
+    fonction &&
+      (FONCTIONS_VALIDATION_REUNION as readonly string[]).includes(fonction),
+  );
+}
+
+/**
+ * Validation multi-direction : un validateur « direction » doit appartenir
+ * à l’une des directions concernées. Admin / secrétaire / rôle directeur : toutes.
+ */
+export function peutApprouverReunionPourDirections(
+  role: RoleUtilisateur | null | undefined,
+  fonction: string | null | undefined,
+  directionIds: string[],
+  profilDirectionId?: string | null,
+): boolean {
+  if (!peutApprouverReunion(role, fonction)) return false;
+  if (role === 'administrateur' || role === 'secretaire' || role === 'directeur') {
+    return true;
+  }
+  if (directionIds.length === 0) return true;
+  return Boolean(
+    profilDirectionId && directionIds.includes(profilDirectionId),
+  );
 }
 
 /** @deprecated Utiliser ROLES_UTILISATEUR */
@@ -197,6 +226,7 @@ export const TABLES = {
   profils: 'profils',
   modelesCompteRendu: 'modeles_compte_rendu',
   reunions: 'reunions',
+  reunionsDirections: 'reunions_directions',
   participantsReunion: 'participants_reunion',
   pointsOrdreJour: 'points_ordre_jour',
   enregistrements: 'enregistrements',
@@ -313,8 +343,14 @@ export type Reunion = {
   date_fin: string | null;
   lieu: string | null;
   direction_id: string | null;
+  /** Directions liées (multi-direction). direction_id = première direction (rétrocompat). */
+  direction_ids?: string[];
   modele_id: string | null;
   cree_par: string | null;
+  valide_par: string | null;
+  valide_le: string | null;
+  /** Enrichi côté API */
+  valide_par_nom?: string | null;
   cree_le: string;
   modifie_le: string;
 };
@@ -464,6 +500,7 @@ export type ParametresApplication = {
 
 export const TYPES_NOTIFICATION = [
   'invitation_reunion',
+  'reunion_a_valider',
   'reunion_approuvee',
   'reunion_refusee',
   'cr_soumis',

@@ -5,10 +5,11 @@ import { Input } from '@/components/ui/Input';
 import { apiConnexion } from '@/lib/auth-api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const setSession = useAuthStore((s) => s.setSession);
   const announce = useAnnouncerStore((s) => s.announce);
 
@@ -17,6 +18,11 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [shakeKey, setShakeKey] = useState(0);
   const [loading, setLoading] = useState(false);
+
+  const redirectTo =
+    typeof (location.state as { from?: unknown } | null)?.from === 'string'
+      ? ((location.state as { from: string }).from || '/')
+      : '/';
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -33,7 +39,7 @@ export function LoginPage() {
       const session = await apiConnexion(email.trim(), password);
       setSession(session);
       announce(`Connexion réussie. Bienvenue ${session.profil?.prenom ?? ''}.`);
-      navigate('/', { replace: true });
+      navigate(redirectTo.startsWith('/') ? redirectTo : '/', { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Connexion impossible.');
       setShakeKey((k) => k + 1);

@@ -3,7 +3,7 @@ import { TABLES } from '@ogefmeeting/shared';
 import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
 import { requireSupabaseAdmin } from '../lib/supabase.js';
-import { envoyerEmail } from './email.service.js';
+import { envoyerEmailOgefmeeting } from './email.service.js';
 
 type ProfilDestinataire = {
   id: string;
@@ -142,31 +142,18 @@ export async function notifierChangementStatutCr(opts: {
       },
     });
 
-    const html = `
-      <p>${message}</p>
-      ${motif ? `<p><strong>Commentaire :</strong> ${escapeHtml(motif)}</p>` : ''}
-      <p><a href="${lien}">Ouvrir le compte rendu</a></p>
-      <p style="color:#666;font-size:12px;">Ogefmeeting — OGEFREM</p>
-    `;
-
     for (const dest of destinataires) {
       if (!dest.email) continue;
-      await envoyerEmail({
+      await envoyerEmailOgefmeeting({
         to: dest.email,
         subject: sujet,
-        html,
-        text: `${message}\n\nLien : ${lien}`,
+        titre: sujet.replace('[Ogefmeeting] ', ''),
+        message: motif ? `${message}\n\nCommentaire : ${motif}` : message,
+        lien,
+        boutonLibelle: 'Ouvrir le compte rendu',
       });
     }
   } catch (error) {
     logger.warn({ err: error }, 'Échec notification changement statut CR');
   }
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }

@@ -17,6 +17,12 @@ export const modifierParametresSchema = z
 
 export type ModifierParametresInput = z.infer<typeof modifierParametresSchema>;
 
+export const testerEmailSchema = z.object({
+  email: z.string().email('Email invalide.'),
+});
+
+export type TesterEmailInput = z.infer<typeof testerEmailSchema>;
+
 export const listerNotificationsQuerySchema = paginationQuerySchema.extend({
   non_lues: z
     .enum(['true', 'false'])

@@ -13,6 +13,7 @@ export const creerReunionSchema = z.object({
   date_prevue: z.string().datetime({ message: 'date_prevue doit être une date ISO valide.' }),
   lieu: z.string().trim().optional().nullable(),
   direction_id: uuidSchema.optional().nullable(),
+  direction_ids: z.array(uuidSchema).optional(),
   modele_id: uuidSchema.optional().nullable(),
   /** Optionnel tant que l'auth JWT n'est pas en place (étape 4) */
   cree_par: uuidSchema.optional().nullable(),
@@ -31,6 +32,7 @@ export const modifierReunionSchema = z
       .optional(),
     lieu: z.string().trim().optional().nullable(),
     direction_id: uuidSchema.optional().nullable(),
+    direction_ids: z.array(uuidSchema).optional(),
     modele_id: uuidSchema.optional().nullable(),
   })
   .refine((data) => Object.keys(data).length > 0, {
@@ -89,3 +91,9 @@ export const modifierParticipantSchema = z.object({
 });
 
 export type ModifierParticipantInput = z.infer<typeof modifierParticipantSchema>;
+
+export const repondreInvitationSchema = z.object({
+  reponse: z.enum(['confirme', 'absent']),
+});
+
+export type RepondreInvitationInput = z.infer<typeof repondreInvitationSchema>;
