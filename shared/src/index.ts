@@ -508,6 +508,7 @@ export const TYPES_NOTIFICATION = [
   'cr_en_revision',
   'cr_valide',
   'cr_publie',
+  'cr_disponible',
   'cr_archive',
   'action_en_retard',
 ] as const;

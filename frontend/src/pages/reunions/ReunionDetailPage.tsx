@@ -26,7 +26,7 @@ import {
   obtenirReunion,
   refuserReunion,
 } from '@/lib/reunions-api';
-import { peutApprouverReunionRole, peutApprouverReunionPourReunion } from '@/lib/roles';
+import { peutApprouverReunionRole, peutApprouverReunionPourReunion, peutGererReunionRole, peutModifierReunionRole } from '@/lib/roles';
 import { useAuthStore } from '@/stores/auth.store';
 import {
   STATUTS_PARTICIPANT,
@@ -58,6 +58,7 @@ export function ReunionDetailPage() {
   const role = useAuthStore((s) => s.role ?? s.profil?.role ?? null);
   const userId = useAuthStore((s) => s.user?.id ?? s.profil?.id);
   const peutApprouver = peutApprouverReunionRole(role, profil?.fonction);
+  const peutGerer = peutGererReunionRole(role, profil?.fonction);
   const [tab, setTab] = useState<TabId>('informations');
 
   useEffect(() => {
@@ -253,6 +254,12 @@ export function ReunionDetailPage() {
   const traites = points.filter((p) => p.est_traite).length;
   const monInvitation = reunion.participants.find((p) => p.profil_id === userId);
   const invitationEnAttente = monInvitation?.statut === 'invite';
+  const peutModifier = peutModifierReunionRole(
+    role,
+    profil?.fonction,
+    userId,
+    reunion,
+  );
 
   const tabs = [
     { id: 'informations' as const, label: 'Informations' },
@@ -350,13 +357,15 @@ export function ReunionDetailPage() {
                 {reunion.valide_le ? ` le ${formatDateHeure(reunion.valide_le)}` : ''}.
               </p>
             )}
-            <Link to={`/reunions/${id}/modifier`}>
-              <Button variant="outline" size="sm">
-                <Pencil className="h-4 w-4" aria-hidden />
-                Modifier
-              </Button>
-            </Link>
-            {reunion.statut === 'planifiee' && (
+            {peutModifier && (
+              <Link to={`/reunions/${id}/modifier`}>
+                <Button variant="outline" size="sm">
+                  <Pencil className="h-4 w-4" aria-hidden />
+                  Modifier
+                </Button>
+              </Link>
+            )}
+            {peutGerer && reunion.statut === 'planifiee' && (
               <Button
                 size="sm"
                 loading={demarrerMut.isPending}
@@ -374,18 +383,20 @@ export function ReunionDetailPage() {
                     Mode live
                   </Button>
                 </Link>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  loading={cloturerMut.isPending}
-                  onClick={() => cloturerMut.mutate()}
-                >
-                  <Square className="h-4 w-4" aria-hidden />
-                  Clôturer
-                </Button>
+                {peutGerer && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    loading={cloturerMut.isPending}
+                    onClick={() => cloturerMut.mutate()}
+                  >
+                    <Square className="h-4 w-4" aria-hidden />
+                    Clôturer
+                  </Button>
+                )}
               </>
             )}
-            {reunion.statut !== 'archivee' && reunion.statut !== 'en_cours' && (
+            {peutGerer && reunion.statut !== 'archivee' && reunion.statut !== 'en_cours' && (
               <Button
                 size="sm"
                 variant="ghost"
@@ -448,46 +459,113 @@ export function ReunionDetailPage() {
             {reunion.participants.length === 0 ? (
               <Empty hint="Aucun participant. Modifiez la réunion pour en ajouter." />
             ) : (
-              <ul className="divide-y divide-border rounded-xl border border-border">
-                {reunion.participants.map((p) => {
-                  const profil = profilMap.get(p.profil_id);
-                  const nom = profil
-                    ? `${profil.prenom} ${profil.nom}`
-                    : `Profil ${p.profil_id.slice(0, 8)}…`;
-                  return (
-                    <li
-                      key={p.id}
-                      className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <div>
+              <>
+                {/* Mobile */}
+                <ul className="space-y-2 md:hidden">
+                  {reunion.participants.map((p) => {
+                    const profil = profilMap.get(p.profil_id);
+                    const nom = profil
+                      ? `${profil.prenom} ${profil.nom}`
+                      : `Profil ${p.profil_id.slice(0, 8)}…`;
+                    return (
+                      <li
+                        key={p.id}
+                        className="rounded-xl border border-border/80 bg-surface p-3 shadow-sm"
+                      >
                         <p className="font-semibold text-text">{nom}</p>
                         <p className="text-xs text-text-muted">{profil?.email}</p>
-                      </div>
-                      <label className="flex items-center gap-2 text-sm">
-                        <span className="text-text-muted">Présence</span>
-                        <select
-                          className="h-10 rounded-lg border border-border bg-surface px-2 text-sm"
-                          value={p.statut}
-                          disabled={participantMut.isPending}
-                          onChange={(e) =>
-                            participantMut.mutate({
-                              participantId: p.id,
-                              statut: e.target.value as StatutParticipant,
-                            })
-                          }
-                          aria-label={`Statut de ${nom}`}
-                        >
-                          {STATUTS_PARTICIPANT.map((s) => (
-                            <option key={s} value={s}>
-                              {LIBELLES_PARTICIPANT[s]}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </li>
-                  );
-                })}
-              </ul>
+                        <div className="mt-2">
+                          {peutModifier ? (
+                            <select
+                              className="h-10 w-full rounded-lg border border-border bg-surface px-2 text-sm"
+                              value={p.statut}
+                              disabled={participantMut.isPending}
+                              onChange={(e) =>
+                                participantMut.mutate({
+                                  participantId: p.id,
+                                  statut: e.target.value as StatutParticipant,
+                                })
+                              }
+                              aria-label={`Statut de ${nom}`}
+                            >
+                              {STATUTS_PARTICIPANT.map((s) => (
+                                <option key={s} value={s}>
+                                  {LIBELLES_PARTICIPANT[s]}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className="inline-flex rounded-md bg-surface-muted px-2 py-1 text-xs font-medium text-text-muted">
+                              {LIBELLES_PARTICIPANT[p.statut]}
+                            </span>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+
+                {/* Desktop */}
+                <div className="hidden overflow-hidden rounded-2xl border border-border/80 bg-surface shadow-sm md:block">
+                  <table className="min-w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-border bg-gradient-to-r from-ogefrem-navy/[0.04] to-ogefrem-blue/[0.06]">
+                        <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-text-muted">
+                          Nom
+                        </th>
+                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-muted">
+                          Email
+                        </th>
+                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-muted">
+                          Présence
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/70">
+                      {reunion.participants.map((p) => {
+                        const profil = profilMap.get(p.profil_id);
+                        const nom = profil
+                          ? `${profil.prenom} ${profil.nom}`
+                          : `Profil ${p.profil_id.slice(0, 8)}…`;
+                        return (
+                          <tr key={p.id} className="hover:bg-ogefrem-blue/[0.03]">
+                            <td className="px-5 py-3 font-semibold text-text">{nom}</td>
+                            <td className="px-4 py-3 text-text-muted">
+                              {profil?.email ?? '—'}
+                            </td>
+                            <td className="px-4 py-3">
+                              {peutModifier ? (
+                                <select
+                                  className="h-9 rounded-lg border border-border bg-surface px-2 text-sm"
+                                  value={p.statut}
+                                  disabled={participantMut.isPending}
+                                  onChange={(e) =>
+                                    participantMut.mutate({
+                                      participantId: p.id,
+                                      statut: e.target.value as StatutParticipant,
+                                    })
+                                  }
+                                  aria-label={`Statut de ${nom}`}
+                                >
+                                  {STATUTS_PARTICIPANT.map((s) => (
+                                    <option key={s} value={s}>
+                                      {LIBELLES_PARTICIPANT[s]}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <span className="inline-flex rounded-md bg-surface-muted px-2 py-1 text-xs font-medium text-text-muted">
+                                  {LIBELLES_PARTICIPANT[p.statut]}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         )}
@@ -497,6 +575,7 @@ export function ReunionDetailPage() {
             <p className="text-sm text-text-muted">
               {traites}/{points.length} point{points.length > 1 ? 's' : ''} traité
               {traites > 1 ? 's' : ''}
+              {!peutModifier ? ' · lecture seule' : ''}
             </p>
             {points.length === 0 ? (
               <Empty hint="Aucun point à l’ordre du jour." />
@@ -505,13 +584,13 @@ export function ReunionDetailPage() {
                 {points.map((point, index) => (
                   <li
                     key={point.id}
-                    className="flex items-start gap-3 rounded-xl border border-border p-3"
+                    className="flex items-start gap-3 rounded-xl border border-border/80 bg-surface p-3 shadow-sm"
                   >
                     <input
                       type="checkbox"
-                      className="mt-1 h-5 w-5 accent-ogefrem-blue"
+                      className="mt-1 h-5 w-5 accent-ogefrem-blue disabled:opacity-50"
                       checked={point.est_traite}
-                      disabled={pointMut.isPending}
+                      disabled={!peutModifier || pointMut.isPending}
                       onChange={(e) =>
                         pointMut.mutate({
                           pointId: point.id,

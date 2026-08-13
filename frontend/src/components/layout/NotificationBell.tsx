@@ -1,5 +1,9 @@
 import { Button } from '@/components/ui/Button';
 import {
+  NotificationItemActions,
+  notificationAvecActionsCr,
+} from '@/components/notifications/NotificationItemActions';
+import {
   compterNotificationsNonLues,
   listerNotifications,
   marquerNotificationLue,
@@ -21,6 +25,7 @@ const LIBELLE_TYPE: Record<string, string> = {
   cr_soumis: 'CR soumis',
   cr_en_revision: 'CR en révision',
   cr_publie: 'CR publié',
+  cr_disponible: 'Compte rendu',
   cr_valide: 'CR validé',
   cr_archive: 'CR archivé',
   action_en_retard: 'Action en retard',
@@ -127,29 +132,46 @@ export function NotificationBell() {
             )}
             {listQuery.data?.items.map((n) => (
               <li key={n.id} className="border-b border-border last:border-0">
-                <Link
-                  to={n.lien || '/'}
-                  onClick={() => {
-                    if (!n.est_lu) lireMut.mutate(n.id);
-                    setOpen(false);
-                  }}
-                  className={
-                    n.est_lu
-                      ? 'block px-3 py-2.5 hover:bg-surface-muted'
-                      : 'block bg-ogefrem-blue/5 px-3 py-2.5 hover:bg-ogefrem-blue/10'
-                  }
-                >
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
-                    {LIBELLE_TYPE[n.type] ?? n.type}
-                  </p>
-                  <p className="text-sm font-medium text-text">{n.titre}</p>
-                  <p className="mt-0.5 line-clamp-2 text-xs text-text-muted">
-                    {n.message}
-                  </p>
-                  <p className="mt-1 text-[11px] text-text-muted">
-                    {formatDateHeure(n.cree_le)}
-                  </p>
-                </Link>
+                {notificationAvecActionsCr(n) ? (
+                  <div
+                    className={
+                      n.est_lu ? '' : 'bg-ogefrem-blue/5'
+                    }
+                  >
+                    <NotificationItemActions
+                      notification={n}
+                      libelleType={LIBELLE_TYPE[n.type] ?? n.type}
+                      dateLabel={formatDateHeure(n.cree_le)}
+                      compact
+                      onNavigate={() => setOpen(false)}
+                      onMarkRead={(id) => lireMut.mutate(id)}
+                    />
+                  </div>
+                ) : (
+                  <Link
+                    to={n.lien || '/'}
+                    onClick={() => {
+                      if (!n.est_lu) lireMut.mutate(n.id);
+                      setOpen(false);
+                    }}
+                    className={
+                      n.est_lu
+                        ? 'block px-3 py-2.5 hover:bg-surface-muted'
+                        : 'block bg-ogefrem-blue/5 px-3 py-2.5 hover:bg-ogefrem-blue/10'
+                    }
+                  >
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+                      {LIBELLE_TYPE[n.type] ?? n.type}
+                    </p>
+                    <p className="text-sm font-medium text-text">{n.titre}</p>
+                    <p className="mt-0.5 line-clamp-2 text-xs text-text-muted">
+                      {n.message}
+                    </p>
+                    <p className="mt-1 text-[11px] text-text-muted">
+                      {formatDateHeure(n.cree_le)}
+                    </p>
+                  </Link>
+                )}
               </li>
             ))}
           </ul>

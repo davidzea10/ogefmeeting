@@ -18,6 +18,7 @@ import {
   modifierPointOrdreJour,
   obtenirReunion,
 } from '@/lib/reunions-api';
+import { peutGererReunionRole, peutModifierReunionRole } from '@/lib/roles';
 import { useAuthStore } from '@/stores/auth.store';
 import {
   STATUTS_PARTICIPANT,
@@ -41,7 +42,10 @@ export function ReunionLivePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const announce = useAnnouncerStore((s) => s.announce);
-  const profilId = useAuthStore((s) => s.profil?.id);
+  const profil = useAuthStore((s) => s.profil);
+  const profilId = profil?.id;
+  const role = useAuthStore((s) => s.role ?? s.profil?.role ?? null);
+  const userId = useAuthStore((s) => s.user?.id ?? s.profil?.id);
   const motionSafe = useMotionSafe();
   const [showCloture, setShowCloture] = useState(false);
 
@@ -175,6 +179,8 @@ export function ReunionLivePage() {
   const traites = points.filter((p) => p.est_traite).length;
   const presents = reunion.participants.filter((p) => p.statut === 'present').length;
   const progress = points.length === 0 ? 0 : Math.round((traites / points.length) * 100);
+  const peutModifier = peutModifierReunionRole(role, profil?.fonction, userId, reunion);
+  const peutGerer = peutGererReunionRole(role, profil?.fonction);
 
   return (
     <div className="flex min-h-screen flex-col bg-ogefrem-navy text-white">
@@ -223,15 +229,17 @@ export function ReunionLivePage() {
                 {chrono.label}
               </p>
             </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="!bg-white !text-ogefrem-navy hover:!bg-white/90"
-              onClick={() => setShowCloture(true)}
-            >
-              <Square className="h-4 w-4" aria-hidden />
-              Clôturer
-            </Button>
+            {peutGerer && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="!bg-white !text-ogefrem-navy hover:!bg-white/90"
+                onClick={() => setShowCloture(true)}
+              >
+                <Square className="h-4 w-4" aria-hidden />
+                Clôturer
+              </Button>
+            )}
           </div>
         </div>
 
@@ -284,9 +292,9 @@ export function ReunionLivePage() {
                   >
                     <input
                       type="checkbox"
-                      className="mt-1 h-5 w-5 shrink-0 accent-ogefrem-yellow"
+                      className="mt-1 h-5 w-5 shrink-0 accent-ogefrem-yellow disabled:opacity-40"
                       checked={point.est_traite}
-                      disabled={pointMut.isPending}
+                      disabled={!peutModifier || pointMut.isPending}
                       onChange={(e) =>
                         pointMut.mutate({
                           pointId: point.id,
@@ -343,9 +351,9 @@ export function ReunionLivePage() {
                   >
                     <span className="min-w-0 truncate text-sm font-medium">{nom}</span>
                     <select
-                      className="h-9 shrink-0 rounded-lg border border-white/20 bg-ogefrem-navy px-2 text-xs text-white"
+                      className="h-9 shrink-0 rounded-lg border border-white/20 bg-ogefrem-navy px-2 text-xs text-white disabled:opacity-50"
                       value={p.statut}
-                      disabled={participantMut.isPending}
+                      disabled={!peutModifier || participantMut.isPending}
                       onChange={(e) =>
                         participantMut.mutate({
                           participantId: p.id,

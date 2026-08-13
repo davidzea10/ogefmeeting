@@ -98,6 +98,9 @@ export class CompteRenduController {
   }
 
   async exporterPdf(req: Request, res: Response): Promise<void> {
+    await compteRenduService.obtenirParId(req.params.id as string, {
+      limiterAuProfilId: profilLimiteAuxParticipations(req.user),
+    });
     const { buffer, filename } = await compteRenduService.exporterPdf(
       req.params.id as string,
     );

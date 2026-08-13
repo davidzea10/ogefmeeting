@@ -24,8 +24,10 @@ describe('matrice RBAC', () => {
     assert.equal(roleAutorise('directeur', PERMISSIONS.AUDIT_LIRE), true);
   });
 
-  it('participant peut créer une réunion (soumise à validation)', () => {
+  it('participant peut créer/modifier (ownership côté contrôleur) mais pas archiver', () => {
     assert.equal(roleAutorise('participant', PERMISSIONS.REUNIONS_CREER), true);
+    assert.equal(roleAutorise('participant', PERMISSIONS.REUNIONS_MODIFIER), true);
+    assert.equal(roleAutorise('participant', PERMISSIONS.REUNIONS_ARCHIVER), false);
     assert.equal(roleAutorise('participant', PERMISSIONS.UTILISATEURS_INVITER), false);
   });
 
@@ -36,7 +38,7 @@ describe('matrice RBAC', () => {
     assert.equal(roleAutorise('secretaire', PERMISSIONS.DIRECTIONS_GERER), false);
   });
 
-  it('chef de service / sous-directeur peuvent créer une réunion via fonction', () => {
+  it('chef de service / sous-directeur / agent (participant) peuvent créer une réunion', () => {
     assert.equal(
       autorisePermission('participant', PERMISSIONS.REUNIONS_CREER, 'chef_service'),
       true,
@@ -45,8 +47,13 @@ describe('matrice RBAC', () => {
       autorisePermission('participant', PERMISSIONS.REUNIONS_CREER, 'sous_directeur'),
       true,
     );
+    // Agent (rôle participant) : création autorisée, soumise à validation.
     assert.equal(
       autorisePermission('participant', PERMISSIONS.REUNIONS_CREER, 'agent'),
+      true,
+    );
+    assert.equal(
+      autorisePermission('lecteur', PERMISSIONS.REUNIONS_CREER, 'agent'),
       false,
     );
   });

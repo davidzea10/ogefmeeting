@@ -4,12 +4,17 @@ import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
 import { requireSupabaseAdmin } from '../lib/supabase.js';
 import { envoyerEmailOgefmeeting } from './email.service.js';
+import {
+  notificationService,
+  type DestinataireNotif,
+} from './notification.service.js';
 
 type ProfilDestinataire = {
   id: string;
   email: string;
   prenom: string;
   nom: string;
+  est_actif?: boolean;
 };
 
 async function titreReunion(reunionId: string): Promise<string> {
@@ -111,6 +116,20 @@ export async function notifierChangementStatutCr(opts: {
       message = `Le compte rendu pour « ${titre} » a été validé et publié.${
         motif ? ` Commentaire : ${motif}` : ''
       }`;
+
+      const { data: participantRows } = await requireSupabaseAdmin()
+        .from(TABLES.participantsReunion)
+        .select('profils(id, email, prenom, nom, est_actif)')
+        .eq('reunion_id', opts.cr.reunion_id);
+
+      for (const row of participantRows ?? []) {
+        const raw = (row as { profils?: ProfilDestinataire | ProfilDestinataire[] | null })
+          .profils;
+        const profil = Array.isArray(raw) ? raw[0] : raw;
+        if (profil?.id && profil.est_actif !== false) {
+          destinataires.push(profil);
+        }
+      }
     } else if (opts.nouveauStatut === 'archive') {
       const auteur = await profilParId(opts.cr.cree_par);
       destinataires = auteur ? [auteur] : [];
@@ -155,5 +174,80 @@ export async function notifierChangementStatutCr(opts: {
     }
   } catch (error) {
     logger.warn({ err: error }, 'Échec notification changement statut CR');
+  }
+}
+
+/**
+ * Notifie tous les participants lorsqu’un compte rendu est créé pour une réunion clôturée.
+ * Best-effort : n’interrompt jamais la création du CR.
+ */
+export async function notifierParticipantsRapportReunion(opts: {
+  cr: CompteRendu;
+}): Promise<void> {
+  try {
+    const supabase = requireSupabaseAdmin();
+
+    const { data: reunion } = await supabase
+      .from(TABLES.reunions)
+      .select('titre, statut')
+      .eq('id', opts.cr.reunion_id)
+      .maybeSingle();
+
+    if (!reunion || (reunion as { statut: string }).statut !== 'cloturee') {
+      return;
+    }
+
+    const { count } = await supabase
+      .from(TABLES.comptesRendus)
+      .select('id', { count: 'exact', head: true })
+      .eq('reunion_id', opts.cr.reunion_id);
+
+    if ((count ?? 0) > 1) {
+      return;
+    }
+
+    const { data: rows } = await supabase
+      .from(TABLES.participantsReunion)
+      .select('profil_id, profils(id, email, prenom, nom, est_actif)')
+      .eq('reunion_id', opts.cr.reunion_id);
+
+    const destinataires: DestinataireNotif[] = [];
+    for (const row of rows ?? []) {
+      const raw = (row as { profils?: ProfilDestinataire | ProfilDestinataire[] | null })
+        .profils;
+      const profil = Array.isArray(raw) ? raw[0] : raw;
+      if (profil?.id && profil.est_actif !== false) {
+        destinataires.push({
+          id: profil.id,
+          email: profil.email,
+          prenom: profil.prenom,
+          nom: profil.nom,
+        });
+      }
+    }
+
+    if (destinataires.length === 0) return;
+
+    const titreReunion = (reunion as { titre?: string }).titre ?? 'Réunion';
+    const lien = lienCr(opts.cr.id);
+    const titreNotif = `Compte rendu — ${titreReunion}`;
+    const message =
+      `La réunion « ${titreReunion} » est clôturée. ` +
+      `Le compte rendu est disponible au téléchargement (PDF).`;
+
+    await notificationService.creerPourProfils(destinataires, {
+      type: 'cr_disponible',
+      titre: titreNotif,
+      message,
+      lien,
+      emailSujet: `[Ogefmeeting] Compte rendu disponible — ${titreReunion}`,
+      emailBoutonLibelle: 'Télécharger le compte rendu',
+      metadonnees: {
+        compte_rendu_id: opts.cr.id,
+        reunion_id: opts.cr.reunion_id,
+      },
+    });
+  } catch (error) {
+    logger.warn({ err: error }, 'Échec notification participants compte rendu');
   }
 }

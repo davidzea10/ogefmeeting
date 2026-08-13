@@ -1,5 +1,9 @@
 import { useAnnouncerStore } from '@/components/a11y/LiveAnnouncer';
 import { Breadcrumbs } from '@/components/layout/Breadcrumbs';
+import {
+  NotificationItemActions,
+  notificationAvecActionsCr,
+} from '@/components/notifications/NotificationItemActions';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { formatDateHeure } from '@/lib/labels';
@@ -22,6 +26,7 @@ const LIBELLE_TYPE: Record<string, string> = {
   cr_soumis: 'CR soumis',
   cr_en_revision: 'CR en révision',
   cr_publie: 'CR publié',
+  cr_disponible: 'Compte rendu',
   cr_valide: 'CR validé',
   cr_archive: 'CR archivé',
   action_en_retard: 'Action en retard',
@@ -139,34 +144,47 @@ export function NotificationsPage() {
       {query.isSuccess && query.data.items.length > 0 && (
         <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
           {query.data.items.map((n) => (
-            <li key={n.id}>
-              <Link
-                to={n.lien || '/'}
-                onClick={() => {
-                  if (!n.est_lu) lireMut.mutate(n.id);
-                }}
-                className={
-                  n.est_lu
-                    ? 'block px-4 py-3 hover:bg-surface-muted'
-                    : 'block bg-ogefrem-blue/5 px-4 py-3 hover:bg-ogefrem-blue/10'
-                }
-              >
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
-                    {LIBELLE_TYPE[n.type] ?? n.type}
-                  </p>
-                  <p className="text-[11px] text-text-muted">
-                    {formatDateHeure(n.cree_le)}
-                  </p>
-                </div>
-                <p className="mt-0.5 font-semibold text-text">{n.titre}</p>
-                <p className="mt-0.5 text-sm text-text-muted">{n.message}</p>
-                {!n.est_lu && (
-                  <Badge variant="default" className="mt-2">
-                    Non lu
-                  </Badge>
-                )}
-              </Link>
+            <li
+              key={n.id}
+              className={
+                n.est_lu
+                  ? ''
+                  : 'bg-ogefrem-blue/5'
+              }
+            >
+              {notificationAvecActionsCr(n) ? (
+                <NotificationItemActions
+                  notification={n}
+                  libelleType={LIBELLE_TYPE[n.type] ?? n.type}
+                  dateLabel={formatDateHeure(n.cree_le)}
+                  onMarkRead={(id) => lireMut.mutate(id)}
+                  showUnreadBadge={!n.est_lu}
+                />
+              ) : (
+                <Link
+                  to={n.lien || '/'}
+                  onClick={() => {
+                    if (!n.est_lu) lireMut.mutate(n.id);
+                  }}
+                  className="block px-4 py-3 hover:bg-surface-muted"
+                >
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+                      {LIBELLE_TYPE[n.type] ?? n.type}
+                    </p>
+                    <p className="text-[11px] text-text-muted">
+                      {formatDateHeure(n.cree_le)}
+                    </p>
+                  </div>
+                  <p className="mt-0.5 font-semibold text-text">{n.titre}</p>
+                  <p className="mt-0.5 text-sm text-text-muted">{n.message}</p>
+                  {!n.est_lu && (
+                    <Badge variant="default" className="mt-2">
+                      Non lu
+                    </Badge>
+                  )}
+                </Link>
+              )}
             </li>
           ))}
         </ul>

@@ -55,6 +55,31 @@ export function peutAccederAdministration(
   return role === 'administrateur';
 }
 
+/**
+ * Modifier une réunion :
+ * - ayant-droit : toutes
+ * - agent : uniquement s’il en est le créateur
+ */
+export function peutModifierReunionRole(
+  role: RoleUtilisateur | null | undefined,
+  fonction: string | null | undefined,
+  userId: string | null | undefined,
+  reunion: Pick<Reunion, 'cree_par'>,
+): boolean {
+  if (peutApprouverReunion(role, fonction)) return true;
+  return Boolean(userId && reunion.cree_par && reunion.cree_par === userId);
+}
+
+/**
+ * Archiver / démarrer / clôturer : réservé aux ayant-droit.
+ */
+export function peutGererReunionRole(
+  role: RoleUtilisateur | null | undefined,
+  fonction?: string | null,
+): boolean {
+  return peutApprouverReunion(role, fonction);
+}
+
 /** Peut valider cette réunion précise (directions + statut). */
 export function peutApprouverReunionPourReunion(
   role: RoleUtilisateur | null | undefined,

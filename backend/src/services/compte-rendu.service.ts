@@ -18,7 +18,10 @@ import type {
 import { AppError } from '../utils/errors.js';
 import { handleSupabaseError } from '../utils/supabase-error.js';
 import { genererPdfCompteRendu, nomFichierPdfCr } from './cr-pdf.service.js';
-import { notifierChangementStatutCr } from './cr-notification.service.js';
+import {
+  notifierChangementStatutCr,
+  notifierParticipantsRapportReunion,
+} from './cr-notification.service.js';
 import { parametresService } from './parametres.service.js';
 
 export class CompteRenduService {
@@ -42,7 +45,10 @@ export class CompteRenduService {
       handleSupabaseError(error, 'Impossible de créer le compte rendu.');
     }
 
-    return data as CompteRendu;
+    const compteRendu = data as CompteRendu;
+    await notifierParticipantsRapportReunion({ cr: compteRendu });
+
+    return compteRendu;
   }
 
   async lister(
@@ -471,6 +477,36 @@ export class CompteRenduService {
       }
     }
 
+    const { data: participantsRows } = await supabase
+      .from(TABLES.participantsReunion)
+      .select('statut, profils(prenom, nom, email, fonction, directions(nom))')
+      .eq('reunion_id', compte_rendu.reunion_id)
+      .order('cree_le', { ascending: true });
+
+    type ProfilJoin = {
+      prenom?: string;
+      nom?: string;
+      email?: string | null;
+      fonction?: string | null;
+      directions?: { nom?: string } | { nom?: string }[] | null;
+    };
+
+    const participants = (participantsRows ?? []).map((row) => {
+      const rawProfil = (row as { profils?: ProfilJoin | ProfilJoin[] | null }).profils;
+      const profil = Array.isArray(rawProfil) ? rawProfil[0] : rawProfil;
+      const rawDir = profil?.directions;
+      const direction = Array.isArray(rawDir) ? rawDir[0] : rawDir;
+      const prenom = profil?.prenom?.trim() ?? '';
+      const nom = profil?.nom?.trim() ?? '';
+      return {
+        nom: `${prenom} ${nom}`.trim() || '—',
+        email: profil?.email ?? null,
+        direction: direction?.nom ?? null,
+        fonction: profil?.fonction ?? null,
+        statut: String((row as { statut?: string }).statut ?? 'invite'),
+      };
+    });
+
     const parametres = await parametresService.obtenir();
 
     const buffer = await genererPdfCompteRendu({
@@ -480,6 +516,7 @@ export class CompteRenduService {
         'titre' | 'date_prevue' | 'lieu' | 'type_reunion' | 'description'
       >,
       sections,
+      participants,
       valideParNom,
       enTetePdf: parametres.en_tete_pdf,
       sousTitrePdf: parametres.sous_titre_pdf,

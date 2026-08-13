@@ -51,6 +51,7 @@ export class ReunionController {
   }
 
   async modifier(req: Request, res: Response): Promise<void> {
+    await this.assurerPeutEditerReunion(req, req.params.id as string);
     const data = await reunionService.modifier(
       req.params.id as string,
       req.body as ModifierReunionInput,
@@ -59,16 +60,34 @@ export class ReunionController {
   }
 
   async archiver(req: Request, res: Response): Promise<void> {
+    if (!utilisateurPeutApprouver(req.user)) {
+      throw new AppError(
+        403,
+        'Seuls un secrétaire, chef de service, sous-directeur ou directeur peuvent archiver une réunion.',
+      );
+    }
     const data = await reunionService.archiver(req.params.id as string);
     res.status(200).json({ success: true, data });
   }
 
   async demarrer(req: Request, res: Response): Promise<void> {
+    if (!utilisateurPeutApprouver(req.user)) {
+      throw new AppError(
+        403,
+        'Seuls un secrétaire, chef de service, sous-directeur ou directeur peuvent démarrer une réunion.',
+      );
+    }
     const data = await reunionService.demarrer(req.params.id as string);
     res.status(200).json({ success: true, data });
   }
 
   async cloturer(req: Request, res: Response): Promise<void> {
+    if (!utilisateurPeutApprouver(req.user)) {
+      throw new AppError(
+        403,
+        'Seuls un secrétaire, chef de service, sous-directeur ou directeur peuvent clôturer une réunion.',
+      );
+    }
     const data = await reunionService.cloturer(req.params.id as string);
     res.status(200).json({ success: true, data });
   }
@@ -101,6 +120,7 @@ export class ReunionController {
   }
 
   async gererParticipants(req: Request, res: Response): Promise<void> {
+    await this.assurerPeutEditerReunion(req, req.params.id as string);
     const data = await reunionService.gererParticipants(
       req.params.id as string,
       req.body as GererParticipantsInput,
@@ -109,6 +129,7 @@ export class ReunionController {
   }
 
   async gererOrdreJour(req: Request, res: Response): Promise<void> {
+    await this.assurerPeutEditerReunion(req, req.params.id as string);
     const data = await reunionService.gererOrdreJour(
       req.params.id as string,
       req.body as GererOrdreJourInput,
@@ -117,6 +138,7 @@ export class ReunionController {
   }
 
   async modifierPoint(req: Request, res: Response): Promise<void> {
+    await this.assurerPeutEditerReunion(req, req.params.id as string);
     const data = await reunionService.modifierPoint(
       req.params.id as string,
       req.params.pointId as string,
@@ -126,6 +148,7 @@ export class ReunionController {
   }
 
   async modifierParticipant(req: Request, res: Response): Promise<void> {
+    await this.assurerPeutEditerReunion(req, req.params.id as string);
     const data = await reunionService.modifierParticipant(
       req.params.id as string,
       req.params.participantId as string,
@@ -143,6 +166,24 @@ export class ReunionController {
       reponse,
     );
     res.status(200).json({ success: true, data });
+  }
+
+  /**
+   * Ayant-droit : toutes les réunions.
+   * Agent : uniquement ses propres réunions (création / proposition).
+   */
+  private async assurerPeutEditerReunion(req: Request, reunionId: string): Promise<void> {
+    if (utilisateurPeutApprouver(req.user)) return;
+    if (!req.user) {
+      throw new AppError(401, 'Authentification requise.');
+    }
+    const reunion = await reunionService.obtenirParId(reunionId);
+    if (reunion.cree_par !== req.user.id) {
+      throw new AppError(
+        403,
+        'Vous ne pouvez modifier que les réunions que vous avez créées. Les autres sont en lecture seule.',
+      );
+    }
   }
 }
 
