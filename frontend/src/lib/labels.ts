@@ -4,6 +4,7 @@ export const LIBELLES_STATUT: Record<StatutReunion, string> = {
   en_attente_validation: 'En attente de validation',
   planifiee: 'Planifiée',
   en_cours: 'En cours',
+  en_pause: 'En pause',
   cloturee: 'Clôturée',
   archivee: 'Archivée',
   refusee: 'Refusée',

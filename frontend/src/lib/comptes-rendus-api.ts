@@ -116,6 +116,31 @@ export function listerModelesCompteRendu() {
   return apiFetch<ModeleCompteRendu[]>('/api/modeles-compte-rendu');
 }
 
+/** Génère le contenu du CR via GPT (transcription STT + ordre du jour). */
+export function genererCompteRenduIa(
+  id: string,
+  options: { niveau_detail?: 'simple' | 'detaille' | 'tres_detaille' } = {},
+) {
+  return apiFetch<CompteRendu>(`/api/comptes-rendus/${id}/generer-ia`, {
+    method: 'POST',
+    body: JSON.stringify({
+      niveau_detail: options.niveau_detail ?? 'detaille',
+    }),
+  });
+}
+
+/** Envoie le rapport PDF validé à tous les participants (réunion clôturée). */
+export function envoyerCompteRenduParticipants(id: string) {
+  return apiFetch<{
+    envoye: boolean;
+    nb_destinataires: number;
+    nb_emails_ok: number;
+  }>(`/api/comptes-rendus/${id}/envoyer-participants`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
 /** Télécharge le PDF binaire du compte rendu (blob, pas JSON). */
 export async function telechargerPdfCompteRendu(id: string): Promise<{
   blob: Blob;

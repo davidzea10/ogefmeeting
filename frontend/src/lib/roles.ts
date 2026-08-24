@@ -71,12 +71,27 @@ export function peutModifierReunionRole(
 }
 
 /**
- * Archiver / démarrer / clôturer : réservé aux ayant-droit.
+ * Archiver / démarrer / clôturer / pause : réservé aux ayant-droit.
  */
 export function peutGererReunionRole(
   role: RoleUtilisateur | null | undefined,
   fonction?: string | null,
 ): boolean {
+  return peutApprouverReunion(role, fonction);
+}
+
+/**
+ * Voir audio + transcription après clôture :
+ * administrateur, organisateur (créateur), ou ayant-droit (secrétaire / direction).
+ */
+export function peutVoirArchivesMediaRole(
+  role: RoleUtilisateur | null | undefined,
+  fonction: string | null | undefined,
+  userId: string | null | undefined,
+  reunion: Pick<Reunion, 'cree_par'>,
+): boolean {
+  if (role === 'administrateur') return true;
+  if (userId && reunion.cree_par && userId === reunion.cree_par) return true;
   return peutApprouverReunion(role, fonction);
 }
 

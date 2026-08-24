@@ -1,0 +1,35 @@
+[00:00:08] Réunion technique conjointe DANTIC et DGIT — Modernisation des échanges de données autour du FERI. Date : mercredi 20 août 2026. Lieu : salle de conférence DANTIC, immeuble OGEFREM, Kinshasa. Présents : Patrick Ilunga, directeur adjoint DGIT, Sandra Mbuyi, responsable applicatif FERI, Eric Nsimba, architecte DANTIC, Clarisse Banza, analyste métier, et deux invités distants du prestataire via visioconférence.
+
+[00:02:30] Patrick Ilunga : Le contexte est la montée en charge des déclarations FERI et la nécessité d'aligner les flux entre le système de traçabilité DGIT et les outils internes DANTIC. L'OGEFREM doit garantir la fiabilité des données transmises aux opérateurs et aux partenaires. Cette réunion n'est pas un conseil de direction, c'est un atelier technique de cadrage.
+
+[00:05:15] Sandra Mbuyi : Aujourd'hui, une partie des échanges se fait encore par fichiers plats et courriels. Nous voulons réduire les ressaisies manuelles. Les mandataires et chargeurs demandent plus de visibilité sur le statut des dossiers. La DRCP nous a transmis une liste de douze irritants prioritaires du terrain.
+
+[00:08:40] Eric Nsimba : Côté DANTIC, nous proposons une API REST sécurisée derrière le reverse proxy institutionnel. Authentification par jeton de service pour les applications internes. Les journaux d'audit doivent être centralisés pour la DAI. Nous écartons pour l'instant l'exposition publique directe sans passerelle.
+
+[00:12:05] Clarisse Banza : Sur le modèle de données, nous devons distinguer les événements métier : création dossier, validation, rejet, demande de complément, clôture. Chaque événement porte un identifiant unique, un horodatage, et l'identité du système source. Les champs sensibles ne doivent pas apparaître dans les logs applicatifs en clair.
+
+[00:15:20] Prestataire distant : Nous pouvons fournir un connecteur qui pousse les statuts toutes les cinq minutes vers un endpoint OGEFREM. Il faudra valider le format JSON et la stratégie de reprise sur incident. Nous recommandons un identifiant de corrélation par lot.
+
+[00:18:35] Patrick Ilunga : Question : est-ce que Ogefmeeting entre dans ce périmètre ? Réponse de la salle : non pour cette phase. Ogefmeeting reste l'outil réunions. En revanche, les comptes rendus de ces ateliers techniques alimenteront la mémoire institutionnelle via le futur module CR IA.
+
+[00:21:50] Sandra Mbuyi : Nous avons eu un incident le mois dernier : doublon de numéros sur un import nocturne. La cause était une absence de clé d'idempotence. Décision : toute API d'insertion doit accepter un header Idempotency-Key et rejeter les doublons sans effet de bord.
+
+[00:25:10] Eric Nsimba : Environnements : développement sur Supabase cloud pour le prototype, préproduction sur serveur OGEFREM, production après visa DANTIC et DGIT. Les données de test ne doivent pas contenir de vrais noms d'opérateurs.
+
+[00:28:45] Clarisse Banza : Côté délais, le cahier des charges fonctionnel doit être bouclé avant fin septembre. Le développement du connecteur est estimé à six semaines si le format est stable. La DFAC doit valider les impacts sur la relation chargeurs.
+
+[00:32:00] Patrick Ilunga : Décision : valider le principe d'une API événementielle interne, pas de fichier CSV quotidien comme cible finale. Décision deux : comité de pilotage bihebdomadaire DANTIC DGIT chaque mardi à quatorze heures jusqu'à fin octobre.
+
+[00:35:20] Sandra Mbuyi : Action : Sandra et Clarisse livrent le mapping des champs FERI version un point deux d'ici le 5 septembre.
+
+[00:37:10] Eric Nsimba : Action : Eric rédige la note d'architecture sécurité avec chiffrement en transit TLS un point trois, authentification mutuelle envisagée en production, à partager à la DAI.
+
+[00:39:00] Prestataire : Action : le prestataire envoie un exemple de payload JSON et la documentation OpenAPI avant le 28 août.
+
+[00:41:15] Patrick Ilunga : Risque : dépendance à un seul prestataire pour le connecteur. Mitigation : exiger la livraison des spécifications et possibilité de reprise par une équipe interne.
+
+[00:43:30] Sandra Mbuyi : Risque métier : période de forte activité en octobre liée à la saison d'import. Il faudra une fenêtre de gel des changements du quinze septembre au quinze octobre sauf correctifs critiques.
+
+[00:46:00] Eric Nsimba : Prochaine étape : atelier de trois heures sur la gestion des erreurs et codes retour API, prévu le 3 septembre en salle DANTIC.
+
+[00:48:10] Patrick Ilunga : Aucune autre question. Je remercie les participants. Réunion levée à quarante huit minutes.

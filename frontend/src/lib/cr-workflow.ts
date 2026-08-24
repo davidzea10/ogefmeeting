@@ -10,6 +10,20 @@ const ROLES_MODIFIER: RoleUtilisateur[] = [
 /** Rôles pouvant valider / renvoyer en révision (permission CR_VALIDER). */
 const ROLES_VALIDER: RoleUtilisateur[] = ['administrateur', 'directeur'];
 
+export type NiveauDetailCr = 'simple' | 'detaille' | 'tres_detaille';
+
+export const LIBELLES_NIVEAU_DETAIL_CR: Record<NiveauDetailCr, string> = {
+  simple: 'Compte rendu simple',
+  detaille: 'Compte rendu détaillé',
+  tres_detaille: 'Compte rendu très détaillé',
+};
+
+export const DESCRIPTIONS_NIVEAU_DETAIL_CR: Record<NiveauDetailCr, string> = {
+  simple: 'Synthèse courte — points essentiels et sous-éléments en bref.',
+  detaille: 'Standard — un sous-point par projet ou sujet cité, avec développement.',
+  tres_detaille: 'Exhaustif — reprend tout le contenu de la transcription.',
+};
+
 export function peutModifierCr(role: RoleUtilisateur | null | undefined): boolean {
   return Boolean(role && ROLES_MODIFIER.includes(role));
 }
@@ -60,7 +74,7 @@ export function messageWorkflowCr(statut: StatutCompteRendu): string {
     case 'soumis':
       return 'Soumis — en attente de validation. Le directeur peut ajuster le contenu, commenter, valider ou renvoyer.';
     case 'valide':
-      return 'Validé — compte rendu officiel (lecture seule). Vous pouvez l’archiver.';
+      return 'Validé — rapport officiel. Dès que la réunion est clôturée, le PDF est envoyé aux participants (renvoi possible via le bouton).';
     case 'archive':
       return 'Archivé — consultation uniquement.';
     default:
@@ -73,4 +87,20 @@ export function peutArchiverCr(
   statut: StatutCompteRendu,
 ): boolean {
   return peutValiderCr(role) && statut === 'valide';
+}
+
+/** Organisateur / secrétariat / direction : envoyer le rapport validé aux participants. */
+export function peutEnvoyerRapportParticipants(
+  role: RoleUtilisateur | null | undefined,
+  statutCr: StatutCompteRendu,
+  statutReunion: string | null | undefined,
+  userId: string | null | undefined,
+  organisateurId: string | null | undefined,
+): boolean {
+  if (statutCr !== 'valide' && statutCr !== 'archive') return false;
+  if (statutReunion !== 'cloturee') return false;
+  if (role === 'administrateur' || role === 'directeur' || role === 'secretaire') {
+    return true;
+  }
+  return Boolean(userId && organisateurId && userId === organisateurId);
 }

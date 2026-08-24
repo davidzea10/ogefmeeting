@@ -7,6 +7,7 @@ import { InvitationPage } from '@/pages/InvitationPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { NotificationsPage } from '@/pages/NotificationsPage';
 import { AdministrationPage } from '@/pages/admin/AdministrationPage';
+import { TesteLivePage } from '@/pages/admin/TesteLivePage';
 import { ActionsListPage } from '@/pages/actions/ActionsListPage';
 import { ArchivesPage } from '@/pages/archives/ArchivesPage';
 import { RecherchePage } from '@/pages/recherche/RecherchePage';
@@ -45,6 +46,7 @@ export const router = createBrowserRouter([
           {
             element: <RequireAdmin />,
             children: [
+              { path: 'teste-live', element: <TesteLivePage /> },
               { path: 'administration', element: <AdministrationPage /> },
               {
                 path: 'utilisateurs',

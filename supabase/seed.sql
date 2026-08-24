@@ -27,12 +27,10 @@ INSERT INTO public.modeles_compte_rendu (nom, identifiant, description, sections
     'conseil_direction',
     'Compte rendu pour les réunions du conseil de direction',
     '[
-      {"cle": "contexte", "libelle": "Contexte et objectifs"},
+      {"cle": "contexte", "libelle": "Introduction"},
       {"cle": "participants", "libelle": "Participants"},
-      {"cle": "ordre_du_jour", "libelle": "Points abordés"},
-      {"cle": "decisions", "libelle": "Décisions prises"},
-      {"cle": "actions", "libelle": "Actions à mener"},
-      {"cle": "prochaine_reunion", "libelle": "Prochaine réunion"}
+      {"cle": "ordre_du_jour", "libelle": "Points de l’ordre du jour"},
+      {"cle": "conclusion", "libelle": "Conclusion"}
     ]'::jsonb,
     true
   ),
@@ -41,12 +39,10 @@ INSERT INTO public.modeles_compte_rendu (nom, identifiant, description, sections
     'technique',
     'Compte rendu pour les réunions techniques (DGIT, DANTIC)',
     '[
-      {"cle": "contexte", "libelle": "Contexte"},
+      {"cle": "contexte", "libelle": "Introduction"},
       {"cle": "participants", "libelle": "Participants"},
       {"cle": "points_techniques", "libelle": "Points techniques"},
-      {"cle": "decisions", "libelle": "Décisions"},
-      {"cle": "actions", "libelle": "Actions"},
-      {"cle": "risques", "libelle": "Risques identifiés"}
+      {"cle": "conclusion", "libelle": "Conclusion"}
     ]'::jsonb,
     false
   ),
@@ -56,10 +52,9 @@ INSERT INTO public.modeles_compte_rendu (nom, identifiant, description, sections
     'operationnel',
     'Compte rendu pour les points opérationnels quotidiens',
     '[
-      {"cle": "synthese", "libelle": "Synthèse"},
-      {"cle": "operations", "libelle": "Opérations"},
-      {"cle": "blocages", "libelle": "Blocages"},
-      {"cle": "actions", "libelle": "Actions immédiates"}
+      {"cle": "contexte", "libelle": "Introduction"},
+      {"cle": "operations", "libelle": "Points abordés"},
+      {"cle": "conclusion", "libelle": "Conclusion"}
     ]'::jsonb,
     false
   ),
@@ -69,11 +64,10 @@ INSERT INTO public.modeles_compte_rendu (nom, identifiant, description, sections
     'partenaire',
     'Compte rendu pour les réunions avec mandataires et partenaires',
     '[
-      {"cle": "contexte", "libelle": "Contexte"},
+      {"cle": "contexte", "libelle": "Introduction"},
       {"cle": "participants", "libelle": "Participants"},
-      {"cle": "echanges", "libelle": "Échanges"},
-      {"cle": "accords", "libelle": "Accords"},
-      {"cle": "suivi", "libelle": "Suivi"}
+      {"cle": "echanges", "libelle": "Points de l’ordre du jour"},
+      {"cle": "conclusion", "libelle": "Conclusion"}
     ]'::jsonb,
     false
   )

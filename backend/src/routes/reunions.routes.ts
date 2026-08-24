@@ -38,6 +38,14 @@ reunionsRouter.post(
   asyncHandler((req, res) => reunionController.creer(req, res)),
 );
 
+/** Doit être déclaré AVANT /:id pour ne pas être capturé comme uuid */
+reunionsRouter.post(
+  '/teste-live',
+  requireAuth,
+  requirePermission(PERMISSIONS.REUNIONS_DEMARRER),
+  asyncHandler((req, res) => reunionController.preparerTesteLive(req, res)),
+);
+
 reunionsRouter.get(
   '/:id',
   requireAuth,
@@ -77,6 +85,22 @@ reunionsRouter.post(
   requirePermission(PERMISSIONS.REUNIONS_DEMARRER),
   validateParams(idParamSchema),
   asyncHandler((req, res) => reunionController.cloturer(req, res)),
+);
+
+reunionsRouter.post(
+  '/:id/pause',
+  requireAuth,
+  requirePermission(PERMISSIONS.REUNIONS_DEMARRER),
+  validateParams(idParamSchema),
+  asyncHandler((req, res) => reunionController.mettreEnPause(req, res)),
+);
+
+reunionsRouter.post(
+  '/:id/reprendre',
+  requireAuth,
+  requirePermission(PERMISSIONS.REUNIONS_DEMARRER),
+  validateParams(idParamSchema),
+  asyncHandler((req, res) => reunionController.reprendre(req, res)),
 );
 
 reunionsRouter.post(

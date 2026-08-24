@@ -1,14 +1,15 @@
 import type { ModeleCompteRendu, ReunionDetail, SectionCompteRendu } from '@ogefmeeting/shared';
 import { formatDateHeure, LIBELLES_PARTICIPANT, LIBELLES_TYPE } from '@/lib/labels';
 
-/** Sections par défaut si aucun modèle n’est associé à la réunion */
+/**
+ * Sections par défaut — pas de sections globales Décisions / Actions :
+ * elles vivent dans chaque point d'ordre du jour (génération IA).
+ */
 export const SECTIONS_CR_DEFAUT: SectionCompteRendu[] = [
-  { cle: 'contexte', libelle: 'Contexte et objectifs' },
+  { cle: 'contexte', libelle: 'Introduction' },
   { cle: 'participants', libelle: 'Participants' },
-  { cle: 'ordre_du_jour', libelle: 'Points abordés' },
-  { cle: 'decisions', libelle: 'Décisions prises' },
-  { cle: 'actions', libelle: 'Actions à mener' },
-  { cle: 'prochaine_reunion', libelle: 'Prochaine réunion' },
+  { cle: 'ordre_du_jour', libelle: 'Points de l’ordre du jour' },
+  { cle: 'conclusion', libelle: 'Conclusion' },
 ];
 
 export type ContenuCr = Record<string, string>;
@@ -71,8 +72,6 @@ export function preremplirContenuCr(
     ].join(''),
     ordre_du_jour: listHtml(points),
     points_techniques: listHtml(points),
-    decisions: '<p></p>',
-    actions: '<p></p>',
     prochaine_reunion: '<p></p>',
     synthese: paragraphs([reunion.description || reunion.titre]),
     operations: '<p></p>',
@@ -85,6 +84,7 @@ export function preremplirContenuCr(
 
   const contenu: ContenuCr = {};
   for (const section of sections) {
+    if (section.cle === 'decisions' || section.cle === 'actions') continue;
     contenu[section.cle] = prefillByCle[section.cle] ?? '<p></p>';
   }
   return contenu;
@@ -93,8 +93,8 @@ export function preremplirContenuCr(
 export function sectionsDepuisModele(
   modele: ModeleCompteRendu | null | undefined,
 ): SectionCompteRendu[] {
-  if (modele?.sections?.length) return modele.sections;
-  return SECTIONS_CR_DEFAUT;
+  const raw = modele?.sections?.length ? modele.sections : SECTIONS_CR_DEFAUT;
+  return raw.filter((s) => s.cle !== 'decisions' && s.cle !== 'actions');
 }
 
 export function contenuEstVide(contenu: Record<string, unknown> | null | undefined): boolean {

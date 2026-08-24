@@ -1,0 +1,29 @@
+[00:00:05] Comité sécurité et infrastructure — DANTIC. Titre officiel : Revue trimestrielle cybersécurité et continuité de service des applications OGEFREM. Kinshasa, jeudi 14 août 2026. Participants : Joseph Kabeya, directeur DANTIC, Léa Mutombo, RSSI, Paul Omekenge, admin systèmes, Nathalie Kasa, représentante DAI, et David Debuze pour le volet applicatif Ogefmeeting.
+
+[00:03:10] Joseph Kabeya : L'objectif est de faire le point sur les vulnérabilités, les sauvegardes, les accès privilégiés, et l'intégration des nouveaux services cloud utilisés en développement. Ce n'est pas une réunion sur le fret maritime mais sur la protection des systèmes qui supportent les missions de l'OGEFREM.
+
+[00:06:25] Léa Mutombo : Scan de vulnérabilités du parc serveurs : trois critiques corrigées en juillet, une critique restante sur un serveur de fichiers legacy. Délai de correction fixé au 25 août. Nous avons activé l'authentification multifacteur pour les comptes administrateurs Active Directory, taux de conformité actuel quatre vingt sept pour cent.
+
+[00:10:40] Paul Omekenge : Sauvegardes : la politique trois deux un est respectée pour la base métier principale. Tests de restauration réalisés le 5 août, temps de restauration complet quatre heures douze, acceptable. En revanche les sauvegardes du dépôt Git interne ne sont pas encore automatisées.
+
+[00:14:15] Nathalie Kasa : La DAI rappelle que tout traitement de données personnelles des agents doit respecter la politique interne. Les enregistrements audio de réunion sont des données sensibles. L'accès doit être journalisé. La durée de conservation proposée est vingt quatre mois sauf décision contraire du secrétariat général.
+
+[00:18:00] David Debuze : Pour Ogefmeeting, les enregistrements sont stockés dans Supabase Storage avec URLs signées à durée limitée. La transcription texte est en base PostgreSQL. Les clés Deepgram et OpenAI sont uniquement sur le backend. Nous n'avons pas encore branché l'envoi d'email Resend en production car le domaine ogefrem.cd n'est pas vérifié côté DNS SPF DKIM.
+
+[00:22:30] Léa Mutombo : Point d'attention : le WebSocket transcription ouvre un flux sortant vers Deepgram. Nous devons whitelister les IP et vérifier que le trafic ne sort pas vers des destinations non approuvées. Proposition : proxy sortant avec inspection.
+
+[00:26:10] Joseph Kabeya : Décision : tout nouveau service SaaS externe doit passer par un formulaire de validation DANTIC DAI avant achat de crédits. Deepgram et OpenAI sont acceptés pour la phase pilote avec plafond de dépenses de cent dollars par mois.
+
+[00:29:45] Paul Omekenge : Décision : automatiser les sauvegardes Git d'ici le 30 août. Décision : désactiver les comptes invités expirés sur la plateforme de visioconférence, quinze comptes identifiés.
+
+[00:33:20] Nathalie Kasa : Action : Nathalie transmet la grille de contrôle DAI adaptée aux applications web internes avant le 22 août.
+
+[00:35:05] David Debuze : Action : David fournit le diagramme d'architecture Ogefmeeting avec flux audio, WebSocket, API, stockage, pour revue RSSI.
+
+[00:37:40] Léa Mutombo : Action : Léa organise un exercice de phishing simulé en septembre pour le personnel DANTIC et DGIT, avec rapport au comité.
+
+[00:40:15] Paul Omekenge : Incident mineur mentionné : tentative de connexion SSH brute force sur un serveur de test, adresse bloquée au firewall. Aucun impact production.
+
+[00:43:00] Joseph Kabeya : Prochaine revue trimestrielle fixée au 13 novembre 2026. Un point spécial déploiement production Ogefmeeting sera ajouté à l'ordre du jour si la démo de septembre est concluante.
+
+[00:45:30] Joseph Kabeya : Je clos la session. Merci.

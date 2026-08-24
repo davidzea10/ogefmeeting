@@ -1,5 +1,6 @@
 import { useAnnouncerStore } from '@/components/a11y/LiveAnnouncer';
 import { Breadcrumbs } from '@/components/layout/Breadcrumbs';
+import { EnregistrementsSection } from '@/components/reunions/EnregistrementsSection';
 import { ReunionStatusBadge } from '@/components/reunions/ReunionStatusBadge';
 import { ReunionTabs, type TabId } from '@/components/reunions/ReunionTabs';
 import { ReunionTimeline } from '@/components/reunions/ReunionTimeline';
@@ -26,7 +27,7 @@ import {
   obtenirReunion,
   refuserReunion,
 } from '@/lib/reunions-api';
-import { peutApprouverReunionRole, peutApprouverReunionPourReunion, peutGererReunionRole, peutModifierReunionRole } from '@/lib/roles';
+import { peutApprouverReunionRole, peutApprouverReunionPourReunion, peutGererReunionRole, peutModifierReunionRole, peutVoirArchivesMediaRole } from '@/lib/roles';
 import { useAuthStore } from '@/stores/auth.store';
 import {
   STATUTS_PARTICIPANT,
@@ -38,7 +39,6 @@ import {
   Archive,
   Check,
   CheckSquare,
-  Mic,
   Pencil,
   Play,
   Radio,
@@ -260,6 +260,12 @@ export function ReunionDetailPage() {
     userId,
     reunion,
   );
+  const peutVoirArchives = peutVoirArchivesMediaRole(
+    role,
+    profil?.fonction,
+    userId,
+    reunion,
+  );
 
   const tabs = [
     { id: 'informations' as const, label: 'Informations' },
@@ -273,7 +279,7 @@ export function ReunionDetailPage() {
       label: 'Ordre du jour',
       count: points.length,
     },
-    { id: 'enregistrement' as const, label: 'Enregistrement' },
+    { id: 'enregistrement' as const, label: 'Audio & texte' },
     {
       id: 'compte-rendu' as const,
       label: 'Compte rendu',
@@ -375,12 +381,12 @@ export function ReunionDetailPage() {
                 Démarrer
               </Button>
             )}
-            {reunion.statut === 'en_cours' && (
+            {reunion.statut === 'en_cours' || reunion.statut === 'en_pause' ? (
               <>
                 <Link to={`/reunions/${id}/live`}>
                   <Button size="sm">
                     <Radio className="h-4 w-4" aria-hidden />
-                    Mode live
+                    {reunion.statut === 'en_pause' ? 'Reprendre le live' : 'Mode live'}
                   </Button>
                 </Link>
                 {peutGerer && (
@@ -395,8 +401,11 @@ export function ReunionDetailPage() {
                   </Button>
                 )}
               </>
-            )}
-            {peutGerer && reunion.statut !== 'archivee' && reunion.statut !== 'en_cours' && (
+            ) : null}
+            {peutGerer &&
+              reunion.statut !== 'archivee' &&
+              reunion.statut !== 'en_cours' &&
+              reunion.statut !== 'en_pause' && (
               <Button
                 size="sm"
                 variant="ghost"
@@ -626,14 +635,12 @@ export function ReunionDetailPage() {
           </div>
         )}
 
-        {tab === 'enregistrement' && (
-          <div className="flex flex-col items-center gap-3 py-8 text-center">
-            <Mic className="h-10 w-10 text-ogefrem-blue" aria-hidden />
-            <h3 className="text-lg font-semibold text-text">Enregistrement audio</h3>
-            <p className="max-w-md text-sm text-text-muted">
-              Enregistrement audio non disponible pour le moment.
-            </p>
-          </div>
+        {tab === 'enregistrement' && id && (
+          <EnregistrementsSection
+            reunionId={id}
+            peutConsulter={peutVoirArchives}
+            peutSupprimer={peutGerer}
+          />
         )}
 
         {tab === 'compte-rendu' && (

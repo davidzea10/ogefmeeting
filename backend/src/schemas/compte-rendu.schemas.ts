@@ -66,3 +66,12 @@ export const creerCommentaireCrSchema = z.object({
 });
 
 export type CreerCommentaireCrInput = z.infer<typeof creerCommentaireCrSchema>;
+
+export const genererCrIaSchema = z.object({
+  niveau_detail: z
+    .enum(['simple', 'detaille', 'tres_detaille'])
+    .optional()
+    .default('detaille'),
+});
+
+export type GenererCrIaInput = z.infer<typeof genererCrIaSchema>;

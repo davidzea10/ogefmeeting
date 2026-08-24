@@ -21,6 +21,8 @@ import {
   notificationsRouter,
   parametresRouter,
 } from './parametres.routes.js';
+import { enregistrementsRouter } from './enregistrements.routes.js';
+import { transcriptionsRouter } from './transcriptions.routes.js';
 import { attachAuth } from '../middleware/auth.js';
 
 /**
@@ -49,3 +51,5 @@ apiRouter.use('/modeles-compte-rendu', modelesRouter);
 apiRouter.use('/recherche', rechercheRouter);
 apiRouter.use('/parametres', parametresRouter);
 apiRouter.use('/notifications', notificationsRouter);
+apiRouter.use('/enregistrements', enregistrementsRouter);
+apiRouter.use('/transcriptions', transcriptionsRouter);

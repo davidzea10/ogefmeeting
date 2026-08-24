@@ -1,0 +1,45 @@
+[00:00:12] Bonjour à tous. Nous ouvrons ce point d'avancement Ogefmeeting en salle DANTIC, Kinshasa, ce lundi 24 août 2026. Sont présents David Debuze, chef de projet côté DANTIC, Marie Kabongo, référente infrastructure, Jean-Pierre Mulumba, développeur full stack, et Grace Tshimanga, chargée de la coordination avec la DGIT. L'ordre du jour porte sur la transcription live, la persistance des données, et la prochaine étape compte rendu automatique.
+
+[00:01:45] David Debuze : Merci. Pour rappel, Ogefmeeting est l'application de gestion des réunions de l'OGEFREM. L'objectif est de couvrir la planification, le déroulement en direct avec ordre du jour et présences, l'enregistrement audio, la transcription en temps réel, puis après clôture l'archivage et la rédaction assistée du compte rendu. Nous sommes dans une phase de validation technique avant démo à la direction.
+
+[00:03:20] Marie Kabongo : Côté infrastructure, l'application tourne en local pour les tests avec un backend Node et un frontend React. La base Supabase est opérationnelle. Nous avons appliqué les migrations pour les statuts de réunion, notamment le statut en pause, et pour la table transcriptions où l'enregistrement audio n'est plus obligatoire au moment de sauvegarder le texte live.
+
+[00:05:10] Jean-Pierre Mulumba : Sur la transcription, nous avons intégré Deepgram en streaming via WebSocket. Le micro du navigateur envoie l'audio PCM au backend, le backend fait proxy vers Deepgram, et le texte revient en direct dans le panneau à droite de l'écran live. Nous avons ajouté le basculement français anglais. En test hier, la latence était acceptable, environ une à deux secondes sur les phrases finales.
+
+[00:07:30] Grace Tshimanga : La DGIT suit ce sujet de près car plusieurs réunions techniques concernent FERI, AD et FERE. Il faudra montrer que la transcription peut être sauvegardée et retrouvée après clôture par l'organisateur, le secrétariat et les profils autorisés. C'est un point de conformité pour nous.
+
+[00:09:15] David Debuze : Oui. Après clôture, la section archives affiche l'audio et le texte. Seuls l'administrateur, l'organisateur et les ayants droit voient ces éléments. Nous avons corrigé un bug où le panneau audio disparaissait quand la réunion passait en pause. Maintenant la pause gèle le compteur et la transcription peut reprendre sans perdre le contexte.
+
+[00:11:40] Jean-Pierre Mulumba : Pour le compte rendu, nous ne utilisons pas Deepgram pour résumer. Deepgram fait uniquement la reconnaissance vocale. La rédaction du rapport sera faite par GPT après la réunion, à partir du texte final sauvegardé, plus les métadonnées : titre, type, lieu, date, participants, ordre du jour, directions concernées.
+
+[00:13:55] Marie Kabongo : Question budget : OpenAI facture à l'usage. Pour des tests en notebook nous restons sur gpt-4o-mini. En production il faudra un plafond mensuel et une clé API côté serveur uniquement, jamais dans le navigateur.
+
+[00:15:20] Grace Tshimanga : Le prompt doit connaître l'OGEFREM, les seize directions, et surtout analyser d'abord l'intitulé de la réunion avant de rédiger. Si la réunion s'appelle point DANTIC sur la cybersécurité, le CR ne doit pas parler uniquement de FERI sauf si c'est dans la transcription.
+
+[00:17:05] David Debuze : Exactement. Nous avons préparé un module ogefrem_context avec la présentation de l'institution, DG, DFM, DTFM, DFAC, DGIT, DEP, DANTIC, DSG, DOCG, DRH, DFIN, DAI, DAJ, DII, DSAERM, DRCP. Le modèle doit identifier les directions impliquées et produire un JSON structuré : synthèse, points traités, décisions, actions, prochaines étapes.
+
+[00:19:30] Jean-Pierre Mulumba : Le circuit cible dans l'application sera : réunion live, STT Deepgram, sauvegarde texte, clôture, bouton générer le CR avec l'IA, relecture secrétariat, publication. Aujourd'hui nous validons d'abord le notebook Jupyter avec des transcriptions longues simulées.
+
+[00:21:10] Marie Kabongo : Côté sécurité, les fichiers env ne doivent pas être commités. Les clés Deepgram et OpenAI restent sur le serveur backend. Nous prévoirons une revue avec la DAI avant mise en production.
+
+[00:23:00] Grace Tshimanga : Pour la démo direction, je propose un scénario réunion technique DANTIC et DGIT, avec un ordre du jour en trois points, et une transcription d'environ quarante cinq minutes condensée en texte. Il faut montrer que le CR reprend les décisions et les actions avec responsables.
+
+[00:25:15] David Debuze : Décision un : valider Deepgram en français comme moteur STT live pour la version un. Pas de diarisation automatique en version un, ce sera pour la version deux.
+
+[00:26:40] Décision deux : valider GPT pour le brouillon de compte rendu post réunion, avec relecture humaine obligatoire avant publication.
+
+[00:28:05] Action : David et Jean-Pierre finalisent le notebook test CR et le script Python d'ici vendredi 29 août.
+
+[00:29:20] Action : Marie documente l'architecture réseau et les ports WebSocket pour le déploiement futur sur serveur OGEFREM.
+
+[00:30:35] Action : Grace prépare la convocation et le scénario de démo pour les responsables DANTIC et DGIT, semaine du premier septembre.
+
+[00:32:00] Jean-Pierre Mulumba : Risque identifié : qualité du micro en salle de réunion. Prévoir un micro USB de conférence pour la démo. Risque deux : connexion internet instable, prévoir un mode dégradé où l'audio est enregistré localement et transcrit après coup si nécessaire.
+
+[00:34:10] Marie Kabongo : Nous avons déjà le stockage offline IndexedDB côté navigateur pour l'audio en cas de coupure. La transcription après coup n'est pas encore implémentée, à cadrer en version deux.
+
+[00:36:25] David Debuze : Prochaine réunion de suivi fixée au lundi 8 septembre 2026, même salle, pour bilan après tests notebook et retours de la démo. Est-ce que quelqu'un a une remarque avant clôture ?
+
+[00:38:00] Grace Tshimanga : Juste rappeler que le secrétariat général voudra un export PDF du CR final. Ce n'est pas bloquant pour la démo mais à prévoir dans la roadmap.
+
+[00:39:15] David Debuze : Noté. Je clos la réunion. Merci à tous.

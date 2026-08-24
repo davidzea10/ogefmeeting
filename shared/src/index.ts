@@ -137,6 +137,7 @@ export const STATUTS_REUNION = [
   'en_attente_validation',
   'planifiee',
   'en_cours',
+  'en_pause',
   'cloturee',
   'archivee',
   'refusee',
@@ -376,6 +377,34 @@ export type PointOrdreJour = {
   duree_minutes: number | null;
   cree_le: string;
   modifie_le: string;
+};
+
+export type Enregistrement = {
+  id: string;
+  reunion_id: string;
+  nom_fichier: string;
+  type_mime: string;
+  taille_octets: number | null;
+  duree_secondes: number | null;
+  televerse_par: string | null;
+  cree_le: string;
+};
+
+/** Enregistrement avec URL signée pour lecture / téléchargement */
+export type EnregistrementAvecUrl = Enregistrement & {
+  url_lecture: string;
+};
+
+export type Transcription = {
+  id: string;
+  reunion_id: string;
+  enregistrement_id: string | null;
+  statut: StatutTranscription;
+  langue: string;
+  texte_complet: string | null;
+  score_confiance: number | null;
+  traite_le: string | null;
+  cree_le: string;
 };
 
 export type ReunionDetail = Reunion & {

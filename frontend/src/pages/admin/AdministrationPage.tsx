@@ -596,7 +596,7 @@ function ModelesPanel() {
   const [identifiant, setIdentifiant] = useState('');
   const [description, setDescription] = useState('');
   const [sectionsText, setSectionsText] = useState(
-    'contexte:Contexte\nparticipants:Participants\ndecisions:Décisions\nactions:Actions',
+    'contexte:Introduction\nparticipants:Participants\nordre_du_jour:Points de l’ordre du jour\nconclusion:Conclusion',
   );
   const [editId, setEditId] = useState<string | null>(null);
 

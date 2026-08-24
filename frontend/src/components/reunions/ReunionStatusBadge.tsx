@@ -9,6 +9,7 @@ const variantByStatut: Record<
   en_attente_validation: 'warning',
   planifiee: 'default',
   en_cours: 'yellow',
+  en_pause: 'warning',
   cloturee: 'success',
   archivee: 'neutral',
   refusee: 'danger',

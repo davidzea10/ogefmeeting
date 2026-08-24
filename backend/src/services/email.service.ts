@@ -2,6 +2,13 @@ import { env } from '../config/env.js';
 import { logger } from '../lib/logger.js';
 import { AppError } from '../utils/errors.js';
 
+export type EmailAttachment = {
+  filename: string;
+  /** Contenu en base64 (sans préfixe data:) */
+  content: string;
+  contentType?: string;
+};
+
 export type EmailPayload = {
   to: string | string[];
   subject: string;
@@ -9,6 +16,7 @@ export type EmailPayload = {
   text?: string;
   /** Si true : refuse le mode simulation (clé Resend obligatoire + envoi réussi). */
   exigerReel?: boolean;
+  attachments?: EmailAttachment[];
 };
 
 export function emailConfigure(): boolean {
@@ -114,6 +122,15 @@ export async function envoyerEmail(
         subject: payload.subject,
         html: payload.html,
         text: payload.text,
+        ...(payload.attachments?.length
+          ? {
+              attachments: payload.attachments.map((a) => ({
+                filename: a.filename,
+                content: a.content,
+                content_type: a.contentType ?? 'application/pdf',
+              })),
+            }
+          : {}),
       }),
     });
 
@@ -164,6 +181,7 @@ export async function envoyerEmailOgefmeeting(opts: {
   boutonLibelle?: string;
   /** Invitations : true — pas de simulation. */
   exigerReel?: boolean;
+  attachments?: EmailAttachment[];
 }): Promise<{ envoye: boolean; mode: 'resend' | 'simulation' }> {
   const url = opts.lien
     ? opts.lien.startsWith('http')
@@ -184,6 +202,7 @@ export async function envoyerEmailOgefmeeting(opts: {
     html,
     text: `${opts.titre}\n\n${opts.message}${url ? `\n\nLien : ${url}` : ''}`,
     exigerReel: opts.exigerReel,
+    attachments: opts.attachments,
   });
 }
 

@@ -80,6 +80,7 @@ npm run dev
 - [Architecture](./docs/architecture.md)
 - [Conventions](./docs/conventions.md)
 - [Variables d'environnement](./docs/environment.md)
+- [Déploiement Vercel + Render](./docs/deployment-vercel.md)
 - [Guide contribution](./CONTRIBUTING.md)
 
 ## Licence

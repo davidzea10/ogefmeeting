@@ -81,6 +81,16 @@ export class ReunionController {
     res.status(200).json({ success: true, data });
   }
 
+  /** Admin uniquement — crée / réutilise une réunion live DANTIC pour tests audio/IA. */
+  async preparerTesteLive(req: Request, res: Response): Promise<void> {
+    if (!req.user) throw new AppError(401, 'Authentification requise.');
+    if (req.user.role !== 'administrateur') {
+      throw new AppError(403, 'Réservé aux administrateurs.');
+    }
+    const data = await reunionService.preparerTesteLive(req.user.id);
+    res.status(200).json({ success: true, data });
+  }
+
   async cloturer(req: Request, res: Response): Promise<void> {
     if (!utilisateurPeutApprouver(req.user)) {
       throw new AppError(
@@ -89,6 +99,22 @@ export class ReunionController {
       );
     }
     const data = await reunionService.cloturer(req.params.id as string);
+    res.status(200).json({ success: true, data });
+  }
+
+  async mettreEnPause(req: Request, res: Response): Promise<void> {
+    if (!utilisateurPeutApprouver(req.user)) {
+      throw new AppError(403, 'Droits insuffisants pour mettre la réunion en pause.');
+    }
+    const data = await reunionService.mettreEnPause(req.params.id as string);
+    res.status(200).json({ success: true, data });
+  }
+
+  async reprendre(req: Request, res: Response): Promise<void> {
+    if (!utilisateurPeutApprouver(req.user)) {
+      throw new AppError(403, 'Droits insuffisants pour reprendre la réunion.');
+    }
+    const data = await reunionService.reprendre(req.params.id as string);
     res.status(200).json({ success: true, data });
   }
 

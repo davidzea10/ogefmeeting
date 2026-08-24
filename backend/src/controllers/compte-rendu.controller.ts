@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import type {
   CreerCommentaireCrInput,
   CreerCompteRenduInput,
+  GenererCrIaInput,
   ListerComptesRendusQuery,
   ModifierCompteRenduInput,
   RejeterCompteRenduInput,
@@ -9,6 +10,8 @@ import type {
   ValiderCompteRenduInput,
 } from '../schemas/compte-rendu.schemas.js';
 import { compteRenduService } from '../services/compte-rendu.service.js';
+import { reunionService } from '../services/reunion.service.js';
+import { AppError } from '../utils/errors.js';
 import { profilLimiteAuxParticipations } from '../utils/reunion-acces.js';
 import { PERMISSIONS, roleAutorise } from '../utils/permissions.js';
 
@@ -108,6 +111,44 @@ export class CompteRenduController {
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', String(buffer.length));
     res.status(200).send(buffer);
+  }
+
+  async genererAvecIa(req: Request, res: Response): Promise<void> {
+    await compteRenduService.obtenirParId(req.params.id as string, {
+      limiterAuProfilId: profilLimiteAuxParticipations(req.user),
+    });
+    const body = (req.body ?? {}) as GenererCrIaInput;
+    const data = await compteRenduService.genererAvecIa(req.params.id as string, {
+      modifie_par: req.user?.id ?? null,
+      niveau_detail: body.niveau_detail,
+    });
+    res.status(200).json({ success: true, data });
+  }
+
+  async envoyerAuxParticipants(req: Request, res: Response): Promise<void> {
+    const cr = await compteRenduService.obtenirParId(req.params.id as string, {
+      limiterAuProfilId: profilLimiteAuxParticipations(req.user),
+    });
+
+    const reunion = await reunionService.obtenirParId(cr.reunion_id);
+    const userId = req.user?.id;
+    const role = req.user?.role;
+    const estOrganisateur = Boolean(userId && reunion.cree_par === userId);
+    const estAutorise =
+      role === 'administrateur' ||
+      role === 'directeur' ||
+      role === 'secretaire' ||
+      estOrganisateur;
+
+    if (!estAutorise) {
+      throw new AppError(
+        403,
+        'Seul l’organisateur, le secrétariat, un directeur ou un administrateur peut envoyer le rapport.',
+      );
+    }
+
+    const data = await compteRenduService.envoyerAuxParticipants(req.params.id as string);
+    res.status(200).json({ success: true, data });
   }
 }
 

@@ -67,6 +67,13 @@ const envSchema = z.object({
     emptyToUndefined,
     z.string().min(3).optional(),
   ).default('Ogefmeeting <onboarding@resend.dev>'),
+  /** Deepgram — transcription live (clé côté serveur uniquement) */
+  DEEPGRAM_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  DEEPGRAM_LANGUAGE: z.preprocess(emptyToUndefined, z.string().min(2).optional()).default('fr'),
+  DEEPGRAM_MODEL: z.preprocess(emptyToUndefined, z.string().min(1).optional()).default('nova-3'),
+  /** OpenAI — génération compte rendu (clé côté serveur uniquement) */
+  OPENAI_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  OPENAI_MODEL: z.preprocess(emptyToUndefined, z.string().min(1).optional()).default('gpt-4o-mini'),
 });
 
 const parsed = envSchema.parse(process.env);

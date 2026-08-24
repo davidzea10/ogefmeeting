@@ -124,6 +124,14 @@ export function cloturerReunion(id: string) {
   return apiFetch<Reunion>(`/api/reunions/${id}/cloturer`, { method: 'POST' });
 }
 
+export function mettreReunionEnPause(id: string) {
+  return apiFetch<Reunion>(`/api/reunions/${id}/pause`, { method: 'POST' });
+}
+
+export function reprendreReunion(id: string) {
+  return apiFetch<Reunion>(`/api/reunions/${id}/reprendre`, { method: 'POST' });
+}
+
 export function modifierPointOrdreJour(
   reunionId: string,
   pointId: string,
@@ -187,4 +195,9 @@ export function creerCompteRendu(reunionId: string, cree_par?: string | null) {
       cree_par: cree_par ?? null,
     }),
   });
+}
+
+/** Admin : prépare / réutilise une réunion live DANTIC pour tests audio/IA. */
+export function preparerTesteLive() {
+  return apiFetch<ReunionDetail>('/api/reunions/teste-live', { method: 'POST' });
 }

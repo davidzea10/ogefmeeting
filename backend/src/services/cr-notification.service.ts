@@ -112,24 +112,10 @@ export async function notifierChangementStatutCr(opts: {
     } else if (opts.nouveauStatut === 'valide') {
       const auteur = await profilParId(opts.cr.cree_par);
       destinataires = auteur ? [auteur] : [];
-      sujet = `[Ogefmeeting] Compte rendu publié — ${titre}`;
-      message = `Le compte rendu pour « ${titre} » a été validé et publié.${
+      sujet = `[Ogefmeeting] Compte rendu validé — ${titre}`;
+      message = `Le compte rendu pour « ${titre} » a été validé.${
         motif ? ` Commentaire : ${motif}` : ''
-      }`;
-
-      const { data: participantRows } = await requireSupabaseAdmin()
-        .from(TABLES.participantsReunion)
-        .select('profils(id, email, prenom, nom, est_actif)')
-        .eq('reunion_id', opts.cr.reunion_id);
-
-      for (const row of participantRows ?? []) {
-        const raw = (row as { profils?: ProfilDestinataire | ProfilDestinataire[] | null })
-          .profils;
-        const profil = Array.isArray(raw) ? raw[0] : raw;
-        if (profil?.id && profil.est_actif !== false) {
-          destinataires.push(profil);
-        }
-      }
+      } L’envoi du rapport PDF aux participants est déclenché si la réunion est clôturée.`;
     } else if (opts.nouveauStatut === 'archive') {
       const auteur = await profilParId(opts.cr.cree_par);
       destinataires = auteur ? [auteur] : [];
@@ -249,5 +235,196 @@ export async function notifierParticipantsRapportReunion(opts: {
     });
   } catch (error) {
     logger.warn({ err: error }, 'Échec notification participants compte rendu');
+  }
+}
+
+export type ResultatEnvoiRapportParticipants = {
+  envoye: boolean;
+  nb_destinataires: number;
+  nb_emails_ok: number;
+  motif_non_envoi?: string;
+};
+
+/**
+ * Envoie le rapport PDF validé à tous les participants.
+ * Prérequis : CR validé + réunion clôturée.
+ */
+export async function envoyerRapportAuxParticipants(opts: {
+  cr: CompteRendu;
+  /** Si true : lève une AppError si les prérequis ne sont pas remplis. */
+  exigerConditions?: boolean;
+}): Promise<ResultatEnvoiRapportParticipants> {
+  const { AppError } = await import('../utils/errors.js');
+  const { compteRenduService } = await import('./compte-rendu.service.js');
+
+  const supabase = requireSupabaseAdmin();
+  const { data: reunion, error: reunionError } = await supabase
+    .from(TABLES.reunions)
+    .select('id, titre, statut, cree_par')
+    .eq('id', opts.cr.reunion_id)
+    .maybeSingle();
+
+  if (reunionError) {
+    logger.warn({ err: reunionError }, 'Impossible de charger la réunion pour envoi CR');
+  }
+
+  const statutReunion = (reunion as { statut?: string } | null)?.statut;
+  const titre = (reunion as { titre?: string } | null)?.titre ?? 'Réunion';
+
+  if (opts.cr.statut !== 'valide' && opts.cr.statut !== 'archive') {
+    if (opts.exigerConditions) {
+      throw new AppError(
+        400,
+        'Le compte rendu doit être validé avant envoi aux participants.',
+      );
+    }
+    return {
+      envoye: false,
+      nb_destinataires: 0,
+      nb_emails_ok: 0,
+      motif_non_envoi: 'Compte rendu non validé',
+    };
+  }
+
+  if (statutReunion !== 'cloturee') {
+    if (opts.exigerConditions) {
+      throw new AppError(
+        400,
+        'La réunion doit être clôturée avant envoi du rapport aux participants.',
+      );
+    }
+    return {
+      envoye: false,
+      nb_destinataires: 0,
+      nb_emails_ok: 0,
+      motif_non_envoi: 'Réunion non clôturée',
+    };
+  }
+
+  const { data: rows } = await supabase
+    .from(TABLES.participantsReunion)
+    .select('profils(id, email, prenom, nom, est_actif)')
+    .eq('reunion_id', opts.cr.reunion_id);
+
+  const destinataires: ProfilDestinataire[] = [];
+  for (const row of rows ?? []) {
+    const raw = (row as { profils?: ProfilDestinataire | ProfilDestinataire[] | null }).profils;
+    const profil = Array.isArray(raw) ? raw[0] : raw;
+    if (profil?.id && profil.est_actif !== false && profil.email) {
+      destinataires.push(profil);
+    }
+  }
+
+  // Dédupliquer
+  const uniques = [...new Map(destinataires.map((d) => [d.id, d])).values()];
+
+  if (uniques.length === 0) {
+    if (opts.exigerConditions) {
+      throw new AppError(400, 'Aucun participant avec email pour cette réunion.');
+    }
+    return {
+      envoye: false,
+      nb_destinataires: 0,
+      nb_emails_ok: 0,
+      motif_non_envoi: 'Aucun destinataire',
+    };
+  }
+
+  let pdfBuffer: Buffer;
+  let filename: string;
+  try {
+    const pdf = await compteRenduService.exporterPdf(opts.cr.id);
+    pdfBuffer = pdf.buffer;
+    filename = pdf.filename;
+  } catch (error) {
+    logger.warn({ err: error }, 'Impossible de générer le PDF pour envoi participants');
+    if (opts.exigerConditions) {
+      throw new AppError(502, 'Impossible de générer le PDF du compte rendu.');
+    }
+    return {
+      envoye: false,
+      nb_destinataires: uniques.length,
+      nb_emails_ok: 0,
+      motif_non_envoi: 'Échec génération PDF',
+    };
+  }
+
+  const lien = lienCr(opts.cr.id);
+  const sujet = `[Ogefmeeting] Rapport de réunion — ${titre}`;
+  const message =
+    `Bonjour,\n\n` +
+    `La réunion « ${titre} » est clôturée et son compte rendu a été validé.\n` +
+    `Vous trouverez ci-joint le rapport PDF officiel.\n\n` +
+    `Vous pouvez également le consulter dans Ogefmeeting.`;
+
+  const attachment = {
+    filename,
+    content: pdfBuffer.toString('base64'),
+    contentType: 'application/pdf',
+  };
+
+  await notifierInApp(uniques, {
+    type: 'cr_envoye_participants',
+    titre: `Rapport envoyé — ${titre}`,
+    message: `Le compte rendu validé de la réunion « ${titre} » vous a été transmis par email (PDF).`,
+    lien,
+    metadonnees: {
+      compte_rendu_id: opts.cr.id,
+      reunion_id: opts.cr.reunion_id,
+    },
+  });
+
+  let nbOk = 0;
+  for (const dest of uniques) {
+    const result = await envoyerEmailOgefmeeting({
+      to: dest.email,
+      subject: sujet,
+      titre: `Rapport de réunion — ${titre}`,
+      message,
+      lien,
+      boutonLibelle: 'Ouvrir le compte rendu',
+      attachments: [attachment],
+    });
+    if (result.envoye || result.mode === 'simulation') {
+      nbOk += 1;
+    }
+  }
+
+  logger.info(
+    {
+      compte_rendu_id: opts.cr.id,
+      reunion_id: opts.cr.reunion_id,
+      nb_destinataires: uniques.length,
+      nb_emails_ok: nbOk,
+    },
+    'Rapport CR envoyé aux participants',
+  );
+
+  return {
+    envoye: nbOk > 0,
+    nb_destinataires: uniques.length,
+    nb_emails_ok: nbOk,
+  };
+}
+
+/**
+ * Si un CR validé existe pour la réunion, envoie le rapport aux participants (best-effort).
+ */
+export async function tenterEnvoiRapportSiPret(reunionId: string): Promise<void> {
+  try {
+    const supabase = requireSupabaseAdmin();
+    const { data } = await supabase
+      .from(TABLES.comptesRendus)
+      .select('*')
+      .eq('reunion_id', reunionId)
+      .eq('statut', 'valide')
+      .order('valide_le', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!data) return;
+    await envoyerRapportAuxParticipants({ cr: data as CompteRendu });
+  } catch (error) {
+    logger.warn({ err: error, reunionId }, 'Échec envoi auto rapport après clôture');
   }
 }

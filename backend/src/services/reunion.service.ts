@@ -17,6 +17,7 @@ import type {
 } from '../schemas/reunion.schemas.js';
 import { AppError } from '../utils/errors.js';
 import { handleSupabaseError } from '../utils/supabase-error.js';
+import { tenterEnvoiRapportSiPret } from './cr-notification.service.js';
 import { notificationService } from './notification.service.js';
 
 export type ScopeReunion = {
@@ -402,10 +403,114 @@ export class ReunionService {
     return data as Reunion;
   }
 
+  /**
+   * Prépare une réunion de test live (admin) liée à la direction DANTIC.
+   * Réutilise une réunion « [TEST LIVE] » déjà en_cours si elle existe.
+   */
+  async preparerTesteLive(adminProfilId: string): Promise<ReunionDetail> {
+    const supabase = requireSupabaseAdmin();
+    const TITRE_TEST = '[TEST LIVE] Audio DANTIC';
+
+    const { data: direction, error: dirErr } = await supabase
+      .from(TABLES.directions)
+      .select('id, code, nom')
+      .eq('code', 'DANTIC')
+      .maybeSingle();
+
+    if (dirErr) {
+      handleSupabaseError(dirErr, 'Impossible de charger la direction DANTIC.');
+    }
+    if (!direction) {
+      throw new AppError(
+        404,
+        'Direction DANTIC introuvable. Vérifiez que les seeds / migrations sont appliqués.',
+      );
+    }
+
+    const directionId = (direction as { id: string }).id;
+
+    const { data: existante, error: existErr } = await supabase
+      .from(TABLES.reunions)
+      .select('id, statut')
+      .eq('titre', TITRE_TEST)
+      .eq('statut', 'en_cours')
+      .order('cree_le', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existErr) {
+      handleSupabaseError(existErr, 'Impossible de chercher la réunion de test.');
+    }
+
+    let reunionId: string;
+
+    if (existante?.id) {
+      reunionId = existante.id as string;
+    } else {
+      const creee = await this.creer(
+        {
+          titre: TITRE_TEST,
+          description:
+            'Réunion de test admin — enregistrement audio / futur STT (DANTIC).',
+          type_reunion: 'technique',
+          date_prevue: new Date().toISOString(),
+          lieu: 'Salle test DANTIC',
+          direction_id: directionId,
+          direction_ids: [directionId],
+          cree_par: adminProfilId,
+        },
+        { directementPlanifiee: true },
+      );
+
+      await this.gererOrdreJour(creee.id, {
+        points: [
+          {
+            titre: 'Test micro / enregistrement',
+            description: 'Vérifier le niveau sonore et la lecture.',
+            ordre: 0,
+            duree_minutes: 10,
+          },
+          {
+            titre: 'Test modules IA (à venir)',
+            description: 'Placeholder pour transcription / empreinte vocale.',
+            ordre: 1,
+            duree_minutes: 10,
+          },
+        ],
+      });
+
+      const demarree = await this.demarrer(creee.id);
+      reunionId = demarree.id;
+    }
+
+    // Garantir que l’admin est participant
+    const { data: deja } = await supabase
+      .from(TABLES.participantsReunion)
+      .select('id')
+      .eq('reunion_id', reunionId)
+      .eq('profil_id', adminProfilId)
+      .maybeSingle();
+
+    if (!deja) {
+      await supabase.from(TABLES.participantsReunion).insert({
+        reunion_id: reunionId,
+        profil_id: adminProfilId,
+        statut: 'present',
+      });
+    } else {
+      await supabase
+        .from(TABLES.participantsReunion)
+        .update({ statut: 'present' })
+        .eq('id', (deja as { id: string }).id);
+    }
+
+    return this.obtenirParId(reunionId);
+  }
+
   async cloturer(id: string): Promise<Reunion> {
     const reunion = await this.assurerExiste(id);
 
-    if (reunion.statut !== 'en_cours') {
+    if (reunion.statut !== 'en_cours' && reunion.statut !== 'en_pause') {
       throw new AppError(
         400,
         `Impossible de clôturer une réunion au statut « ${reunion.statut} ».`,
@@ -425,6 +530,60 @@ export class ReunionService {
 
     if (error) {
       handleSupabaseError(error, 'Impossible de clôturer la réunion.');
+    }
+
+    const reunionCloturee = data as Reunion;
+    // Si un CR est déjà validé, envoi automatique du PDF aux participants
+    void tenterEnvoiRapportSiPret(id);
+
+    return reunionCloturee;
+  }
+
+  async mettreEnPause(id: string): Promise<Reunion> {
+    const reunion = await this.assurerExiste(id);
+
+    if (reunion.statut !== 'en_cours') {
+      throw new AppError(
+        400,
+        `Impossible de mettre en pause une réunion au statut « ${reunion.statut} ».`,
+      );
+    }
+
+    const supabase = requireSupabaseAdmin();
+    const { data, error } = await supabase
+      .from(TABLES.reunions)
+      .update({ statut: 'en_pause' })
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (error) {
+      handleSupabaseError(error, 'Impossible de mettre la réunion en pause.');
+    }
+
+    return data as Reunion;
+  }
+
+  async reprendre(id: string): Promise<Reunion> {
+    const reunion = await this.assurerExiste(id);
+
+    if (reunion.statut !== 'en_pause') {
+      throw new AppError(
+        400,
+        `Impossible de reprendre une réunion au statut « ${reunion.statut} ».`,
+      );
+    }
+
+    const supabase = requireSupabaseAdmin();
+    const { data, error } = await supabase
+      .from(TABLES.reunions)
+      .update({ statut: 'en_cours' })
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (error) {
+      handleSupabaseError(error, 'Impossible de reprendre la réunion.');
     }
 
     return data as Reunion;

@@ -19,10 +19,19 @@ import { AppError } from '../utils/errors.js';
 import { handleSupabaseError } from '../utils/supabase-error.js';
 import { genererPdfCompteRendu, nomFichierPdfCr } from './cr-pdf.service.js';
 import {
+  brouillonVersContenuSections,
+  crIaService,
+  type ContexteReunionIa,
+  type NiveauDetailCr,
+} from './cr-ia.service.js';
+import {
+  envoyerRapportAuxParticipants,
   notifierChangementStatutCr,
   notifierParticipantsRapportReunion,
 } from './cr-notification.service.js';
 import { parametresService } from './parametres.service.js';
+import { reunionService } from './reunion.service.js';
+import { transcriptionsService } from './transcriptions.service.js';
 
 export class CompteRenduService {
   async creer(input: CreerCompteRenduInput): Promise<CompteRendu> {
@@ -277,6 +286,9 @@ export class CompteRenduService {
       nouveauStatut: 'valide',
       commentaire: input.commentaire,
     });
+
+    // Réunion clôturée + CR validé → envoi PDF à tous les participants (best-effort)
+    void envoyerRapportAuxParticipants({ cr });
 
     return cr;
   }
@@ -534,6 +546,175 @@ export class CompteRenduService {
     );
 
     return { buffer, filename };
+  }
+
+  /**
+   * Envoie le rapport PDF validé à tous les participants (réunion clôturée requise).
+   * Réservé à l’organisateur / secrétariat / direction / admin.
+   */
+  async envoyerAuxParticipants(id: string): Promise<{
+    envoye: boolean;
+    nb_destinataires: number;
+    nb_emails_ok: number;
+  }> {
+    const cr = await this.assurerExiste(id);
+    return envoyerRapportAuxParticipants({ cr, exigerConditions: true });
+  }
+
+  /**
+   * Génère le contenu du CR via GPT à partir de la dernière transcription STT + ODJ.
+   * Structure : introduction + développement par point d'ordre du jour.
+   */
+  async genererAvecIa(
+    id: string,
+    options: { modifie_par?: string | null; niveau_detail?: NiveauDetailCr } = {},
+  ): Promise<CompteRendu> {
+    const actuel = await this.assurerExiste(id);
+    if (actuel.statut === 'valide' || actuel.statut === 'archive') {
+      throw new AppError(
+        400,
+        'Impossible de régénérer un compte rendu validé ou archivé.',
+      );
+    }
+    if (actuel.statut === 'soumis') {
+      throw new AppError(
+        400,
+        'Compte rendu soumis : renvoyez-le en révision avant de régénérer avec l’IA.',
+      );
+    }
+
+    const reunion = await reunionService.obtenirParId(actuel.reunion_id);
+    const transcriptions = await transcriptionsService.listerParReunion(reunion.id);
+    const derniere = transcriptions[0];
+    if (!derniere?.texte_complet?.trim()) {
+      throw new AppError(
+        400,
+        'Aucune transcription sauvegardée pour cette réunion. Enregistrez d’abord le texte STT en live.',
+      );
+    }
+
+    const supabase = requireSupabaseAdmin();
+    const profilIds = reunion.participants.map((p) => p.profil_id);
+    const nomsProfils = new Map<string, string>();
+    if (profilIds.length > 0) {
+      const { data: profils } = await supabase
+        .from(TABLES.profils)
+        .select('id, prenom, nom')
+        .in('id', profilIds);
+      for (const p of (profils ?? []) as Array<{ id: string; prenom: string; nom: string }>) {
+        nomsProfils.set(p.id, `${p.prenom} ${p.nom}`.trim());
+      }
+    }
+
+    const directionIds = reunion.direction_ids ?? [];
+    let directionCodes: string[] = [];
+    if (directionIds.length > 0) {
+      const { data: dirs } = await supabase
+        .from(TABLES.directions)
+        .select('id, code, nom')
+        .in('id', directionIds);
+      directionCodes = ((dirs ?? []) as Array<{ code: string | null; nom: string }>)
+        .map((d) => (d.code ?? d.nom).trim())
+        .filter(Boolean);
+    }
+
+    const libellesStatut: Record<string, string> = {
+      invite: 'Invité',
+      confirme: 'Confirmé',
+      present: 'Présent',
+      absent: 'Absent',
+    };
+
+    const participantsLibelles = reunion.participants.map((p) => {
+      const nom = nomsProfils.get(p.profil_id) ?? p.profil_id.slice(0, 8);
+      return `${nom} (${libellesStatut[p.statut] ?? p.statut})`;
+    });
+
+    const pointsOdJ = [...reunion.points_ordre_jour]
+      .sort((a, b) => a.ordre - b.ordre)
+      .map((p) => (p.description ? `${p.titre} — ${p.description}` : p.titre));
+
+    const contexte: ContexteReunionIa = {
+      titre: reunion.titre,
+      type_reunion: reunion.type_reunion,
+      lieu: reunion.lieu,
+      date_reunion: reunion.date_prevue,
+      directions_codes: directionCodes,
+      description: reunion.description,
+      participants: participantsLibelles,
+      points_ordre_jour: pointsOdJ,
+    };
+
+    const niveau = options.niveau_detail ?? 'detaille';
+    const brouillon = await crIaService.genererBrouillon(
+      contexte,
+      derniere.texte_complet,
+      niveau,
+    );
+
+    let sections: Array<{ cle: string; libelle: string }> = [
+      { cle: 'contexte', libelle: 'Introduction' },
+      { cle: 'participants', libelle: 'Participants' },
+      { cle: 'ordre_du_jour', libelle: 'Points de l’ordre du jour' },
+      { cle: 'conclusion', libelle: 'Conclusion' },
+    ];
+
+    if (reunion.modele_id) {
+      const { data: modele } = await supabase
+        .from(TABLES.modelesCompteRendu)
+        .select('sections')
+        .eq('id', reunion.modele_id)
+        .maybeSingle();
+      const secs = (modele as { sections?: Array<{ cle: string; libelle: string }> } | null)
+        ?.sections;
+      if (secs?.length) {
+        // Ignore les anciennes sections globales décisions/actions
+        sections = secs.filter((s) => s.cle !== 'decisions' && s.cle !== 'actions');
+        if (sections.length === 0) sections = secs;
+      }
+    }
+
+    const presents = reunion.participants
+      .filter((p) => p.statut === 'present' || p.statut === 'confirme')
+      .map((p) => nomsProfils.get(p.profil_id) ?? p.profil_id.slice(0, 8));
+    const absents = reunion.participants
+      .filter((p) => p.statut === 'absent')
+      .map((p) => nomsProfils.get(p.profil_id) ?? p.profil_id.slice(0, 8));
+
+    const escape = (t: string) =>
+      t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const list = (items: string[]) =>
+      items.length === 0
+        ? '<p><em>Aucun élément.</em></p>'
+        : `<ul>${items.map((i) => `<li>${escape(i)}</li>`).join('')}</ul>`;
+
+    const participantsHtml = [
+      '<p><strong>Présents / confirmés</strong></p>',
+      list(presents),
+      '<p><strong>Absents</strong></p>',
+      list(absents),
+    ].join('');
+
+    const contenu = brouillonVersContenuSections(
+      brouillon,
+      sections.map((s) => s.cle),
+      participantsHtml,
+    );
+
+    const contenu_html = sections
+      .map((s) => `<h2>${escape(s.libelle)}</h2>${contenu[s.cle] ?? '<p></p>'}`)
+      .join('\n');
+
+    return this.modifier(
+      id,
+      {
+        contenu,
+        contenu_html,
+        modifie_par: options.modifie_par ?? null,
+        historiser: true,
+      },
+      {},
+    );
   }
 
   private async insererCommentaire(

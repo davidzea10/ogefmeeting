@@ -1,9 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
-  "installCommand": "cd .. && npm install",
-  "buildCommand": "cd .. && npm run build -w shared && npm run build -w @ogefmeeting/frontend",
-  "outputDirectory": "dist",
+  "installCommand": "npm install",
+  "buildCommand": "npm run build:frontend:vercel",
+  "outputDirectory": "frontend/dist",
   "rewrites": [
     {
       "source": "/((?!assets/).*)",

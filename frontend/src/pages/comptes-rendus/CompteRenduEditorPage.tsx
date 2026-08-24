@@ -1,12 +1,13 @@
 import { useAnnouncerStore } from '@/components/a11y/LiveAnnouncer';
 import { Breadcrumbs } from '@/components/layout/Breadcrumbs';
-import { CrDecisionsActionsPanel } from '@/components/comptes-rendus/CrDecisionsActionsPanel';
 import { CrSectionEditor } from '@/components/comptes-rendus/CrSectionEditor';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import {
   ajouterCommentaireCompteRendu,
   archiverCompteRendu,
+  envoyerCompteRenduParticipants,
+  genererCompteRenduIa,
   listerCommentairesCompteRendu,
   listerVersionsCompteRendu,
   modifierCompteRendu,
@@ -26,12 +27,16 @@ import {
 } from '@/lib/cr-prefill';
 import {
   LIBELLES_STATUT_CR,
+  LIBELLES_NIVEAU_DETAIL_CR,
+  DESCRIPTIONS_NIVEAU_DETAIL_CR,
   messageWorkflowCr,
   peutApprouverCr,
   peutArchiverCr,
+  peutEnvoyerRapportParticipants,
   peutModifierContenuCr,
   peutSoumettreCr,
   peutValiderCr,
+  type NiveauDetailCr,
 } from '@/lib/cr-workflow';
 import { formatDateHeure } from '@/lib/labels';
 import { listerProfils, obtenirReunion } from '@/lib/reunions-api';
@@ -43,10 +48,12 @@ import {
   CheckCircle2,
   Download,
   History,
+  Mail,
   MessageSquare,
   RotateCcw,
   Save,
   Send,
+  Sparkles,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -80,6 +87,7 @@ export function CompteRenduEditorPage() {
   const [showVersions, setShowVersions] = useState(false);
   const [commentaireAction, setCommentaireAction] = useState('');
   const [noteLibre, setNoteLibre] = useState('');
+  const [niveauDetailCr, setNiveauDetailCr] = useState<NiveauDetailCr>('detaille');
   const initDone = useRef(false);
 
   const crQuery = useQuery({
@@ -282,6 +290,38 @@ export function CompteRenduEditorPage() {
     onError: (e: Error) => announce(e.message),
   });
 
+  const genererIaMut = useMutation({
+    mutationFn: () => genererCompteRenduIa(id!, { niveau_detail: niveauDetailCr }),
+    onSuccess: async (data) => {
+      const existing: ContenuCr = {};
+      for (const s of sections) {
+        const raw = data.contenu[s.cle];
+        existing[s.cle] = typeof raw === 'string' ? raw : '<p></p>';
+      }
+      for (const [cle, val] of Object.entries(data.contenu)) {
+        if (typeof val === 'string' && !(cle in existing) && cle !== 'decisions' && cle !== 'actions') {
+          existing[cle] = val;
+        }
+      }
+      setContenu(existing);
+      setDirty(false);
+      setLastSavedAt(new Date());
+      await invalidateCr(data.reunion_id);
+      announce('Compte rendu généré par l’IA. Relisez et ajustez avant soumission.');
+    },
+    onError: (e: Error) => announce(e.message),
+  });
+
+  const envoyerParticipantsMut = useMutation({
+    mutationFn: () => envoyerCompteRenduParticipants(id!),
+    onSuccess: (data) => {
+      announce(
+        `Rapport envoyé à ${data.nb_emails_ok}/${data.nb_destinataires} participant(s).`,
+      );
+    },
+    onError: (e: Error) => announce(e.message),
+  });
+
   useEffect(() => {
     if (!editable || !dirty || !initDone.current) return;
     const t = window.setTimeout(() => {
@@ -305,7 +345,9 @@ export function CompteRenduEditorPage() {
     rejeterMut.isPending ||
     archiverMut.isPending ||
     pdfMut.isPending ||
-    noteMut.isPending;
+    noteMut.isPending ||
+    genererIaMut.isPending ||
+    envoyerParticipantsMut.isPending;
 
   if (!id) {
     return <p className="text-danger">Identifiant manquant.</p>;
@@ -338,6 +380,13 @@ export function CompteRenduEditorPage() {
   const showValidation = peutApprouverCr(role, cr.statut);
   const showArchiver = peutArchiverCr(role, cr.statut);
   const showNoteDirecteur = peutValiderCr(role) && cr.statut === 'soumis';
+  const showEnvoyerParticipants = peutEnvoyerRapportParticipants(
+    role,
+    cr.statut,
+    reunion.statut,
+    profilId,
+    reunion.cree_par,
+  );
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">
@@ -394,9 +443,49 @@ export function CompteRenduEditorPage() {
           </label>
         )}
 
+        {editable && (
+          <label className="block space-y-1 text-sm">
+            <span className="font-medium text-text">Niveau du compte rendu (IA)</span>
+            <select
+              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-text sm:max-w-md"
+              value={niveauDetailCr}
+              onChange={(e) => setNiveauDetailCr(e.target.value as NiveauDetailCr)}
+            >
+              {(Object.keys(LIBELLES_NIVEAU_DETAIL_CR) as NiveauDetailCr[]).map((n) => (
+                <option key={n} value={n}>
+                  {LIBELLES_NIVEAU_DETAIL_CR[n]}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-text-muted">
+              {DESCRIPTIONS_NIVEAU_DETAIL_CR[niveauDetailCr]}
+            </p>
+          </label>
+        )}
+
         <div className="flex flex-wrap gap-2">
           {editable && (
             <>
+              <Button
+                size="sm"
+                variant="outline"
+                loading={genererIaMut.isPending}
+                disabled={workflowBusy}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `Générer un ${LIBELLES_NIVEAU_DETAIL_CR[niveauDetailCr].toLowerCase()} avec l’IA ?\n\n` +
+                        'Le contenu actuel sera remplacé (une version sera historisée). ' +
+                        'Chaque projet ou sujet cité apparaîtra comme sous-point de l’ordre du jour.',
+                    )
+                  ) {
+                    genererIaMut.mutate();
+                  }
+                }}
+              >
+                <Sparkles className="h-4 w-4" aria-hidden />
+                Générer avec l’IA
+              </Button>
               <Button
                 size="sm"
                 loading={saveMut.isPending}
@@ -484,6 +573,27 @@ export function CompteRenduEditorPage() {
                 Rejeter / révision
               </Button>
             </>
+          )}
+
+          {showEnvoyerParticipants && (
+            <Button
+              size="sm"
+              variant="outline"
+              loading={envoyerParticipantsMut.isPending}
+              disabled={workflowBusy}
+              onClick={() => {
+                if (
+                  window.confirm(
+                    'Envoyer le rapport PDF validé à tous les participants de la réunion ?',
+                  )
+                ) {
+                  envoyerParticipantsMut.mutate();
+                }
+              }}
+            >
+              <Mail className="h-4 w-4" aria-hidden />
+              Envoyer aux participants
+            </Button>
           )}
 
           {showArchiver && (
@@ -632,13 +742,6 @@ export function CompteRenduEditorPage() {
           )}
         </aside>
       )}
-
-      <CrDecisionsActionsPanel
-        reunionId={reunion.id}
-        compteRenduId={cr.id}
-        profils={profilsQuery.data?.items ?? []}
-        editable={cr.statut !== 'archive'}
-      />
 
       <div className="space-y-3">
         {sections.map((section, index) => (

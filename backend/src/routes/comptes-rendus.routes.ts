@@ -12,6 +12,7 @@ import {
   rejeterCompteRenduSchema,
   soumettreCompteRenduSchema,
   validerCompteRenduSchema,
+  genererCrIaSchema,
 } from '../schemas/compte-rendu.schemas.js';
 import { PERMISSIONS } from '../utils/permissions.js';
 
@@ -124,4 +125,21 @@ comptesRendusRouter.get(
   requirePermission(PERMISSIONS.CR_LIRE),
   validateParams(idParamSchema),
   asyncHandler((req, res) => compteRenduController.exporterPdf(req, res)),
+);
+
+comptesRendusRouter.post(
+  '/:id/generer-ia',
+  requireAuth,
+  requirePermission(PERMISSIONS.CR_MODIFIER),
+  validateParams(idParamSchema),
+  validateBody(genererCrIaSchema),
+  asyncHandler((req, res) => compteRenduController.genererAvecIa(req, res)),
+);
+
+comptesRendusRouter.post(
+  '/:id/envoyer-participants',
+  requireAuth,
+  requirePermission(PERMISSIONS.CR_LIRE),
+  validateParams(idParamSchema),
+  asyncHandler((req, res) => compteRenduController.envoyerAuxParticipants(req, res)),
 );

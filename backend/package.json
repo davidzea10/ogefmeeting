@@ -17,6 +17,7 @@
   "dependencies": {
     "@ogefmeeting/shared": "*",
     "@supabase/supabase-js": "^2.57.4",
+    "busboy": "^1.6.0",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",

@@ -42,3 +42,27 @@ supabase/.temp/
 # Misc
 *.local
 .cache/
+
+# Python / labo IA
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+IA/.venv/
+IA/__pycache__/
+IA/.ipynb_checkpoints/
+IA/samples/brouillon_cr_exemple.json
+
+# Documents locaux non liés au déploiement
+plan-de-taches.pdf
+*.pdf
+!docs/**/*.pdf
+
+# Artefacts LaTeX
+*.aux
+*.out
+*.toc
+*.log
+frontend/docs/*.aux
+frontend/docs/*.out

@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   FileText,
   LayoutDashboard,
+  Radio,
   Search,
   Settings,
   User,
@@ -39,6 +40,7 @@ const navItems: NavItem[] = [
   { to: '/recherche', label: 'Recherche', icon: Search },
   { to: '/archives', label: 'Archives', icon: Archive },
   { to: '/profil', label: 'Mon profil', icon: User },
+  { to: '/teste-live', label: 'Teste live', icon: Radio, adminOnly: true },
   { to: '/utilisateurs', label: 'Utilisateurs', icon: Users, adminOnly: true },
   { to: '/administration', label: 'Administration', icon: Settings, adminOnly: true },
 ];
