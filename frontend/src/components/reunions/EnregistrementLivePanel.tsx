@@ -12,13 +12,18 @@ import { cn } from '@/lib/cn';
 import type { EnregistrementAvecUrl } from '@ogefmeeting/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { Pause, Play, Square } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 
 type Props = {
   reunionId: string;
   peutEnregistrer: boolean;
   /** Réunion en pause : on garde le panneau visible, on bloque seulement un nouveau démarrage. */
   reunionEnPause?: boolean;
+};
+
+export type EnregistrementLivePanelHandle = {
+  /** Arrête l'enregistrement en cours et attend la fin de l'envoi (clôture). */
+  preparerCloture: () => Promise<void>;
 };
 
 type Etat = 'idle' | 'recording' | 'paused' | 'uploading' | 'ready' | 'error';
@@ -52,11 +57,8 @@ function messageErreurMicro(e: unknown): string {
   return e instanceof Error ? e.message : 'Impossible d’accéder au micro.';
 }
 
-export function EnregistrementLivePanel({
-  reunionId,
-  peutEnregistrer,
-  reunionEnPause = false,
-}: Props) {
+export const EnregistrementLivePanel = forwardRef<EnregistrementLivePanelHandle, Props>(
+  function EnregistrementLivePanel({ reunionId, peutEnregistrer, reunionEnPause = false }, ref) {
   const announce = useAnnouncerStore((s) => s.announce);
   const queryClient = useQueryClient();
 
@@ -80,6 +82,46 @@ export function EnregistrementLivePanel({
   const [dureeEnregistree, setDureeEnregistree] = useState<number | null>(null);
   const [qualiteLabel, setQualiteLabel] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
+  const clotureUploadRef = useRef<((err?: Error) => void) | null>(null);
+
+  const preparerCloture = useCallback(async (): Promise<void> => {
+    const rec = recorderRef.current;
+    if (!rec || rec.state === 'inactive') return;
+
+    await new Promise<void>((resolve, reject) => {
+      const timeout = window.setTimeout(() => {
+        clotureUploadRef.current = null;
+        reject(new Error('Délai dépassé lors de l’enregistrement audio.'));
+      }, 120_000);
+
+      clotureUploadRef.current = (err?: Error) => {
+        window.clearTimeout(timeout);
+        clotureUploadRef.current = null;
+        if (err) reject(err);
+        else resolve();
+      };
+
+      if (pauseStartRef.current != null) {
+        pausedMsRef.current += Date.now() - pauseStartRef.current;
+        pauseStartRef.current = null;
+      }
+      setEtat('uploading');
+      try {
+        if (rec.state === 'recording' || rec.state === 'paused') {
+          try {
+            rec.requestData();
+          } catch {
+            /* ignore */
+          }
+        }
+        rec.stop();
+      } catch (e) {
+        clotureUploadRef.current?.(e instanceof Error ? e : new Error('Erreur arrêt audio.'));
+      }
+    });
+  }, []);
+
+  useImperativeHandle(ref, () => ({ preparerCloture }), [preparerCloture]);
 
   const stopMeter = () => {
     if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
@@ -295,6 +337,7 @@ export function EnregistrementLivePanel({
     if (blob.size < 800) {
       setErreur('Enregistrement trop court ou vide. Vérifiez le micro Windows.');
       setEtat('error');
+      clotureUploadRef.current?.(new Error('Enregistrement audio trop court.'));
       return;
     }
 
@@ -317,6 +360,7 @@ export function EnregistrementLivePanel({
       setEtat('ready');
       announce('Enregistrement enregistré.');
       await queryClient.invalidateQueries({ queryKey: ['enregistrements', reunionId] });
+      clotureUploadRef.current?.();
     } catch (e) {
       const pending: PendingAudioUpload = {
         id: crypto.randomUUID(),
@@ -337,6 +381,7 @@ export function EnregistrementLivePanel({
         setErreur(e instanceof Error ? e.message : 'Upload échoué.');
       }
       setEtat('error');
+      clotureUploadRef.current?.(e instanceof Error ? e : new Error('Upload audio échoué.'));
     }
   }
 
@@ -474,4 +519,5 @@ export function EnregistrementLivePanel({
       </div>
     </section>
   );
-}
+},
+);

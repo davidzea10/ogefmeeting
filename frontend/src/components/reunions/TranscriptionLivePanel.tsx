@@ -3,7 +3,7 @@ import { useTranscriptionLive, type LangueTranscription } from '@/hooks/useTrans
 import { cn } from '@/lib/cn';
 import { sauvegarderTranscription } from '@/lib/transcriptions-api';
 import { Captions, Eraser, Mic, MicOff, Save } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 
 type Props = {
   reunionId: string;
@@ -13,197 +13,231 @@ type Props = {
   desactive?: boolean;
 };
 
-export function TranscriptionLivePanel({ reunionId, peutControle, desactive }: Props) {
-  const {
-    actif,
-    connecting,
-    erreur,
-    interim,
-    segments,
-    langue,
-    setLangue,
-    texteComplet,
-    sauvegardeOk,
-    setSauvegardeOk,
-    demarrer,
-    arreter,
-    effacer,
-  } = useTranscriptionLive(reunionId);
+export type TranscriptionLivePanelHandle = {
+  /** Sauvegarde la transcription et arrête le flux (clôture). */
+  preparerCloture: () => Promise<void>;
+};
 
-  const [saving, setSaving] = useState(false);
-  const [saveErreur, setSaveErreur] = useState<string | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
+export const TranscriptionLivePanel = forwardRef<TranscriptionLivePanelHandle, Props>(
+  function TranscriptionLivePanel({ reunionId, peutControle, desactive }, ref) {
+    const {
+      actif,
+      connecting,
+      erreur,
+      interim,
+      segments,
+      langue,
+      setLangue,
+      texteComplet,
+      sauvegardeOk,
+      setSauvegardeOk,
+      demarrer,
+      arreter,
+      effacer,
+    } = useTranscriptionLive(reunionId);
 
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [segments, interim]);
+    const [saving, setSaving] = useState(false);
+    const [saveErreur, setSaveErreur] = useState<string | null>(null);
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const texteRef = useRef(texteComplet);
+    const sauvegardeOkRef = useRef(sauvegardeOk);
+    const langueRef = useRef(langue);
+    const actifRef = useRef(actif);
 
-  const changerLangue = (l: LangueTranscription) => {
-    if (actif) return;
-    setLangue(l);
-  };
+    useEffect(() => {
+      texteRef.current = texteComplet;
+    }, [texteComplet]);
+    useEffect(() => {
+      sauvegardeOkRef.current = sauvegardeOk;
+    }, [sauvegardeOk]);
+    useEffect(() => {
+      langueRef.current = langue;
+    }, [langue]);
+    useEffect(() => {
+      actifRef.current = actif;
+    }, [actif]);
 
-  const sauvegarder = async () => {
-    if (!texteComplet) return;
-    setSaving(true);
-    setSaveErreur(null);
-    try {
-      await sauvegarderTranscription({
-        reunion_id: reunionId,
-        langue,
-        texte_complet: texteComplet,
-      });
-      setSauvegardeOk(true);
-    } catch (e) {
-      setSaveErreur(e instanceof Error ? e.message : 'Échec de la sauvegarde');
-    } finally {
-      setSaving(false);
-    }
-  };
+    useEffect(() => {
+      const el = scrollRef.current;
+      if (!el) return;
+      el.scrollTop = el.scrollHeight;
+    }, [segments, interim]);
 
-  return (
-    <aside
-      className="flex h-full min-h-[28rem] flex-col overflow-hidden rounded-2xl border border-white/15 bg-white/[0.06] shadow-lg backdrop-blur-sm lg:min-h-0 lg:max-h-[calc(100vh-7.5rem)]"
-      aria-labelledby="transcription-live-title"
-    >
-      <div className="flex shrink-0 items-start justify-between gap-3 border-b border-white/10 px-4 py-3">
-        <div className="min-w-0">
-          <h2
-            id="transcription-live-title"
-            className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-ogefrem-yellow"
-          >
-            <Captions className="h-4 w-4 shrink-0" aria-hidden />
-            Transcription
-          </h2>
-          <div className="mt-2 flex items-center gap-1" role="group" aria-label="Langue de transcription">
-            <button
-              type="button"
-              disabled={actif}
-              onClick={() => changerLangue('fr')}
-              className={cn(
-                'rounded-md px-2.5 py-1 text-xs font-semibold transition',
-                langue === 'fr'
-                  ? 'bg-ogefrem-yellow text-ogefrem-navy'
-                  : 'bg-white/10 text-white/70 hover:bg-white/15',
-                actif && 'opacity-50',
-              )}
-            >
-              Français
-            </button>
-            <button
-              type="button"
-              disabled={actif}
-              onClick={() => changerLangue('en')}
-              className={cn(
-                'rounded-md px-2.5 py-1 text-xs font-semibold transition',
-                langue === 'en'
-                  ? 'bg-ogefrem-yellow text-ogefrem-navy'
-                  : 'bg-white/10 text-white/70 hover:bg-white/15',
-                actif && 'opacity-50',
-              )}
-            >
-              English
-            </button>
-          </div>
-        </div>
-        {actif && (
-          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-danger/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" aria-hidden />
-            Live
-          </span>
-        )}
-      </div>
+    const changerLangue = (l: LangueTranscription) => {
+      if (actif) return;
+      setLangue(l);
+    };
 
-      <div
-        ref={scrollRef}
-        className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4"
-        aria-live="polite"
-        aria-relevant="additions"
+    const sauvegarder = async () => {
+      if (!texteComplet) return;
+      setSaving(true);
+      setSaveErreur(null);
+      try {
+        await sauvegarderTranscription({
+          reunion_id: reunionId,
+          langue,
+          texte_complet: texteComplet,
+        });
+        setSauvegardeOk(true);
+      } catch (e) {
+        setSaveErreur(e instanceof Error ? e.message : 'Échec de la sauvegarde');
+        throw e;
+      } finally {
+        setSaving(false);
+      }
+    };
+
+    const preparerCloture = async (): Promise<void> => {
+      const texte = texteRef.current.trim();
+      if (texte && !sauvegardeOkRef.current) {
+        await sauvegarderTranscription({
+          reunion_id: reunionId,
+          langue: langueRef.current,
+          texte_complet: texte,
+        });
+        setSauvegardeOk(true);
+      }
+      if (actifRef.current) {
+        arreter();
+      }
+    };
+
+    useImperativeHandle(ref, () => ({ preparerCloture }), [arreter, reunionId]);
+
+    return (
+      <aside
+        className="flex h-full min-h-[28rem] flex-col overflow-hidden rounded-2xl border border-white/15 bg-white/[0.06] shadow-lg backdrop-blur-sm lg:min-h-0 lg:max-h-[calc(100vh-7.5rem)]"
+        aria-labelledby="transcription-live-title"
       >
-        {segments.length === 0 && !interim && !erreur && (
-          <p className="text-sm leading-relaxed text-white/45">
-            {peutControle
-              ? 'Choisissez la langue, puis démarrez la transcription.'
-              : 'La transcription apparaîtra ici lorsque le secrétaire la démarrera.'}
-          </p>
-        )}
-
-        {segments.map((seg) => (
-          <p key={seg.id} className="text-sm leading-relaxed text-white/90">
-            {seg.text}
-          </p>
-        ))}
-
-        {interim ? (
-          <p className="text-sm italic leading-relaxed text-white/45">{interim}</p>
-        ) : null}
-
-        {erreur ? (
-          <p className="rounded-lg border border-danger/40 bg-danger/15 px-3 py-2 text-sm text-red-200" role="alert">
-            {erreur}
-          </p>
-        ) : null}
-        {saveErreur ? (
-          <p className="rounded-lg border border-danger/40 bg-danger/15 px-3 py-2 text-sm text-red-200" role="alert">
-            {saveErreur}
-          </p>
-        ) : null}
-        {sauvegardeOk ? (
-          <p className="text-xs text-success" role="status">
-            Transcription sauvegardée — visible après clôture (admin / organisateur).
-          </p>
-        ) : null}
-      </div>
-
-      {peutControle && (
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-white/10 px-4 py-3">
-          {!actif ? (
-            <Button
-              size="sm"
-              className="!bg-ogefrem-yellow !text-ogefrem-navy hover:!bg-ogefrem-yellow/90"
-              loading={connecting}
-              disabled={desactive}
-              onClick={() => void demarrer()}
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-white/10 px-4 py-3">
+          <div className="min-w-0">
+            <h2
+              id="transcription-live-title"
+              className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-ogefrem-yellow"
             >
-              <Mic className="h-4 w-4" aria-hidden />
-              Démarrer
-            </Button>
-          ) : (
+              <Captions className="h-4 w-4 shrink-0" aria-hidden />
+              Transcription
+            </h2>
+            <div className="mt-2 flex items-center gap-1" role="group" aria-label="Langue de transcription">
+              <button
+                type="button"
+                disabled={actif}
+                onClick={() => changerLangue('fr')}
+                className={cn(
+                  'rounded-md px-2.5 py-1 text-xs font-semibold transition',
+                  langue === 'fr'
+                    ? 'bg-ogefrem-yellow text-ogefrem-navy'
+                    : 'bg-white/10 text-white/70 hover:bg-white/15',
+                  actif && 'opacity-50',
+                )}
+              >
+                Français
+              </button>
+              <button
+                type="button"
+                disabled={actif}
+                onClick={() => changerLangue('en')}
+                className={cn(
+                  'rounded-md px-2.5 py-1 text-xs font-semibold transition',
+                  langue === 'en'
+                    ? 'bg-ogefrem-yellow text-ogefrem-navy'
+                    : 'bg-white/10 text-white/70 hover:bg-white/15',
+                  actif && 'opacity-50',
+                )}
+              >
+                English
+              </button>
+            </div>
+          </div>
+          {actif && (
+            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-danger/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" aria-hidden />
+              Live
+            </span>
+          )}
+        </div>
+
+        <div
+          ref={scrollRef}
+          className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4"
+          aria-live="polite"
+          aria-relevant="additions"
+        >
+          {segments.length === 0 && !interim && !erreur && (
+            <p className="text-sm leading-relaxed text-white/45">
+              {peutControle
+                ? 'Choisissez la langue, puis démarrez la transcription.'
+                : 'La transcription apparaîtra ici lorsque le secrétaire la démarrera.'}
+            </p>
+          )}
+
+          {segments.map((seg) => (
+            <p key={seg.id} className="text-sm leading-relaxed text-white/90">
+              {seg.text}
+            </p>
+          ))}
+
+          {interim ? (
+            <p className="text-sm italic leading-relaxed text-white/45">{interim}</p>
+          ) : null}
+
+          {erreur ? (
+            <p className="rounded-lg border border-danger/40 bg-danger/15 px-3 py-2 text-sm text-red-200" role="alert">
+              {erreur}
+            </p>
+          ) : null}
+          {saveErreur ? (
+            <p className="rounded-lg border border-danger/40 bg-danger/15 px-3 py-2 text-sm text-red-200" role="alert">
+              {saveErreur}
+            </p>
+          ) : null}
+          {sauvegardeOk ? (
+            <p className="text-xs text-success" role="status">
+              Transcription sauvegardée — visible après clôture (admin / organisateur).
+            </p>
+          ) : null}
+        </div>
+
+        {peutControle && (
+          <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-white/10 px-4 py-3">
+            {!actif ? (
+              <Button
+                size="sm"
+                disabled={desactive || connecting}
+                loading={connecting}
+                onClick={() => void demarrer()}
+              >
+                <Mic className="h-4 w-4" aria-hidden />
+                Démarrer STT
+              </Button>
+            ) : (
+              <Button size="sm" variant="secondary" onClick={arreter}>
+                <MicOff className="h-4 w-4" aria-hidden />
+                Arrêter STT
+              </Button>
+            )}
             <Button
               size="sm"
               variant="secondary"
-              className="!bg-white/15 !text-white hover:!bg-white/25"
-              onClick={arreter}
+              disabled={!texteComplet || saving || sauvegardeOk}
+              loading={saving}
+              onClick={() => void sauvegarder()}
             >
-              <MicOff className="h-4 w-4" aria-hidden />
-              Arrêter
+              <Save className="h-4 w-4" aria-hidden />
+              Sauvegarder
             </Button>
-          )}
-          <Button
-            size="sm"
-            variant="ghost"
-            className={cn('!text-white/70 hover:!bg-white/10 hover:!text-white')}
-            loading={saving}
-            disabled={!texteComplet}
-            onClick={() => void sauvegarder()}
-          >
-            <Save className="h-4 w-4" aria-hidden />
-            Sauver texte
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className={cn('!text-white/70 hover:!bg-white/10 hover:!text-white')}
-            onClick={effacer}
-            disabled={segments.length === 0 && !interim}
-          >
-            <Eraser className="h-4 w-4" aria-hidden />
-            Effacer
-          </Button>
-        </div>
-      )}
-    </aside>
-  );
-}
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={!texteComplet || actif}
+              onClick={effacer}
+              aria-label="Effacer la transcription affichée"
+            >
+              <Eraser className="h-4 w-4" aria-hidden />
+            </Button>
+          </div>
+        )}
+      </aside>
+    );
+  },
+);

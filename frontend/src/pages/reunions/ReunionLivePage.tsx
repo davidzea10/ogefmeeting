@@ -9,9 +9,9 @@ import { useReunionRealtime } from '@/hooks/useReunionRealtime';
 import { formatDateHeure, LIBELLES_PARTICIPANT, LIBELLES_TYPE } from '@/lib/labels';
 import { isRealtimeConfigured } from '@/lib/supabase-browser';
 import { easeOutExpo, useMotionSafe } from '@/lib/motion';
-import { EnregistrementLivePanel } from '@/components/reunions/EnregistrementLivePanel';
+import { EnregistrementLivePanel, type EnregistrementLivePanelHandle } from '@/components/reunions/EnregistrementLivePanel';
 import { LiveOrdreJourPanel } from '@/components/reunions/LiveOrdreJourPanel';
-import { TranscriptionLivePanel } from '@/components/reunions/TranscriptionLivePanel';
+import { TranscriptionLivePanel, type TranscriptionLivePanelHandle } from '@/components/reunions/TranscriptionLivePanel';
 import {
   cloturerReunion,
   creerCompteRendu,
@@ -39,7 +39,7 @@ import {
   Square,
   Users,
 } from 'lucide-react';
-import { useMemo, useState, type MouseEvent } from 'react';
+import { useMemo, useRef, useState, type MouseEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 export function ReunionLivePage() {
@@ -53,6 +53,8 @@ export function ReunionLivePage() {
   const userId = useAuthStore((s) => s.user?.id ?? s.profil?.id);
   const motionSafe = useMotionSafe();
   const [showCloture, setShowCloture] = useState(false);
+  const audioPanelRef = useRef<EnregistrementLivePanelHandle>(null);
+  const transcriptionPanelRef = useRef<TranscriptionLivePanelHandle>(null);
 
   useReunionRealtime(id);
 
@@ -106,6 +108,12 @@ export function ReunionLivePage() {
 
   const cloturerMut = useMutation({
     mutationFn: async () => {
+      await audioPanelRef.current?.preparerCloture().catch((e: Error) => {
+        announce(`Audio : ${e.message}`);
+      });
+      await transcriptionPanelRef.current?.preparerCloture().catch((e: Error) => {
+        throw new Error(`Transcription : ${e.message}`);
+      });
       const cloturee = await cloturerReunion(id!);
       const existants = await listerComptesRendusReunion(id!);
       let crId = existants.items[0]?.id;
@@ -198,8 +206,11 @@ export function ReunionLivePage() {
   const progress = points.length === 0 ? 0 : Math.round((traites / points.length) * 100);
   const peutModifier = peutModifierReunionRole(role, profil?.fonction, userId, reunion);
   const peutGerer = peutGererReunionRole(role, profil?.fonction, userId, reunion);
-  /** Invité : voit le live, sans pause / clôture / ODJ / audio. */
-  const estInviteLectureSeule = !peutGerer && !peutModifier;
+  /** Organisateur ou ayant-droit : conduire, clôturer, enregistrer. */
+  const peutConduireLive = peutGerer || peutModifier;
+  const estOrganisateur = Boolean(userId && reunion.cree_par && reunion.cree_par === userId);
+  /** Invité simple : voit le live sans modifier ni clôturer. */
+  const estInviteLectureSeule = !peutConduireLive;
 
   return (
     <div className="flex min-h-screen flex-col bg-ogefrem-navy text-white">
@@ -212,7 +223,7 @@ export function ReunionLivePage() {
               className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-white/80 transition hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-ogefrem-yellow"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden />
-              {estInviteLectureSeule ? 'Quitter la réunion' : 'Quitter'}
+              {estInviteLectureSeule ? 'Quitter la réunion' : 'Quitter le live'}
             </Link>
             <div className="hidden h-6 w-px bg-white/20 sm:block" aria-hidden />
             <Logo size="sm" className="hidden sm:flex" />
@@ -261,7 +272,7 @@ export function ReunionLivePage() {
                 {chrono.label}
               </p>
             </div>
-            {peutGerer && (
+            {peutConduireLive && (
               <>
                 {enPause ? (
                   <Button
@@ -316,8 +327,18 @@ export function ReunionLivePage() {
           className="border-b border-ogefrem-yellow/30 bg-ogefrem-yellow/15 px-4 py-2 text-center text-sm text-ogefrem-yellow"
           role="status"
         >
-          Mode participant — lecture seule. Vous pouvez quitter ou fermer cette fenêtre ;
+          Mode participant — lecture seule. Vous pouvez quitter cette page ;
           seuls l’organisateur et les ayant-droit peuvent mettre en pause ou clôturer.
+        </div>
+      )}
+
+      {peutConduireLive && !estOrganisateur && (
+        <div
+          className="border-b border-white/10 bg-white/5 px-4 py-2 text-center text-sm text-white/80"
+          role="status"
+        >
+          Mode ayant-droit — vous pouvez quitter le live ou clôturer la réunion.
+          La clôture enregistre l’audio, la transcription et crée le compte rendu brouillon.
         </div>
       )}
 
@@ -399,8 +420,9 @@ export function ReunionLivePage() {
             </section>
 
             <EnregistrementLivePanel
+              ref={audioPanelRef}
               reunionId={id}
-              peutEnregistrer={peutGerer}
+              peutEnregistrer={peutConduireLive}
               reunionEnPause={enPause}
             />
           </div>
@@ -408,8 +430,9 @@ export function ReunionLivePage() {
           {/* Colonne droite — transcription live */}
           <div className="lg:sticky lg:top-[5.5rem]">
             <TranscriptionLivePanel
+              ref={transcriptionPanelRef}
               reunionId={id}
-              peutControle={peutGerer}
+              peutControle={peutConduireLive}
               desactive={enPause}
             />
           </div>
@@ -506,8 +529,8 @@ function ClotureModal({
         </dl>
 
         <p className="mt-4 text-sm text-text-muted">
-          Un compte rendu brouillon sera créé (ou réutilisé) et vous serez redirigé vers
-          l’onglet compte rendu.
+          L’audio et la transcription seront sauvegardés avant clôture. Un compte rendu brouillon
+          sera créé (ou réutilisé) et vous serez redirigé vers l’onglet compte rendu.
         </p>
 
         <div className="mt-6 flex flex-wrap justify-end gap-2">

@@ -375,7 +375,7 @@ export class ReunionService {
     return data as Reunion;
   }
 
-  async demarrer(id: string): Promise<Reunion> {
+  async demarrer(id: string, demarreParProfilId?: string | null): Promise<Reunion> {
     const reunion = await this.assurerExiste(id);
 
     if (reunion.statut !== 'planifiee') {
@@ -400,7 +400,71 @@ export class ReunionService {
       handleSupabaseError(error, 'Impossible de démarrer la réunion.');
     }
 
-    return data as Reunion;
+    const demarree = data as Reunion;
+    void this.notifierInvitesReunionDemarree(demarree, demarreParProfilId ?? null);
+
+    return demarree;
+  }
+
+  /** Alerte les invités dès que la réunion passe en cours (best-effort, 1 notif / invité). */
+  private async notifierInvitesReunionDemarree(
+    reunion: Pick<Reunion, 'id' | 'titre' | 'lieu'>,
+    demarreParProfilId: string | null,
+  ): Promise<void> {
+    try {
+      const supabase = requireSupabaseAdmin();
+      const { data: participants, error } = await supabase
+        .from(TABLES.participantsReunion)
+        .select('profil_id, statut')
+        .eq('reunion_id', reunion.id)
+        .in('statut', ['invite', 'confirme']);
+
+      if (error || !participants?.length) return;
+
+      const ids = participants
+        .map((p) => p.profil_id as string)
+        .filter((profilId) => profilId && profilId !== demarreParProfilId);
+
+      if (ids.length === 0) return;
+
+      const { data: profils } = await supabase
+        .from(TABLES.profils)
+        .select('id, email, prenom, nom, est_actif')
+        .in('id', ids)
+        .eq('est_actif', true);
+
+      const metaCle = { reunion_id: reunion.id, kind: 'demarrage' };
+      const destinataires: { id: string; email?: string | null; prenom?: string; nom?: string }[] =
+        [];
+
+      for (const profil of profils ?? []) {
+        const { data: deja } = await supabase
+          .from(TABLES.notifications)
+          .select('id')
+          .eq('profil_id', profil.id)
+          .eq('type', 'reunion_demarree')
+          .contains('metadonnees', metaCle)
+          .maybeSingle();
+        if (!deja) destinataires.push(profil);
+      }
+
+      if (destinataires.length === 0) return;
+
+      const lieuPart = reunion.lieu ? ` — ${reunion.lieu}` : '';
+      await notificationService.creerPourProfils(destinataires, {
+        type: 'reunion_demarree',
+        titre: 'La réunion a commencé',
+        message:
+          `« ${reunion.titre} » est en cours${lieuPart}.\n\n` +
+          `Rejoignez le mode live pour suivre l’ordre du jour en direct.`,
+        lien: `/reunions/${reunion.id}/live`,
+        emailSujet: `[Ogefmeeting] En cours — ${reunion.titre}`,
+        emailBoutonLibelle: 'Rejoindre le live',
+        metadonnees: metaCle,
+      });
+    } catch {
+      /* best-effort */
+    }
   }
 
   /**

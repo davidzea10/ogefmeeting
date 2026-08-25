@@ -80,7 +80,7 @@ export class ReunionController {
         'Seuls l’organisateur ou un ayant-droit (secrétaire, chef, direction) peuvent démarrer une réunion.',
       );
     }
-    const data = await reunionService.demarrer(req.params.id as string);
+    const data = await reunionService.demarrer(req.params.id as string, req.user.id);
     res.status(200).json({ success: true, data });
   }
 

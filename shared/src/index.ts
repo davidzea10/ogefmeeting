@@ -529,6 +529,7 @@ export type ParametresApplication = {
 
 export const TYPES_NOTIFICATION = [
   'invitation_reunion',
+  'reunion_demarree',
   'reunion_a_valider',
   'reunion_approuvee',
   'reunion_refusee',
