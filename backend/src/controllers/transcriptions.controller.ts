@@ -2,7 +2,10 @@ import type { Request, Response } from 'express';
 import { transcriptionsService } from '../services/transcriptions.service.js';
 import { reunionService } from '../services/reunion.service.js';
 import { AppError } from '../utils/errors.js';
-import { utilisateurPeutApprouver } from '../utils/reunion-acces.js';
+import {
+  utilisateurPeutApprouver,
+  utilisateurPeutGererConduite,
+} from '../utils/reunion-acces.js';
 
 function peutVoirArchives(
   user: Request['user'],
@@ -20,9 +23,6 @@ function peutVoirArchives(
 export class TranscriptionsController {
   async sauvegarder(req: Request, res: Response): Promise<void> {
     if (!req.user) throw new AppError(401, 'Authentification requise.');
-    if (!utilisateurPeutApprouver(req.user) && req.user.role !== 'administrateur') {
-      throw new AppError(403, 'Droits insuffisants pour sauvegarder une transcription.');
-    }
 
     const body = req.body as {
       reunion_id: string;
@@ -30,6 +30,11 @@ export class TranscriptionsController {
       texte_complet: string;
       enregistrement_id?: string | null;
     };
+
+    const reunion = await reunionService.obtenirParId(body.reunion_id);
+    if (!utilisateurPeutGererConduite(req.user, reunion)) {
+      throw new AppError(403, 'Droits insuffisants pour sauvegarder une transcription.');
+    }
 
     const data = await transcriptionsService.sauvegarder(body);
     res.status(201).json({ success: true, data });

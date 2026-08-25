@@ -85,7 +85,6 @@ export function ReunionTable({
   const profil = useAuthStore((s) => s.profil);
   const role = useAuthStore((s) => s.role ?? s.profil?.role ?? null);
   const userId = useAuthStore((s) => s.user?.id ?? s.profil?.id);
-  const peutGerer = peutGererReunionRole(role, profil?.fonction);
 
   return (
     <>
@@ -94,6 +93,12 @@ export function ReunionTable({
         {reunions.map((reunion) => {
           const loading = actionLoadingId === reunion.id;
           const peutModifier = peutModifierReunionRole(
+            role,
+            profil?.fonction,
+            userId,
+            reunion,
+          );
+          const peutGerer = peutGererReunionRole(
             role,
             profil?.fonction,
             userId,
@@ -166,6 +171,12 @@ export function ReunionTable({
             {reunions.map((reunion) => {
               const loading = actionLoadingId === reunion.id;
               const peutModifier = peutModifierReunionRole(
+                role,
+                profil?.fonction,
+                userId,
+                reunion,
+              );
+              const peutGerer = peutGererReunionRole(
                 role,
                 profil?.fonction,
                 userId,

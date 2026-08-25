@@ -194,9 +194,9 @@ export function ReunionFormWizard({ mode, reunionId }: Props) {
       .filter((p) => p.direction_id && selectedDirectionIds.includes(p.direction_id))
       .map((p) => ({
         profil_id: p.id,
-        prenom: p.prenom,
-        nom: p.nom,
-        email: p.email,
+        prenom: p.prenom ?? '',
+        nom: p.nom ?? '',
+        email: p.email ?? '',
       }));
 
     setValue('participants', nextParticipants, { shouldDirty: true });

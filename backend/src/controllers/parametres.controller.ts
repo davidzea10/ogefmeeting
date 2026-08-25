@@ -72,8 +72,9 @@ export class NotificationController {
 
   async compterNonLues(req: Request, res: Response): Promise<void> {
     if (!req.user) throw new AppError(401, 'Authentification requise.');
-    // Best-effort : rappels actions en retard (max 1x / action / jour)
+    // Best-effort : rappels actions + réunions (max 1x / type / jour)
     await notificationService.notifierActionsEnRetard().catch(() => 0);
+    await notificationService.notifierRappelsReunions().catch(() => 0);
     const count = await notificationService.compterNonLues(req.user.id);
     res.status(200).json({ success: true, data: { non_lues: count } });
   }

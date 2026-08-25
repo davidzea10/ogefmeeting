@@ -214,6 +214,146 @@ export class NotificationService {
 
     return crees;
   }
+
+  /**
+   * Rappels de réunions planifiées :
+   * - tous les jours tant que la date n’est pas atteinte ;
+   * - le jour J : 2 h avant et 1 h avant.
+   * Déclenché en best-effort (ex. compteur non-lues). Max 1 notif / type / destinataire.
+   */
+  async notifierRappelsReunions(): Promise<number> {
+    const supabase = requireSupabaseAdmin();
+    const now = new Date();
+    const jourCle = formatJourLocal(now);
+
+    const horizon = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
+    const { data: reunions, error } = await supabase
+      .from(TABLES.reunions)
+      .select('id, titre, date_prevue, lieu, cree_par, statut')
+      .eq('statut', 'planifiee')
+      .gte('date_prevue', now.toISOString())
+      .lte('date_prevue', horizon.toISOString())
+      .limit(80);
+
+    if (error || !reunions?.length) return 0;
+
+    let crees = 0;
+
+    for (const reunion of reunions) {
+      const datePrevue = new Date(reunion.date_prevue as string);
+      if (Number.isNaN(datePrevue.getTime())) continue;
+
+      const msRestant = datePrevue.getTime() - now.getTime();
+      if (msRestant <= 0) continue;
+
+      const joursRestants = calendrierJoursRestants(now, datePrevue);
+      const dateLabel = datePrevue.toLocaleString('fr-FR', {
+        dateStyle: 'full',
+        timeStyle: 'short',
+      });
+      const lieuPart = reunion.lieu ? ` — ${reunion.lieu}` : '';
+
+      let type: string | null = null;
+      let titre = '';
+      let message = '';
+      let metaCle: Record<string, unknown> = {};
+
+      if (joursRestants >= 1) {
+        type = 'rappel_reunion_quotidien';
+        titre = 'Rappel de réunion';
+        message =
+          joursRestants === 1
+            ? `La réunion « ${reunion.titre} » a lieu demain (${dateLabel})${lieuPart}.`
+            : `La réunion « ${reunion.titre} » aura lieu dans ${joursRestants} jours (${dateLabel})${lieuPart}.`;
+        metaCle = { reunion_id: reunion.id, jour: jourCle, kind: 'quotidien' };
+      } else {
+        // Jour J
+        const deuxHeures = 2 * 60 * 60 * 1000;
+        const uneHeure = 60 * 60 * 1000;
+        if (msRestant <= deuxHeures && msRestant > uneHeure) {
+          type = 'rappel_reunion_2h';
+          titre = 'Réunion dans 2 heures';
+          message = `La réunion « ${reunion.titre} » commence bientôt (${dateLabel})${lieuPart}.`;
+          metaCle = { reunion_id: reunion.id, kind: '2h' };
+        } else if (msRestant <= uneHeure) {
+          type = 'rappel_reunion_1h';
+          titre = 'Réunion dans 1 heure';
+          message = `La réunion « ${reunion.titre} » commence dans moins d’une heure (${dateLabel})${lieuPart}.`;
+          metaCle = { reunion_id: reunion.id, kind: '1h' };
+        } else {
+          // Matin du jour J (plus de 2 h avant) : rappel « aujourd’hui »
+          type = 'rappel_reunion_quotidien';
+          titre = 'Réunion aujourd’hui';
+          message = `La réunion « ${reunion.titre} » a lieu aujourd’hui à ${dateLabel}${lieuPart}.`;
+          metaCle = { reunion_id: reunion.id, jour: jourCle, kind: 'aujourdhui' };
+        }
+      }
+
+      if (!type) continue;
+
+      const destinataireIds = new Set<string>();
+      if (reunion.cree_par) destinataireIds.add(reunion.cree_par as string);
+
+      const { data: participants } = await supabase
+        .from(TABLES.participantsReunion)
+        .select('profil_id, statut')
+        .eq('reunion_id', reunion.id)
+        .in('statut', ['invite', 'confirme', 'present']);
+
+      for (const p of participants ?? []) {
+        if (p.profil_id) destinataireIds.add(p.profil_id as string);
+      }
+
+      if (destinataireIds.size === 0) continue;
+
+      const ids = [...destinataireIds];
+      const { data: profils } = await supabase
+        .from(TABLES.profils)
+        .select('id, email, prenom, nom, est_actif')
+        .in('id', ids)
+        .eq('est_actif', true);
+
+      const destinataires: DestinataireNotif[] = [];
+      for (const profil of profils ?? []) {
+        const { data: deja } = await supabase
+          .from(TABLES.notifications)
+          .select('id')
+          .eq('profil_id', profil.id)
+          .eq('type', type)
+          .contains('metadonnees', metaCle)
+          .maybeSingle();
+        if (deja) continue;
+        destinataires.push(profil as DestinataireNotif);
+      }
+
+      if (destinataires.length === 0) continue;
+
+      await this.creerPourProfils(destinataires, {
+        type,
+        titre,
+        message,
+        lien: `/reunions/${reunion.id}`,
+        emailSujet: `[Ogefmeeting] ${titre} — ${reunion.titre}`,
+        emailBoutonLibelle: 'Voir la réunion',
+        metadonnees: metaCle,
+      });
+      crees += destinataires.length;
+    }
+
+    return crees;
+  }
 }
 
 export const notificationService = new NotificationService();
+
+function formatJourLocal(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** Nombre de jours calendaires restants (0 = jour J). */
+function calendrierJoursRestants(now: Date, target: Date): number {
+  const a = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const b = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+  return Math.round((b.getTime() - a.getTime()) / 86_400_000);
+}

@@ -208,7 +208,9 @@ export function ReunionLivePage() {
   const presents = reunion.participants.filter((p) => p.statut === 'present').length;
   const progress = points.length === 0 ? 0 : Math.round((traites / points.length) * 100);
   const peutModifier = peutModifierReunionRole(role, profil?.fonction, userId, reunion);
-  const peutGerer = peutGererReunionRole(role, profil?.fonction);
+  const peutGerer = peutGererReunionRole(role, profil?.fonction, userId, reunion);
+  /** Invité : voit le live, sans pause / clôture / ODJ / audio. */
+  const estInviteLectureSeule = !peutGerer && !peutModifier;
 
   return (
     <div className="flex min-h-screen flex-col bg-ogefrem-navy text-white">
@@ -221,7 +223,7 @@ export function ReunionLivePage() {
               className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-white/80 transition hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-ogefrem-yellow"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden />
-              Quitter
+              {estInviteLectureSeule ? 'Quitter la réunion' : 'Quitter'}
             </Link>
             <div className="hidden h-6 w-px bg-white/20 sm:block" aria-hidden />
             <Logo size="sm" className="hidden sm:flex" />
@@ -319,6 +321,16 @@ export function ReunionLivePage() {
           />
         </div>
       </header>
+
+      {estInviteLectureSeule && (
+        <div
+          className="border-b border-ogefrem-yellow/30 bg-ogefrem-yellow/15 px-4 py-2 text-center text-sm text-ogefrem-yellow"
+          role="status"
+        >
+          Mode participant — lecture seule. Vous pouvez quitter ou fermer cette fenêtre ;
+          seuls l’organisateur et les ayant-droit peuvent mettre en pause ou clôturer.
+        </div>
+      )}
 
       <main
         id="contenu-principal"

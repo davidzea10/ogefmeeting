@@ -9,6 +9,11 @@ import { paginationQuerySchema, uuidSchema } from './common.schemas.js';
 
 const fonctionSchema = z.enum(FONCTIONS_ORGANISATION).optional().nullable();
 const nomOptionnelSchema = z.string().trim().max(100).optional().default('');
+const nomObligatoireSchema = z
+  .string()
+  .trim()
+  .min(1, 'Ce champ est obligatoire.')
+  .max(100);
 
 export const modifierMonProfilSchema = z
   .object({
@@ -33,8 +38,8 @@ export const inviterUtilisateurSchema = z
       .string()
       .min(8, 'Le mot de passe doit contenir au moins 8 caractères.')
       .optional(),
-    prenom: nomOptionnelSchema,
-    nom: nomOptionnelSchema,
+    prenom: nomObligatoireSchema,
+    nom: nomObligatoireSchema,
     /** Si omis → dérivé de la fonction (agent → membre, chef/dir → directeur) */
     role: z.enum(ROLES_ASSIGNABLES_ADMIN).optional(),
     direction_id: uuidSchema.optional().nullable(),

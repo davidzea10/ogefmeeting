@@ -13,6 +13,7 @@ import { AppError } from '../utils/errors.js';
 import {
   profilLimiteAuxParticipations,
   utilisateurPeutApprouver,
+  utilisateurPeutGererConduite,
 } from '../utils/reunion-acces.js';
 
 /**
@@ -71,10 +72,12 @@ export class ReunionController {
   }
 
   async demarrer(req: Request, res: Response): Promise<void> {
-    if (!utilisateurPeutApprouver(req.user)) {
+    if (!req.user) throw new AppError(401, 'Authentification requise.');
+    const reunion = await reunionService.obtenirParId(req.params.id as string);
+    if (!utilisateurPeutGererConduite(req.user, reunion)) {
       throw new AppError(
         403,
-        'Seuls un secrétaire, chef de service, sous-directeur ou directeur peuvent démarrer une réunion.',
+        'Seuls l’organisateur ou un ayant-droit (secrétaire, chef, direction) peuvent démarrer une réunion.',
       );
     }
     const data = await reunionService.demarrer(req.params.id as string);
@@ -92,10 +95,12 @@ export class ReunionController {
   }
 
   async cloturer(req: Request, res: Response): Promise<void> {
-    if (!utilisateurPeutApprouver(req.user)) {
+    if (!req.user) throw new AppError(401, 'Authentification requise.');
+    const reunion = await reunionService.obtenirParId(req.params.id as string);
+    if (!utilisateurPeutGererConduite(req.user, reunion)) {
       throw new AppError(
         403,
-        'Seuls un secrétaire, chef de service, sous-directeur ou directeur peuvent clôturer une réunion.',
+        'Seuls l’organisateur ou un ayant-droit peuvent clôturer une réunion.',
       );
     }
     const data = await reunionService.cloturer(req.params.id as string);
@@ -103,7 +108,9 @@ export class ReunionController {
   }
 
   async mettreEnPause(req: Request, res: Response): Promise<void> {
-    if (!utilisateurPeutApprouver(req.user)) {
+    if (!req.user) throw new AppError(401, 'Authentification requise.');
+    const reunion = await reunionService.obtenirParId(req.params.id as string);
+    if (!utilisateurPeutGererConduite(req.user, reunion)) {
       throw new AppError(403, 'Droits insuffisants pour mettre la réunion en pause.');
     }
     const data = await reunionService.mettreEnPause(req.params.id as string);
@@ -111,7 +118,9 @@ export class ReunionController {
   }
 
   async reprendre(req: Request, res: Response): Promise<void> {
-    if (!utilisateurPeutApprouver(req.user)) {
+    if (!req.user) throw new AppError(401, 'Authentification requise.');
+    const reunion = await reunionService.obtenirParId(req.params.id as string);
+    if (!utilisateurPeutGererConduite(req.user, reunion)) {
       throw new AppError(403, 'Droits insuffisants pour reprendre la réunion.');
     }
     const data = await reunionService.reprendre(req.params.id as string);

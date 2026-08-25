@@ -58,7 +58,6 @@ export function ReunionDetailPage() {
   const role = useAuthStore((s) => s.role ?? s.profil?.role ?? null);
   const userId = useAuthStore((s) => s.user?.id ?? s.profil?.id);
   const peutApprouver = peutApprouverReunionRole(role, profil?.fonction);
-  const peutGerer = peutGererReunionRole(role, profil?.fonction);
   const [tab, setTab] = useState<TabId>('informations');
 
   useEffect(() => {
@@ -81,6 +80,12 @@ export function ReunionDetailPage() {
     enabled: Boolean(id),
   });
 
+  const peutGerer = peutGererReunionRole(
+    role,
+    profil?.fonction,
+    userId,
+    reunionQuery.data,
+  );
   const profilsQuery = useQuery({
     queryKey: ['profils', 'detail'],
     queryFn: () => listerProfils({ limite: 100 }),

@@ -37,3 +37,16 @@ export function utilisateurPeutApprouverReunion(
     user.direction_id,
   );
 }
+
+/**
+ * Démarrer / pause / reprendre / clôturer :
+ * ayant-droit (secrétaire, chef, direction, admin) OU organisateur (créateur).
+ */
+export function utilisateurPeutGererConduite(
+  user: AuthUser | undefined,
+  reunion: { cree_par?: string | null },
+): boolean {
+  if (!user) return false;
+  if (utilisateurPeutApprouver(user)) return true;
+  return Boolean(reunion.cree_par && reunion.cree_par === user.id);
+}

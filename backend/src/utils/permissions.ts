@@ -84,8 +84,9 @@ const MATRICE: Record<RoleUtilisateur, Permission[]> = {
   participant: [
     PERMISSIONS.REUNIONS_LIRE,
     PERMISSIONS.REUNIONS_CREER,
-    // Modifier autorisé au niveau permission ; ownership vérifié dans le contrôleur.
+    // Modifier / démarrer / pause / clôturer : permission OK ; ownership vérifié dans le contrôleur.
     PERMISSIONS.REUNIONS_MODIFIER,
+    PERMISSIONS.REUNIONS_DEMARRER,
     PERMISSIONS.CR_LIRE,
     PERMISSIONS.ACTIONS_LIRE,
     PERMISSIONS.ACTIONS_GERER,

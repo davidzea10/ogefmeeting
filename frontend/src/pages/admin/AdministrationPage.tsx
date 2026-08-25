@@ -161,8 +161,11 @@ function UtilisateursPanel() {
     queryClient.invalidateQueries({ queryKey: ['admin', 'profils'] });
 
   const creerMut = useMutation({
-    mutationFn: () =>
-      creerMembre({
+    mutationFn: () => {
+      if (!form.prenom.trim() || !form.nom.trim()) {
+        throw new Error('Prénom et nom sont obligatoires.');
+      }
+      return creerMembre({
         email: form.email.trim(),
         prenom: form.prenom.trim(),
         nom: form.nom.trim(),
@@ -170,7 +173,8 @@ function UtilisateursPanel() {
         direction_id: form.direction_id || null,
         fonction: form.fonction || null,
         matricule: form.matricule.trim() || null,
-      }),
+      });
+    },
     onSuccess: async (data) => {
       setMdpCree(data.mot_de_passe_temporaire);
       setShowForm(false);
@@ -340,14 +344,16 @@ function UtilisateursPanel() {
               onChange={(e) => setForm((f) => ({ ...f, matricule: e.target.value }))}
             />
             <input
-              className="h-10 rounded-lg border border-border px-3 text-sm"
-              placeholder="Prénom (optionnel)"
+              required
+              className="h-10 rounded-lg border border-border bg-surface px-3 text-sm text-text"
+              placeholder="Prénom *"
               value={form.prenom}
               onChange={(e) => setForm((f) => ({ ...f, prenom: e.target.value }))}
             />
             <input
-              className="h-10 rounded-lg border border-border px-3 text-sm"
-              placeholder="Nom (optionnel)"
+              required
+              className="h-10 rounded-lg border border-border bg-surface px-3 text-sm text-text"
+              placeholder="Nom *"
               value={form.nom}
               onChange={(e) => setForm((f) => ({ ...f, nom: e.target.value }))}
             />

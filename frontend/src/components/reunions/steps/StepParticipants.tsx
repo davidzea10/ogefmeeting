@@ -11,6 +11,17 @@ type Props = {
   setValue: UseFormSetValue<ReunionFormValues>;
 };
 
+function libelleProfil(p: {
+  prenom?: string | null;
+  nom?: string | null;
+  email?: string | null;
+}): string {
+  const nomComplet = `${p.prenom ?? ''} ${p.nom ?? ''}`.trim();
+  if (nomComplet) return nomComplet;
+  if (p.email?.trim()) return p.email.trim();
+  return 'Participant';
+}
+
 export function StepParticipants({ profils, watch, setValue }: Props) {
   const [q, setQ] = useState('');
   const selected = watch('participants');
@@ -40,12 +51,15 @@ export function StepParticipants({ profils, watch, setValue }: Props) {
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return annuaireFiltrable;
-    return annuaireFiltrable.filter(
-      (p) =>
-        p.prenom.toLowerCase().includes(needle) ||
-        p.nom.toLowerCase().includes(needle) ||
-        p.email.toLowerCase().includes(needle),
-    );
+    return annuaireFiltrable.filter((p) => {
+      const label = libelleProfil(p).toLowerCase();
+      return (
+        label.includes(needle) ||
+        (p.prenom ?? '').toLowerCase().includes(needle) ||
+        (p.nom ?? '').toLowerCase().includes(needle) ||
+        (p.email ?? '').toLowerCase().includes(needle)
+      );
+    });
   }, [annuaireFiltrable, q]);
 
   function addProfil(p: Profil) {
@@ -56,9 +70,9 @@ export function StepParticipants({ profils, watch, setValue }: Props) {
         ...selected,
         {
           profil_id: p.id,
-          prenom: p.prenom,
-          nom: p.nom,
-          email: p.email,
+          prenom: p.prenom ?? '',
+          nom: p.nom ?? '',
+          email: p.email ?? '',
         },
       ],
       { shouldDirty: true },
@@ -82,9 +96,9 @@ export function StepParticipants({ profils, watch, setValue }: Props) {
         ...selected,
         ...toAdd.map((p) => ({
           profil_id: p.id,
-          prenom: p.prenom,
-          nom: p.nom,
-          email: p.email,
+          prenom: p.prenom ?? '',
+          nom: p.nom ?? '',
+          email: p.email ?? '',
         })),
       ],
       { shouldDirty: true },
@@ -107,7 +121,7 @@ export function StepParticipants({ profils, watch, setValue }: Props) {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Rechercher dans l’annuaire…"
-          className="h-11 w-full rounded-lg border border-border bg-surface pl-10 text-sm focus:border-ogefrem-blue focus:outline-none focus:ring-2 focus:ring-ogefrem-blue/25"
+          className="h-11 w-full rounded-lg border border-border bg-surface pl-10 text-sm text-text focus:border-ogefrem-blue focus:outline-none focus:ring-2 focus:ring-ogefrem-blue/25"
           aria-label="Rechercher un participant"
         />
       </div>
@@ -140,22 +154,26 @@ export function StepParticipants({ profils, watch, setValue }: Props) {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <section
-          className="max-h-72 overflow-y-auto rounded-xl border border-border"
+          className="max-h-72 overflow-y-auto rounded-xl border border-border bg-surface"
           aria-label="Annuaire"
         >
           <ul className="divide-y divide-border">
             {filtered.map((p) => {
               const already = selectedIds.has(p.id);
+              const label = libelleProfil(p);
+              const aNomComplet = Boolean(`${p.prenom ?? ''} ${p.nom ?? ''}`.trim());
               return (
                 <li
                   key={p.id}
                   className="flex items-center justify-between gap-2 px-3 py-2.5"
                 >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-text">
-                      {p.prenom} {p.nom}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-text">
+                      {label}
                     </p>
-                    <p className="truncate text-xs text-text-muted">{p.email}</p>
+                    {aNomComplet && p.email ? (
+                      <p className="truncate text-xs text-text-muted">{p.email}</p>
+                    ) : null}
                   </div>
                   <Button
                     type="button"
@@ -163,7 +181,7 @@ export function StepParticipants({ profils, watch, setValue }: Props) {
                     variant={already ? 'ghost' : 'secondary'}
                     disabled={already}
                     onClick={() => addProfil(p)}
-                    aria-label={`Ajouter ${p.prenom} ${p.nom}`}
+                    aria-label={`Ajouter ${label}`}
                   >
                     <UserPlus className="h-4 w-4" aria-hidden />
                     {already ? 'Ajouté' : 'Ajouter'}
@@ -192,25 +210,34 @@ export function StepParticipants({ profils, watch, setValue }: Props) {
             </p>
           ) : (
             <ul className="space-y-2">
-              {selected.map((p) => (
-                <li
-                  key={p.profil_id}
-                  className="flex items-center justify-between rounded-lg bg-surface px-3 py-2"
-                >
-                  <span className="text-sm font-medium">
-                    {p.prenom} {p.nom}
-                  </span>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    aria-label={`Retirer ${p.prenom}`}
-                    onClick={() => removeProfil(p.profil_id)}
+              {selected.map((p) => {
+                const label = libelleProfil(p);
+                return (
+                  <li
+                    key={p.profil_id}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-border bg-surface px-3 py-2"
                   >
-                    <UserMinus className="h-4 w-4" aria-hidden />
-                  </Button>
-                </li>
-              ))}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-text">
+                        {label}
+                      </p>
+                      {p.email && label !== p.email ? (
+                        <p className="truncate text-xs text-text-muted">{p.email}</p>
+                      ) : null}
+                    </div>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="shrink-0"
+                      aria-label={`Retirer ${label}`}
+                      onClick={() => removeProfil(p.profil_id)}
+                    >
+                      <UserMinus className="h-4 w-4" aria-hidden />
+                    </Button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>

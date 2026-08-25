@@ -71,13 +71,19 @@ export function peutModifierReunionRole(
 }
 
 /**
- * Archiver / démarrer / clôturer / pause : réservé aux ayant-droit.
+ * Archiver / démarrer / clôturer / pause :
+ * ayant-droit OU organisateur (créateur de la réunion).
  */
 export function peutGererReunionRole(
   role: RoleUtilisateur | null | undefined,
-  fonction?: string | null,
+  fonction: string | null | undefined,
+  userId?: string | null,
+  reunion?: Pick<Reunion, 'cree_par'> | null,
 ): boolean {
-  return peutApprouverReunion(role, fonction);
+  if (peutApprouverReunion(role, fonction)) return true;
+  return Boolean(
+    userId && reunion?.cree_par && reunion.cree_par === userId,
+  );
 }
 
 /**
