@@ -19,6 +19,11 @@
     /* Empêche le bounce / débordement horizontal type “site web étroit” */
     overflow-x: hidden;
     -webkit-text-size-adjust: 100%;
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -84,9 +89,14 @@
 
 @layer utilities {
   .glass-panel {
-    background: rgb(255 255 255 / 0.94);
+    background: color-mix(in srgb, var(--color-surface) 94%, transparent);
     backdrop-filter: blur(16px);
-    border: 1px solid rgb(255 255 255 / 0.7);
+    border: 1px solid color-mix(in srgb, var(--color-border) 80%, transparent);
+  }
+
+  html.dark .glass-panel {
+    background: color-mix(in srgb, var(--color-surface-elevated) 92%, transparent);
+    border-color: var(--color-border);
   }
 
   .gradient-ogefrem {

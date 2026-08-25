@@ -1,7 +1,7 @@
 import { cn } from '@/lib/cn';
 import {
+  Bell,
   CalendarDays,
-  CheckSquare,
   FileText,
   LayoutDashboard,
   MoreHorizontal,
@@ -17,7 +17,7 @@ const items: {
   { to: '/', label: 'Accueil', icon: LayoutDashboard, end: true },
   { to: '/reunions', label: 'Réunions', icon: CalendarDays },
   { to: '/comptes-rendus', label: 'CR', icon: FileText },
-  { to: '/actions', label: 'Actions', icon: CheckSquare },
+  { to: '/notifications', label: 'Notifs', icon: Bell },
   { to: '/profil', label: 'Plus', icon: MoreHorizontal },
 ];
 

@@ -1,4 +1,5 @@
 import { Breadcrumbs } from '@/components/layout/Breadcrumbs';
+import { ReunionCountdownCard } from '@/components/dashboard/ReunionCountdownCard';
 import { StaggerItem, StaggerList } from '@/components/motion/StaggerList';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -14,6 +15,7 @@ import {
 import {
   LIBELLES_FONCTION,
   LIBELLES_ROLE,
+  peutAccederAdministration,
   peutApprouverReunionRole,
   peutCreerReunionRole,
   peutValiderCrRole,
@@ -41,6 +43,7 @@ export function HomePage() {
   const role = useAuthStore((s) => s.role ?? s.profil?.role ?? null);
   const peutCreer = peutCreerReunionRole(role, profil?.fonction);
   const estValidateur = peutApprouverReunionRole(role, profil?.fonction);
+  const estAdmin = peutAccederAdministration(role);
   const profilId = profil?.id;
 
   const dashboardQuery = useQuery({
@@ -138,6 +141,47 @@ export function HomePage() {
       });
   }, [invitationDetails, profilId, estValidateur]);
 
+  /** Prochaine réunion validée où l’utilisateur est invité (hors admin). */
+  const candidatsCountdown = useMemo(() => {
+    if (estAdmin || !profilId) return [] as Reunion[];
+    const aVenir = reunionsAVenirQuery.data?.items ?? [];
+    return aVenir
+      .filter((r) => r.statut === 'planifiee')
+      .slice(0, 8);
+  }, [estAdmin, profilId, reunionsAVenirQuery.data]);
+
+  const countdownDetails = useQueries({
+    queries: candidatsCountdown.map((r) => ({
+      queryKey: ['reunion', 'countdown-check', r.id],
+      queryFn: () => obtenirReunion(r.id),
+      enabled: !estAdmin && candidatsCountdown.length > 0,
+    })),
+  });
+
+  const prochaineReunionInvitee = useMemo(() => {
+    if (estAdmin || !profilId) return null;
+    const now = Date.now();
+    const eligible = countdownDetails
+      .map((q) => q.data)
+      .filter((detail): detail is NonNullable<typeof detail> => Boolean(detail))
+      .filter((detail) => {
+        if (detail.statut !== 'planifiee') return false;
+        const target = new Date(detail.date_prevue).getTime();
+        if (Number.isNaN(target) || target < now - 30 * 60 * 1000) return false;
+        const moi = detail.participants.find((p) => p.profil_id === profilId);
+        return (
+          moi?.statut === 'invite' ||
+          moi?.statut === 'confirme' ||
+          moi?.statut === 'present'
+        );
+      })
+      .sort(
+        (a, b) =>
+          new Date(a.date_prevue).getTime() - new Date(b.date_prevue).getTime(),
+      );
+    return eligible[0] ?? null;
+  }, [countdownDetails, estAdmin, profilId]);
+
   const stats = dashboardQuery.data;
   const greeting = profil
     ? `Bonjour ${profil.prenom}`
@@ -216,6 +260,10 @@ export function HomePage() {
           </div>
         </div>
       </section>
+
+      {!estAdmin && prochaineReunionInvitee && (
+        <ReunionCountdownCard reunion={prochaineReunionInvitee} />
+      )}
 
       {estValidateur ? (
         <StaffDashboard

@@ -12,9 +12,9 @@ import {
 import { formatDateHeure } from '@/lib/labels';
 import { useAuthStore } from '@/stores/auth.store';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell } from 'lucide-react';
+import { Bell, ExternalLink } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 const LIBELLE_TYPE: Record<string, string> = {
   invitation_reunion: 'Invitation',
@@ -34,6 +34,7 @@ const LIBELLE_TYPE: Record<string, string> = {
 export function NotificationBell() {
   const accessToken = useAuthStore((s) => s.accessToken);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -76,6 +77,11 @@ export function NotificationBell() {
 
   const nonLues = countQuery.data?.non_lues ?? 0;
 
+  function ouvrirPageComplete() {
+    setOpen(false);
+    navigate('/notifications');
+  }
+
   return (
     <div className="relative" ref={rootRef}>
       <Button
@@ -103,23 +109,34 @@ export function NotificationBell() {
         <div
           role="dialog"
           aria-label="Centre de notifications"
-          className="absolute right-0 z-50 mt-2 w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-border bg-surface shadow-lg"
+          className="fixed inset-x-3 top-[calc(var(--header-height)+0.5rem+env(safe-area-inset-top))] z-50 mx-auto w-auto max-w-md overflow-hidden rounded-xl border border-border bg-surface shadow-lg sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mx-0 sm:mt-2 sm:w-[min(22rem,calc(100vw-1.5rem))]"
         >
-          <div className="flex items-center justify-between border-b border-border px-3 py-2">
+          <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
             <p className="text-sm font-semibold text-text">Notifications</p>
-            {nonLues > 0 && (
+            <div className="flex shrink-0 items-center gap-1">
+              {nonLues > 0 && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  loading={toutLireMut.isPending}
+                  onClick={() => toutLireMut.mutate()}
+                >
+                  Tout lu
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="ghost"
-                loading={toutLireMut.isPending}
-                onClick={() => toutLireMut.mutate()}
+                aria-label="Ouvrir toutes les notifications"
+                title="Voir toutes"
+                onClick={ouvrirPageComplete}
               >
-                Tout marquer lu
+                <ExternalLink className="h-4 w-4" aria-hidden />
               </Button>
-            )}
+            </div>
           </div>
 
-          <ul className="max-h-80 overflow-y-auto">
+          <ul className="max-h-[min(22rem,55vh)] overflow-y-auto">
             {listQuery.isLoading && (
               <li className="px-3 py-6 text-center text-sm text-text-muted">
                 Chargement…
@@ -133,11 +150,7 @@ export function NotificationBell() {
             {listQuery.data?.items.map((n) => (
               <li key={n.id} className="border-b border-border last:border-0">
                 {notificationAvecActionsCr(n) ? (
-                  <div
-                    className={
-                      n.est_lu ? '' : 'bg-ogefrem-blue/5'
-                    }
-                  >
+                  <div className={n.est_lu ? '' : 'bg-ogefrem-blue/5'}>
                     <NotificationItemActions
                       notification={n}
                       libelleType={LIBELLE_TYPE[n.type] ?? n.type}
@@ -175,6 +188,17 @@ export function NotificationBell() {
               </li>
             ))}
           </ul>
+
+          <div className="border-t border-border bg-surface-muted/60 px-3 py-2">
+            <button
+              type="button"
+              onClick={ouvrirPageComplete}
+              className="flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold text-ogefrem-blue hover:bg-ogefrem-blue/10"
+            >
+              Voir toutes les notifications
+              <ExternalLink className="h-4 w-4" aria-hidden />
+            </button>
+          </div>
         </div>
       )}
     </div>

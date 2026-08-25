@@ -59,3 +59,35 @@
   --duration-normal: 250ms;
   --duration-slow: 400ms;
 }
+
+/* Mode sombre — bascule via classe `dark` sur <html> */
+html.dark {
+  --color-ogefrem-blue: #4d8dff;
+  --color-ogefrem-blue-light: #7aafff;
+  --color-ogefrem-blue-dark: #1a4a8c;
+  --color-ogefrem-yellow: #f5d010;
+  --color-ogefrem-yellow-light: #fde019;
+  --color-ogefrem-gold: #d4b04a;
+  --color-ogefrem-navy: #071624;
+  --color-ogefrem-white: #0b1220;
+
+  --color-surface: #0f1724;
+  --color-surface-muted: #0a1018;
+  --color-surface-elevated: #162033;
+  --color-border: #243247;
+  --color-border-strong: #334860;
+  --color-text: #e8eef7;
+  --color-text-muted: #9aadc4;
+  --color-text-inverse: #0a1018;
+
+  --color-success: #34d399;
+  --color-warning: #fbbf24;
+  --color-danger: #f87171;
+  --color-info: #4d8dff;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35);
+  --shadow-md: 0 8px 24px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 16px 48px rgb(0 0 0 / 0.5);
+  --shadow-glow-blue: 0 0 0 3px rgb(77 141 255 / 0.28);
+  --shadow-glow-yellow: 0 0 0 3px rgb(245 208 16 / 0.3);
+}

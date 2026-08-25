@@ -2,6 +2,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { GlobalSearch } from '@/components/layout/GlobalSearch';
 import { NotificationBell } from '@/components/layout/NotificationBell';
+import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { apiDeconnexion } from '@/lib/auth-api';
 import { useAnnouncerStore } from '@/components/a11y/LiveAnnouncer';
 import { useAuthStore } from '@/stores/auth.store';
@@ -75,6 +76,7 @@ export function AppHeader({ title = 'Tableau de bord' }: AppHeaderProps) {
             <Search className="h-5 w-5" aria-hidden />
           </Button>
 
+          <ThemeToggle />
           <NotificationBell />
 
           {accessToken ? (
