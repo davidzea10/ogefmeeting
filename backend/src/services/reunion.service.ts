@@ -755,42 +755,86 @@ export class ReunionService {
   }
 
   /**
-   * Remplace l'ordre du jour (supprime les anciens points, insère les nouveaux).
+   * Met à jour l'ordre du jour : upsert des points existants, insertion des nouveaux,
+   * suppression des points retirés. Préserve est_traite sauf si fourni explicitement.
    */
   async gererOrdreJour(id: string, input: GererOrdreJourInput): Promise<PointOrdreJour[]> {
     await this.assurerExiste(id);
     const supabase = requireSupabaseAdmin();
 
-    const { error: deleteError } = await supabase
+    const { data: existingRows, error: fetchError } = await supabase
       .from(TABLES.pointsOrdreJour)
-      .delete()
+      .select('id, est_traite')
       .eq('reunion_id', id);
 
-    if (deleteError) {
-      handleSupabaseError(deleteError, "Impossible de mettre à jour l'ordre du jour.");
+    if (fetchError) {
+      handleSupabaseError(fetchError, "Impossible de lire l'ordre du jour.");
     }
 
-    if (input.points.length === 0) {
-      return [];
+    const existingMap = new Map(
+      (existingRows ?? []).map((row) => [row.id as string, row.est_traite as boolean]),
+    );
+
+    const keptIds = input.points
+      .map((point) => point.id)
+      .filter((pointId): pointId is string => Boolean(pointId && existingMap.has(pointId)));
+
+    const idsToDelete = [...existingMap.keys()].filter((pointId) => !keptIds.includes(pointId));
+
+    if (idsToDelete.length > 0) {
+      const { error: deleteRemovedError } = await supabase
+        .from(TABLES.pointsOrdreJour)
+        .delete()
+        .in('id', idsToDelete)
+        .eq('reunion_id', id);
+
+      if (deleteRemovedError) {
+        handleSupabaseError(deleteRemovedError, "Impossible de mettre à jour l'ordre du jour.");
+      }
     }
 
-    const rows = input.points.map((point, index) => ({
-      reunion_id: id,
-      titre: point.titre,
-      description: point.description ?? null,
-      ordre: point.ordre ?? index,
-      duree_minutes: point.duree_minutes ?? null,
-      est_traite: false,
-    }));
+    for (const [index, point] of input.points.entries()) {
+      const ordre = point.ordre ?? index;
+      const payload = {
+        titre: point.titre,
+        description: point.description ?? null,
+        ordre,
+        duree_minutes: point.duree_minutes ?? null,
+      };
+
+      if (point.id && existingMap.has(point.id)) {
+        const estTraite = point.est_traite ?? existingMap.get(point.id) ?? false;
+        const { error: updateError } = await supabase
+          .from(TABLES.pointsOrdreJour)
+          .update({ ...payload, est_traite: estTraite })
+          .eq('id', point.id)
+          .eq('reunion_id', id);
+
+        if (updateError) {
+          handleSupabaseError(updateError, "Impossible de mettre à jour un point de l'ordre du jour.");
+        }
+        continue;
+      }
+
+      const { error: insertError } = await supabase.from(TABLES.pointsOrdreJour).insert({
+        reunion_id: id,
+        ...payload,
+        est_traite: point.est_traite ?? false,
+      });
+
+      if (insertError) {
+        handleSupabaseError(insertError, "Impossible d'ajouter un point à l'ordre du jour.");
+      }
+    }
 
     const { data, error } = await supabase
       .from(TABLES.pointsOrdreJour)
-      .insert(rows)
       .select('*')
+      .eq('reunion_id', id)
       .order('ordre', { ascending: true });
 
     if (error) {
-      handleSupabaseError(error, "Impossible d’enregistrer l'ordre du jour.");
+      handleSupabaseError(error, "Impossible de relire l'ordre du jour.");
     }
 
     return (data ?? []) as PointOrdreJour[];

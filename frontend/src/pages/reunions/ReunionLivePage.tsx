@@ -10,6 +10,7 @@ import { formatDateHeure, LIBELLES_PARTICIPANT, LIBELLES_TYPE } from '@/lib/labe
 import { isRealtimeConfigured } from '@/lib/supabase-browser';
 import { easeOutExpo, useMotionSafe } from '@/lib/motion';
 import { EnregistrementLivePanel } from '@/components/reunions/EnregistrementLivePanel';
+import { LiveOrdreJourPanel } from '@/components/reunions/LiveOrdreJourPanel';
 import { TranscriptionLivePanel } from '@/components/reunions/TranscriptionLivePanel';
 import {
   cloturerReunion,
@@ -18,7 +19,6 @@ import {
   listerProfils,
   mettreReunionEnPause,
   modifierParticipantStatut,
-  modifierPointOrdreJour,
   obtenirReunion,
   reprendreReunion,
 } from '@/lib/reunions-api';
@@ -33,7 +33,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ArrowLeft,
-  CheckSquare,
   Pause,
   Play,
   Radio,
@@ -89,16 +88,6 @@ export function ReunionLivePage() {
     await queryClient.invalidateQueries({ queryKey: ['reunion', id] });
     await queryClient.invalidateQueries({ queryKey: ['reunions'] });
   };
-
-  const pointMut = useMutation({
-    mutationFn: ({ pointId, est_traite }: { pointId: string; est_traite: boolean }) =>
-      modifierPointOrdreJour(id!, pointId, est_traite),
-    onSuccess: async (_, vars) => {
-      announce(vars.est_traite ? 'Point traité.' : 'Point rouvert.');
-      await invalidate();
-    },
-    onError: (e: Error) => announce(e.message),
-  });
 
   const participantMut = useMutation({
     mutationFn: ({
@@ -351,63 +340,13 @@ export function ReunionLivePage() {
               {presents > 1 ? 's' : ''}
             </p>
 
-            <section aria-labelledby="live-odj-title" className="space-y-3">
-              <h2 id="live-odj-title" className="flex items-center gap-2 text-lg font-semibold">
-                <CheckSquare className="h-5 w-5 text-ogefrem-yellow" aria-hidden />
-                Ordre du jour
-              </h2>
-              {points.length === 0 ? (
-                <p className="rounded-xl border border-dashed border-white/20 p-8 text-center text-white/60">
-                  Aucun point à l’ordre du jour.
-                </p>
-              ) : (
-                <ul className="space-y-2">
-                  {points.map((point, index) => (
-                    <li key={point.id}>
-                      <label
-                        className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition ${
-                          point.est_traite
-                            ? 'border-success/40 bg-success/15'
-                            : 'border-white/15 bg-white/5 hover:bg-white/10'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          className="mt-1 h-5 w-5 shrink-0 accent-ogefrem-yellow disabled:opacity-40"
-                          checked={point.est_traite}
-                          disabled={!peutModifier || pointMut.isPending}
-                          onChange={(e) =>
-                            pointMut.mutate({
-                              pointId: point.id,
-                              est_traite: e.target.checked,
-                            })
-                          }
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span
-                            className={`block font-semibold ${
-                              point.est_traite ? 'text-white/50 line-through' : 'text-white'
-                            }`}
-                          >
-                            {index + 1}. {point.titre}
-                          </span>
-                          {point.description && (
-                            <span className="mt-0.5 block text-sm text-white/55">
-                              {point.description}
-                            </span>
-                          )}
-                          {point.duree_minutes != null && (
-                            <span className="mt-1 block text-xs text-white/40">
-                              {point.duree_minutes} min prévues
-                            </span>
-                          )}
-                        </span>
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
+            <LiveOrdreJourPanel
+              reunionId={id}
+              points={points}
+              peutModifier={peutModifier}
+              onInvalidate={invalidate}
+              announce={announce}
+            />
 
             <section aria-labelledby="live-participants-title" className="space-y-3">
               <h2

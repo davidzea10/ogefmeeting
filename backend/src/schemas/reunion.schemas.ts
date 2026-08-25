@@ -68,10 +68,12 @@ export const gererParticipantsSchema = z.object({
 export type GererParticipantsInput = z.infer<typeof gererParticipantsSchema>;
 
 export const pointOrdreJourInputSchema = z.object({
+  id: uuidSchema.optional(),
   titre: z.string().trim().min(2, 'Le titre du point est trop court.'),
   description: z.string().trim().optional().nullable(),
   ordre: z.number().int().min(0).optional(),
   duree_minutes: z.number().int().min(1).optional().nullable(),
+  est_traite: z.boolean().optional(),
 });
 
 export const gererOrdreJourSchema = z.object({

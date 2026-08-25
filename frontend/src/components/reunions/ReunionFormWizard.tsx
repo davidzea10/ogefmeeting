@@ -267,6 +267,7 @@ export function ReunionFormWizard({ mode, reunionId }: Props) {
       await gererOrdreJour(
         id,
         values.points.map((p, index) => ({
+          id: p.id,
           titre: p.titre,
           description: p.description || null,
           ordre: index,

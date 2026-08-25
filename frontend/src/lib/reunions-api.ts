@@ -90,10 +90,12 @@ export function gererParticipants(
 export function gererOrdreJour(
   id: string,
   points: {
+    id?: string;
     titre: string;
     description?: string | null;
     ordre?: number;
     duree_minutes?: number | null;
+    est_traite?: boolean;
   }[],
 ) {
   return apiFetch<PointOrdreJour[]>(`/api/reunions/${id}/ordre-du-jour`, {
