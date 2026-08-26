@@ -50,3 +50,23 @@ export function utilisateurPeutGererConduite(
   if (utilisateurPeutApprouver(user)) return true;
   return Boolean(reunion.cree_par && reunion.cree_par === user.id);
 }
+
+/**
+ * Rédiger / soumettre un compte rendu :
+ * secrétariat / direction / admin, OU organisateur de la réunion.
+ */
+export function utilisateurPeutRedigerCompteRendu(
+  user: AuthUser | undefined,
+  reunion: { cree_par?: string | null },
+): boolean {
+  if (!user) return false;
+  if (
+    user.role === 'administrateur' ||
+    user.role === 'directeur' ||
+    user.role === 'secretaire'
+  ) {
+    return true;
+  }
+  if (utilisateurPeutApprouver(user)) return true;
+  return Boolean(reunion.cree_par && reunion.cree_par === user.id);
+}

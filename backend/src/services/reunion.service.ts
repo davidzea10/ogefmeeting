@@ -386,11 +386,14 @@ export class ReunionService {
     }
 
     const supabase = requireSupabaseAdmin();
+    const maintenant = new Date().toISOString();
     const { data, error } = await supabase
       .from(TABLES.reunions)
       .update({
         statut: 'en_cours',
-        date_debut: new Date().toISOString(),
+        date_debut: maintenant,
+        // Écrase l’heure planifiée par l’heure réelle de démarrage.
+        date_prevue: maintenant,
       })
       .eq('id', id)
       .select('*')
@@ -599,8 +602,67 @@ export class ReunionService {
     const reunionCloturee = data as Reunion;
     // Si un CR est déjà validé, envoi automatique du PDF aux participants
     void tenterEnvoiRapportSiPret(id);
+    void this.notifierInvitesReunionCloturee(reunionCloturee);
 
     return reunionCloturee;
+  }
+
+  /** Informe les invités qui n’ont pas répondu que la réunion est déjà clôturée. */
+  private async notifierInvitesReunionCloturee(
+    reunion: Pick<Reunion, 'id' | 'titre'>,
+  ): Promise<void> {
+    try {
+      const supabase = requireSupabaseAdmin();
+      const { data: participants, error } = await supabase
+        .from(TABLES.participantsReunion)
+        .select('profil_id')
+        .eq('reunion_id', reunion.id)
+        .eq('statut', 'invite');
+
+      if (error || !participants?.length) return;
+
+      const ids = participants
+        .map((p) => p.profil_id as string)
+        .filter(Boolean);
+      if (ids.length === 0) return;
+
+      const { data: profils } = await supabase
+        .from(TABLES.profils)
+        .select('id, email, prenom, nom, est_actif')
+        .in('id', ids)
+        .eq('est_actif', true);
+
+      const metaCle = { reunion_id: reunion.id, kind: 'cloture_sans_reponse' };
+      const destinataires: { id: string; email?: string | null; prenom?: string; nom?: string }[] =
+        [];
+
+      for (const profil of profils ?? []) {
+        const { data: deja } = await supabase
+          .from(TABLES.notifications)
+          .select('id')
+          .eq('profil_id', profil.id)
+          .eq('type', 'reunion_cloturee')
+          .contains('metadonnees', metaCle)
+          .maybeSingle();
+        if (!deja) destinataires.push(profil);
+      }
+
+      if (destinataires.length === 0) return;
+
+      await notificationService.creerPourProfils(destinataires, {
+        type: 'reunion_cloturee',
+        titre: 'Réunion déjà clôturée',
+        message:
+          `La réunion « ${reunion.titre} » a déjà eu lieu et est clôturée.\n\n` +
+          `Vous n’avez pas confirmé votre présence à temps ; la confirmation n’est plus possible.`,
+        lien: `/reunions/${reunion.id}`,
+        emailSujet: `[Ogefmeeting] Clôturée — ${reunion.titre}`,
+        emailBoutonLibelle: 'Voir la réunion',
+        metadonnees: metaCle,
+      });
+    } catch {
+      /* best-effort */
+    }
   }
 
   async mettreEnPause(id: string): Promise<Reunion> {
@@ -782,7 +844,15 @@ export class ReunionService {
     profilId: string,
     reponse: 'confirme' | 'absent',
   ): Promise<ParticipantReunion> {
-    await this.assurerExiste(reunionId);
+    const reunion = await this.assurerExiste(reunionId);
+
+    if (reunion.statut === 'cloturee' || reunion.statut === 'archivee') {
+      throw new AppError(
+        400,
+        'Cette réunion a déjà eu lieu et est clôturée. Vous ne pouvez plus confirmer votre présence.',
+      );
+    }
+
     const supabase = requireSupabaseAdmin();
 
     const { data: participant, error: findError } = await supabase

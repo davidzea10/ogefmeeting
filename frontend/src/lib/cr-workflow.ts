@@ -12,6 +12,11 @@ const ROLES_VALIDER: RoleUtilisateur[] = ['administrateur', 'directeur'];
 
 export type NiveauDetailCr = 'simple' | 'detaille' | 'tres_detaille';
 
+export type ContexteOrganisateurCr = {
+  userId?: string | null;
+  organisateurId?: string | null;
+};
+
 export const LIBELLES_NIVEAU_DETAIL_CR: Record<NiveauDetailCr, string> = {
   simple: 'Compte rendu simple',
   detaille: 'Compte rendu détaillé',
@@ -24,8 +29,20 @@ export const DESCRIPTIONS_NIVEAU_DETAIL_CR: Record<NiveauDetailCr, string> = {
   tres_detaille: 'Exhaustif — reprend tout le contenu de la transcription.',
 };
 
+/** Secrétariat / direction / admin. */
 export function peutModifierCr(role: RoleUtilisateur | null | undefined): boolean {
   return Boolean(role && ROLES_MODIFIER.includes(role));
+}
+
+/** Rôle CR classique OU organisateur de la réunion. */
+export function peutRedigerCr(
+  role: RoleUtilisateur | null | undefined,
+  ctx?: ContexteOrganisateurCr,
+): boolean {
+  if (peutModifierCr(role)) return true;
+  return Boolean(
+    ctx?.userId && ctx.organisateurId && ctx.userId === ctx.organisateurId,
+  );
 }
 
 export function peutValiderCr(role: RoleUtilisateur | null | undefined): boolean {
@@ -35,8 +52,9 @@ export function peutValiderCr(role: RoleUtilisateur | null | undefined): boolean
 export function peutModifierContenuCr(
   role: RoleUtilisateur | null | undefined,
   statut: StatutCompteRendu,
+  ctx?: ContexteOrganisateurCr,
 ): boolean {
-  if (!peutModifierCr(role)) return false;
+  if (!peutRedigerCr(role, ctx)) return false;
   if (statut === 'brouillon' || statut === 'en_revision') return true;
   // Directeur / admin : peuvent ajuster un CR déjà soumis avant validation
   if (statut === 'soumis' && peutValiderCr(role)) return true;
@@ -46,8 +64,11 @@ export function peutModifierContenuCr(
 export function peutSoumettreCr(
   role: RoleUtilisateur | null | undefined,
   statut: StatutCompteRendu,
+  ctx?: ContexteOrganisateurCr,
 ): boolean {
-  return peutModifierCr(role) && (statut === 'brouillon' || statut === 'en_revision');
+  return (
+    peutRedigerCr(role, ctx) && (statut === 'brouillon' || statut === 'en_revision')
+  );
 }
 
 export function peutApprouverCr(

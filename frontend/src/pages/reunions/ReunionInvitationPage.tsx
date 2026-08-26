@@ -6,7 +6,7 @@ import { formatDateHeure, LIBELLES_TYPE } from '@/lib/labels';
 import { obtenirReunion, repondreInvitationReunion } from '@/lib/reunions-api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, XCircle } from 'lucide-react';
+import { CheckCircle2, Info, XCircle } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 
 /**
@@ -70,6 +70,9 @@ export function ReunionInvitationPage() {
   const moi = reunion.participants.find((p) => p.profil_id === userId);
   const dejaConfirme = moi?.statut === 'confirme' || moi?.statut === 'present';
   const dejaAbsent = moi?.statut === 'absent';
+  const reunionTerminee =
+    reunion.statut === 'cloturee' || reunion.statut === 'archivee';
+  const dateAffichee = reunion.date_debut ?? reunion.date_prevue;
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
@@ -85,7 +88,7 @@ export function ReunionInvitationPage() {
         <Badge variant="neutral">{LIBELLES_TYPE[reunion.type_reunion]}</Badge>
         <h2 className="mt-3 text-2xl font-bold text-text">{reunion.titre}</h2>
         <p className="mt-2 text-sm text-text-muted">
-          {formatDateHeure(reunion.date_prevue)}
+          {formatDateHeure(dateAffichee)}
           {reunion.lieu ? ` · ${reunion.lieu}` : ''}
         </p>
         {reunion.description ? (
@@ -97,6 +100,22 @@ export function ReunionInvitationPage() {
         <div className="rounded-xl border border-border bg-surface p-6 text-sm text-text-muted">
           Vous n’êtes pas dans la liste des participants de cette réunion.
         </div>
+      ) : reunionTerminee && !dejaConfirme && !dejaAbsent ? (
+        <div className="flex items-start gap-3 rounded-xl border border-warning/40 bg-warning/10 p-5 text-text">
+          <Info className="mt-0.5 h-5 w-5 shrink-0 text-warning" aria-hidden />
+          <div>
+            <p className="font-semibold">Réunion déjà clôturée</p>
+            <p className="mt-1 text-sm text-text-muted">
+              Cette réunion a déjà eu lieu et est clôturée. Vous ne pouvez plus confirmer
+              votre présence.
+            </p>
+            <Link to={`/reunions/${id}`} className="mt-3 inline-block">
+              <Button size="sm" variant="outline">
+                Voir la réunion
+              </Button>
+            </Link>
+          </div>
+        </div>
       ) : dejaConfirme ? (
         <div className="flex items-start gap-3 rounded-xl border border-success/30 bg-success/10 p-5 text-success">
           <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" aria-hidden />
@@ -104,6 +123,7 @@ export function ReunionInvitationPage() {
             <p className="font-semibold">Participation confirmée</p>
             <p className="mt-1 text-sm opacity-90">
               Vous êtes bien inscrit(e) à cette réunion.
+              {reunionTerminee ? ' La réunion est déjà clôturée.' : ''}
             </p>
             <Link to={`/reunions/${id}`} className="mt-3 inline-block">
               <Button size="sm">Voir la réunion</Button>
@@ -118,15 +138,22 @@ export function ReunionInvitationPage() {
             <p className="mt-1 text-sm text-text-muted">
               Vous avez indiqué que vous ne participerez pas.
             </p>
-            <Button
-              className="mt-3"
-              size="sm"
-              variant="outline"
-              loading={mut.isPending}
-              onClick={() => mut.mutate('confirme')}
-            >
-              Confirmer finalement
-            </Button>
+            {!reunionTerminee && (
+              <Button
+                className="mt-3"
+                size="sm"
+                variant="outline"
+                loading={mut.isPending}
+                onClick={() => mut.mutate('confirme')}
+              >
+                Confirmer finalement
+              </Button>
+            )}
+            {reunionTerminee && (
+              <p className="mt-2 text-sm text-text-muted">
+                La réunion a déjà eu lieu et est clôturée.
+              </p>
+            )}
           </div>
         </div>
       ) : (

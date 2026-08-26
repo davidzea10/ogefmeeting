@@ -258,7 +258,13 @@ export function ReunionDetailPage() {
   const points = [...reunion.points_ordre_jour].sort((a, b) => a.ordre - b.ordre);
   const traites = points.filter((p) => p.est_traite).length;
   const monInvitation = reunion.participants.find((p) => p.profil_id === userId);
-  const invitationEnAttente = monInvitation?.statut === 'invite';
+  const invitationEnAttente =
+    monInvitation?.statut === 'invite' &&
+    reunion.statut !== 'cloturee' &&
+    reunion.statut !== 'archivee';
+  const invitationExpiree =
+    monInvitation?.statut === 'invite' &&
+    (reunion.statut === 'cloturee' || reunion.statut === 'archivee');
   const peutModifier = peutModifierReunionRole(
     role,
     profil?.fonction,
@@ -440,6 +446,13 @@ export function ReunionDetailPage() {
         </div>
       )}
 
+      {invitationExpiree && (
+        <div className="rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm text-text">
+          Cette réunion a déjà eu lieu et est clôturée. Vous ne pouvez plus confirmer votre
+          présence.
+        </div>
+      )}
+
       <ReunionTimeline reunion={reunion} />
 
       <ReunionTabs tabs={tabs} active={tab} onChange={setTab}>
@@ -447,7 +460,10 @@ export function ReunionDetailPage() {
           <dl className="grid gap-4 sm:grid-cols-2">
             <InfoItem label="Description" value={reunion.description || '—'} />
             <InfoItem label="Type" value={LIBELLES_TYPE[reunion.type_reunion]} />
-            <InfoItem label="Date prévue" value={formatDateHeure(reunion.date_prevue)} />
+            <InfoItem
+              label={reunion.date_debut ? 'Date / heure de début' : 'Date prévue'}
+              value={formatDateHeure(reunion.date_debut ?? reunion.date_prevue)}
+            />
             <InfoItem label="Lieu" value={reunion.lieu || '—'} />
             <InfoItem
               label={directionIds.length > 1 ? 'Directions' : 'Direction'}

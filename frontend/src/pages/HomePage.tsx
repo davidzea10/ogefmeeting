@@ -136,6 +136,7 @@ export function HomePage() {
       .map((q) => q.data)
       .filter((detail): detail is NonNullable<typeof detail> => Boolean(detail))
       .filter((detail) => {
+        if (detail.statut === 'cloturee' || detail.statut === 'archivee') return false;
         const moi = detail.participants.find((p) => p.profil_id === profilId);
         return moi?.statut === 'invite';
       });

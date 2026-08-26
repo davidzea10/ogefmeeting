@@ -125,7 +125,13 @@ export function CompteRenduEditorPage() {
   });
 
   const statut = crQuery.data?.statut;
-  const editable = Boolean(statut && peutModifierContenuCr(role, statut));
+  const organisateurCtx = {
+    userId: profilId,
+    organisateurId: reunionQuery.data?.cree_par ?? null,
+  };
+  const editable = Boolean(
+    statut && peutModifierContenuCr(role, statut, organisateurCtx),
+  );
 
   const optsHistoriserRef = useRef(false);
 
@@ -376,7 +382,11 @@ export function CompteRenduEditorPage() {
 
   const cr = crQuery.data;
   const reunion = reunionQuery.data;
-  const showSoumettre = peutSoumettreCr(role, cr.statut);
+  const ctxOrganisateur = {
+    userId: profilId,
+    organisateurId: reunion.cree_par,
+  };
+  const showSoumettre = peutSoumettreCr(role, cr.statut, ctxOrganisateur);
   const showValidation = peutApprouverCr(role, cr.statut);
   const showArchiver = peutArchiverCr(role, cr.statut);
   const showNoteDirecteur = peutValiderCr(role) && cr.statut === 'soumis';

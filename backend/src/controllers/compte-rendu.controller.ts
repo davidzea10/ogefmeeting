@@ -12,12 +12,17 @@ import type {
 import { compteRenduService } from '../services/compte-rendu.service.js';
 import { reunionService } from '../services/reunion.service.js';
 import { AppError } from '../utils/errors.js';
-import { profilLimiteAuxParticipations } from '../utils/reunion-acces.js';
+import {
+  profilLimiteAuxParticipations,
+  utilisateurPeutRedigerCompteRendu,
+} from '../utils/reunion-acces.js';
 import { PERMISSIONS, roleAutorise } from '../utils/permissions.js';
 
 export class CompteRenduController {
   async creer(req: Request, res: Response): Promise<void> {
-    const data = await compteRenduService.creer(req.body as CreerCompteRenduInput);
+    const body = req.body as CreerCompteRenduInput;
+    await this.assurerPeutRedigerReunion(req, body.reunion_id);
+    const data = await compteRenduService.creer(body);
     res.status(201).json({ success: true, data });
   }
 
@@ -37,6 +42,7 @@ export class CompteRenduController {
   }
 
   async modifier(req: Request, res: Response): Promise<void> {
+    await this.assurerPeutRedigerCr(req, req.params.id as string);
     const ajustementDirecteur = Boolean(
       req.user && roleAutorise(req.user.role, PERMISSIONS.CR_VALIDER),
     );
@@ -49,6 +55,7 @@ export class CompteRenduController {
   }
 
   async soumettre(req: Request, res: Response): Promise<void> {
+    await this.assurerPeutRedigerCr(req, req.params.id as string);
     const data = await compteRenduService.soumettre(
       req.params.id as string,
       (req.body ?? {}) as SoumettreCompteRenduInput,
@@ -114,6 +121,7 @@ export class CompteRenduController {
   }
 
   async genererAvecIa(req: Request, res: Response): Promise<void> {
+    await this.assurerPeutRedigerCr(req, req.params.id as string);
     await compteRenduService.obtenirParId(req.params.id as string, {
       limiterAuProfilId: profilLimiteAuxParticipations(req.user),
     });
@@ -131,16 +139,7 @@ export class CompteRenduController {
     });
 
     const reunion = await reunionService.obtenirParId(cr.reunion_id);
-    const userId = req.user?.id;
-    const role = req.user?.role;
-    const estOrganisateur = Boolean(userId && reunion.cree_par === userId);
-    const estAutorise =
-      role === 'administrateur' ||
-      role === 'directeur' ||
-      role === 'secretaire' ||
-      estOrganisateur;
-
-    if (!estAutorise) {
+    if (!utilisateurPeutRedigerCompteRendu(req.user, reunion)) {
       throw new AppError(
         403,
         'Seul l’organisateur, le secrétariat, un directeur ou un administrateur peut envoyer le rapport.',
@@ -149,6 +148,24 @@ export class CompteRenduController {
 
     const data = await compteRenduService.envoyerAuxParticipants(req.params.id as string);
     res.status(200).json({ success: true, data });
+  }
+
+  private async assurerPeutRedigerReunion(req: Request, reunionId: string): Promise<void> {
+    if (!req.user) throw new AppError(401, 'Authentification requise.');
+    const reunion = await reunionService.obtenirParId(reunionId);
+    if (!utilisateurPeutRedigerCompteRendu(req.user, reunion)) {
+      throw new AppError(
+        403,
+        'Seul l’organisateur de la réunion, le secrétariat ou un ayant-droit peut créer ou modifier le compte rendu.',
+      );
+    }
+  }
+
+  private async assurerPeutRedigerCr(req: Request, crId: string): Promise<void> {
+    const cr = await compteRenduService.obtenirParId(crId, {
+      limiterAuProfilId: profilLimiteAuxParticipations(req.user),
+    });
+    await this.assurerPeutRedigerReunion(req, cr.reunion_id);
   }
 }
 

@@ -33,7 +33,12 @@ const LIBELLES_STATUT_ACTION: Record<StatutAction, string> = {
 };
 
 function peutGererDecisions(role: RoleUtilisateur | null): boolean {
-  return role === 'administrateur' || role === 'directeur' || role === 'secretaire';
+  return (
+    role === 'administrateur' ||
+    role === 'directeur' ||
+    role === 'secretaire' ||
+    role === 'participant'
+  );
 }
 
 function peutGererActions(role: RoleUtilisateur | null): boolean {
