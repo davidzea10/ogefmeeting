@@ -220,6 +220,33 @@ export class EnregistrementsService {
     const { error: deleteErr } = await supabase.from(TABLES.enregistrements).delete().eq('id', id);
     if (deleteErr) handleSupabaseError(deleteErr, 'Impossible de supprimer l’enregistrement.');
   }
+
+  /** Supprime tous les enregistrements audio d’une réunion (fichiers + lignes). */
+  async supprimerParReunion(reunionId: string): Promise<number> {
+    const supabase = requireSupabaseAdmin();
+    const { data, error } = await supabase
+      .from(TABLES.enregistrements)
+      .select('id, chemin_stockage')
+      .eq('reunion_id', reunionId);
+
+    if (error) handleSupabaseError(error, 'Impossible de lister les enregistrements.');
+
+    const rows = (data ?? []) as { id: string; chemin_stockage: string }[];
+    if (rows.length === 0) return 0;
+
+    const chemins = rows.map((r) => r.chemin_stockage).filter(Boolean);
+    if (chemins.length > 0) {
+      await supabase.storage.from('recordings').remove(chemins);
+    }
+
+    const { error: deleteErr } = await supabase
+      .from(TABLES.enregistrements)
+      .delete()
+      .eq('reunion_id', reunionId);
+
+    if (deleteErr) handleSupabaseError(deleteErr, 'Impossible de supprimer les enregistrements.');
+    return rows.length;
+  }
 }
 
 export const enregistrementsService = new EnregistrementsService();

@@ -74,10 +74,13 @@ async function handleClient(client: WebSocket, req: IncomingMessage): Promise<vo
     return;
   }
 
+  sendJson(client, { type: 'connecting', reunionId });
+
   if (!isDeepgramConfigured()) {
     sendJson(client, {
       type: 'error',
-      message: 'Deepgram non configuré (DEEPGRAM_API_KEY absente côté backend)',
+      message:
+        'Transcription live indisponible : DEEPGRAM_API_KEY absente dans le .env du backend.',
     });
     client.close(1013, 'Deepgram non configuré');
     return;
@@ -110,9 +113,12 @@ async function handleClient(client: WebSocket, req: IncomingMessage): Promise<vo
   }
 
   let closed = false;
+  let deepgramOpenTimeout: ReturnType<typeof setTimeout> | undefined;
+
   const closeBoth = (code = 1000, reason = 'bye') => {
     if (closed) return;
     closed = true;
+    if (deepgramOpenTimeout) clearTimeout(deepgramOpenTimeout);
     try {
       if (deepgram.readyState === WebSocket.OPEN) {
         deepgram.send(JSON.stringify({ type: 'CloseStream' }));
@@ -130,7 +136,19 @@ async function handleClient(client: WebSocket, req: IncomingMessage): Promise<vo
     }
   };
 
+  deepgramOpenTimeout = setTimeout(() => {
+    if (deepgram.readyState === WebSocket.OPEN) return;
+    logger.warn({ reunionId }, 'Timeout ouverture Deepgram');
+    sendJson(client, {
+      type: 'error',
+      message:
+        'Deepgram ne répond pas (clé API invalide, quota ou réseau). Vérifiez DEEPGRAM_API_KEY.',
+    });
+    closeBoth(1011, 'Deepgram timeout');
+  }, 15_000);
+
   deepgram.on('open', () => {
+    if (deepgramOpenTimeout) clearTimeout(deepgramOpenTimeout);
     sendJson(client, {
       type: 'ready',
       reunionId,

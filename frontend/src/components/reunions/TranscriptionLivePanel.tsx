@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/Button';
 import { useTranscriptionLive, type LangueTranscription } from '@/hooks/useTranscriptionLive';
 import { cn } from '@/lib/cn';
-import { sauvegarderTranscription } from '@/lib/transcriptions-api';
+import { obtenirStatutStt, sauvegarderTranscription } from '@/lib/transcriptions-api';
 import { Captions, Eraser, Mic, MicOff, Save } from 'lucide-react';
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 
@@ -16,6 +16,8 @@ type Props = {
 export type TranscriptionLivePanelHandle = {
   /** Sauvegarde la transcription et arrête le flux (clôture). */
   preparerCloture: () => Promise<void>;
+  /** Arrête le flux sans sauvegarder (annulation du live). */
+  abandonner: () => void;
 };
 
 export const TranscriptionLivePanel = forwardRef<TranscriptionLivePanelHandle, Props>(
@@ -38,6 +40,28 @@ export const TranscriptionLivePanel = forwardRef<TranscriptionLivePanelHandle, P
 
     const [saving, setSaving] = useState(false);
     const [saveErreur, setSaveErreur] = useState<string | null>(null);
+    const [sttDisponible, setSttDisponible] = useState<boolean | null>(null);
+    const [sttIndispoMessage, setSttIndispoMessage] = useState<string | null>(null);
+
+    useEffect(() => {
+      let annule = false;
+      void obtenirStatutStt()
+        .then((stt) => {
+          if (annule) return;
+          setSttDisponible(stt.disponible);
+          setSttIndispoMessage(stt.disponible ? null : stt.message);
+        })
+        .catch(() => {
+          if (annule) return;
+          setSttDisponible(false);
+          setSttIndispoMessage(
+            'Impossible de contacter le backend pour vérifier la transcription live.',
+          );
+        });
+      return () => {
+        annule = true;
+      };
+    }, []);
     const scrollRef = useRef<HTMLDivElement>(null);
     const texteRef = useRef(texteComplet);
     const sauvegardeOkRef = useRef(sauvegardeOk);
@@ -56,6 +80,13 @@ export const TranscriptionLivePanel = forwardRef<TranscriptionLivePanelHandle, P
     useEffect(() => {
       actifRef.current = actif;
     }, [actif]);
+
+    /** Pause réunion → arrêt du flux STT. */
+    useEffect(() => {
+      if (desactive && actif) {
+        arreter();
+      }
+    }, [desactive, actif, arreter]);
 
     useEffect(() => {
       const el = scrollRef.current;
@@ -102,7 +133,17 @@ export const TranscriptionLivePanel = forwardRef<TranscriptionLivePanelHandle, P
       }
     };
 
-    useImperativeHandle(ref, () => ({ preparerCloture }), [arreter, reunionId]);
+    const abandonner = () => {
+      if (actifRef.current) arreter();
+      effacer();
+      setSauvegardeOk(false);
+    };
+
+    useImperativeHandle(ref, () => ({ preparerCloture, abandonner }), [
+      arreter,
+      effacer,
+      reunionId,
+    ]);
 
     return (
       <aside
@@ -163,7 +204,16 @@ export const TranscriptionLivePanel = forwardRef<TranscriptionLivePanelHandle, P
           aria-live="polite"
           aria-relevant="additions"
         >
-          {segments.length === 0 && !interim && !erreur && (
+          {sttDisponible === false && sttIndispoMessage ? (
+            <p
+              className="rounded-lg border border-warning/40 bg-warning/15 px-3 py-2 text-sm text-amber-100"
+              role="status"
+            >
+              {sttIndispoMessage}
+            </p>
+          ) : null}
+
+          {segments.length === 0 && !interim && !erreur && sttDisponible !== false && (
             <p className="text-sm leading-relaxed text-white/45">
               {peutControle
                 ? 'Choisissez la langue, puis démarrez la transcription.'
@@ -203,8 +253,8 @@ export const TranscriptionLivePanel = forwardRef<TranscriptionLivePanelHandle, P
             {!actif ? (
               <Button
                 size="sm"
-                disabled={desactive || connecting}
-                loading={connecting}
+                disabled={desactive || connecting || sttDisponible === false}
+                loading={connecting || sttDisponible === null}
                 onClick={() => void demarrer()}
               >
                 <Mic className="h-4 w-4" aria-hidden />

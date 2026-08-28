@@ -7,12 +7,18 @@ import { useChronometre } from '@/hooks/useChronometre';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { useReunionRealtime } from '@/hooks/useReunionRealtime';
 import { formatDateHeure, LIBELLES_PARTICIPANT, LIBELLES_TYPE } from '@/lib/labels';
+import {
+  appliquerPresenceLocale,
+  trierParticipantsLive,
+  type TriPresenceLive,
+} from '@/lib/live-presence';
 import { isRealtimeConfigured } from '@/lib/supabase-browser';
 import { easeOutExpo, useMotionSafe } from '@/lib/motion';
 import { EnregistrementLivePanel, type EnregistrementLivePanelHandle } from '@/components/reunions/EnregistrementLivePanel';
 import { LiveOrdreJourPanel } from '@/components/reunions/LiveOrdreJourPanel';
 import { TranscriptionLivePanel, type TranscriptionLivePanelHandle } from '@/components/reunions/TranscriptionLivePanel';
 import {
+  annulerLiveReunion,
   cloturerReunion,
   creerCompteRendu,
   listerComptesRendusReunion,
@@ -20,6 +26,7 @@ import {
   mettreReunionEnPause,
   modifierParticipantStatut,
   obtenirReunion,
+  rejoindreLiveReunion,
   reprendreReunion,
 } from '@/lib/reunions-api';
 import { peutGererReunionRole, peutModifierReunionRole } from '@/lib/roles';
@@ -33,13 +40,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ArrowLeft,
+  Crown,
   Pause,
   Play,
   Radio,
   Square,
   Users,
+  XCircle,
 } from 'lucide-react';
-import { useMemo, useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 export function ReunionLivePage() {
@@ -50,9 +59,15 @@ export function ReunionLivePage() {
   const profil = useAuthStore((s) => s.profil);
   const profilId = profil?.id;
   const role = useAuthStore((s) => s.role ?? s.profil?.role ?? null);
-  const userId = useAuthStore((s) => s.user?.id ?? s.profil?.id);
+  const userId = profilId ?? useAuthStore((s) => s.user?.id);
   const motionSafe = useMotionSafe();
   const [showCloture, setShowCloture] = useState(false);
+  const [showAnnuler, setShowAnnuler] = useState(false);
+  const [triPresence, setTriPresence] = useState<TriPresenceLive>('arrivee');
+  const [filtrePresentsSeulement, setFiltrePresentsSeulement] = useState(false);
+  const etaitEnLiveRef = useRef(false);
+  const tentativesRejoindreRef = useRef(0);
+  const presenceServeurOkRef = useRef(false);
   const audioPanelRef = useRef<EnregistrementLivePanelHandle>(null);
   const transcriptionPanelRef = useRef<TranscriptionLivePanelHandle>(null);
 
@@ -62,6 +77,9 @@ export function ReunionLivePage() {
     queryKey: ['reunion', id],
     queryFn: () => obtenirReunion(id!),
     enabled: Boolean(id),
+    /** Sync pause / présences / clôture même si Realtime Supabase indisponible. */
+    refetchInterval: 2000,
+    refetchIntervalInBackground: true,
   });
 
   const profilsQuery = useQuery({
@@ -90,6 +108,116 @@ export function ReunionLivePage() {
     await queryClient.invalidateQueries({ queryKey: ['reunion', id] });
     await queryClient.invalidateQueries({ queryKey: ['reunions'] });
   };
+
+  /** Entrée live → présence automatique (invite/confirme → présent). */
+  const rejoindreMut = useMutation({
+    mutationFn: () => rejoindreLiveReunion(id!),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ['reunion', id] });
+      const previous = queryClient.getQueryData<Awaited<ReturnType<typeof obtenirReunion>>>([
+        'reunion',
+        id,
+      ]);
+      if (previous && userId) {
+        queryClient.setQueryData(['reunion', id], {
+          ...previous,
+          participants: previous.participants.map((p) =>
+            p.profil_id === userId ? { ...p, statut: 'present' as const } : p,
+          ),
+        });
+      }
+      return { previous };
+    },
+    onSuccess: (participant) => {
+      presenceServeurOkRef.current = true;
+      tentativesRejoindreRef.current = 0;
+      queryClient.setQueryData<Awaited<ReturnType<typeof obtenirReunion>>>(
+        ['reunion', id],
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            participants: old.participants.map((p) =>
+              p.id === participant.id ? participant : p,
+            ),
+          };
+        },
+      );
+      void invalidate();
+    },
+    onError: (e: Error) => {
+      announce(e.message || 'Impossible de marquer votre présence.');
+      // On garde l’affichage optimiste « présent » pour l’utilisateur connecté.
+    },
+  });
+
+  useEffect(() => {
+    presenceServeurOkRef.current = false;
+    tentativesRejoindreRef.current = 0;
+    etaitEnLiveRef.current = false;
+  }, [id]);
+
+  /** Si le serveur indique déjà « présent », pas besoin de rappeler l’API. */
+  useEffect(() => {
+    if (!reunion || !userId) return;
+    const moi = reunion.participants.find((p) => p.profil_id === userId);
+    if (moi?.statut === 'present' && moi.present_le) {
+      presenceServeurOkRef.current = true;
+    }
+  }, [reunion, userId]);
+
+  /** Marque la présence dès l’entrée live, avec nouvelles tentatives si l’API échoue. */
+  useEffect(() => {
+    if (!id || !userId || !reunion) return;
+    if (reunion.statut !== 'en_cours' && reunion.statut !== 'en_pause') return;
+    if (presenceServeurOkRef.current) return;
+
+    const moi = reunion.participants.find((p) => p.profil_id === userId);
+    if (!moi) return;
+    if (rejoindreMut.isPending) return;
+    if (tentativesRejoindreRef.current >= 8) return;
+
+    const delai = tentativesRejoindreRef.current === 0 ? 0 : 2500;
+    const timer = window.setTimeout(() => {
+      tentativesRejoindreRef.current += 1;
+      rejoindreMut.mutate();
+    }, delai);
+
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- retry contrôlé par tentativesRejoindreRef
+  }, [id, userId, reunion?.statut, reunion?.participants, rejoindreMut.isPending]);
+
+  /** Clôture / annulation par l’organisateur → redirection synchronisée pour tous. */
+  useEffect(() => {
+    if (!reunion || !id) return;
+
+    if (reunion.statut === 'en_cours' || reunion.statut === 'en_pause') {
+      etaitEnLiveRef.current = true;
+      return;
+    }
+
+    if (!etaitEnLiveRef.current) return;
+
+    audioPanelRef.current?.abandonner();
+    transcriptionPanelRef.current?.abandonner();
+
+    if (reunion.statut === 'cloturee') {
+      announce('La réunion a été clôturée.');
+      navigate(`/reunions/${id}`, { replace: true });
+      return;
+    }
+
+    if (reunion.statut === 'planifiee') {
+      announce('Le live a été annulé par l’organisateur.');
+      navigate(`/reunions/${id}`, { replace: true });
+      return;
+    }
+
+    if (reunion.statut === 'archivee') {
+      announce('Le test live a été annulé.');
+      navigate('/teste-live', { replace: true });
+    }
+  }, [reunion?.statut, id, navigate, announce, reunion]);
 
   const participantMut = useMutation({
     mutationFn: ({
@@ -151,6 +279,32 @@ export function ReunionLivePage() {
     onError: (e: Error) => announce(e.message),
   });
 
+  const annulerMut = useMutation({
+    mutationFn: async () => {
+      audioPanelRef.current?.abandonner();
+      transcriptionPanelRef.current?.abandonner();
+      return annulerLiveReunion(id!);
+    },
+    onSuccess: async (reunionAnnulee) => {
+      const estTest = reunionAnnulee.titre.trim().startsWith('[TEST LIVE]');
+      announce(
+        estTest
+          ? 'Test live annulé — rien n’a été conservé.'
+          : 'Live annulé — retour à la planification. Rien n’a été enregistré.',
+      );
+      setShowAnnuler(false);
+      await invalidate();
+      await queryClient.invalidateQueries({ queryKey: ['enregistrements', id] });
+      await queryClient.invalidateQueries({ queryKey: ['comptes-rendus', id] });
+      if (estTest) {
+        navigate('/teste-live', { replace: true });
+      } else {
+        navigate(`/reunions/${id}`, { replace: true });
+      }
+    },
+    onError: (e: Error) => announce(e.message),
+  });
+
   if (!id) {
     return <p className="p-8 text-danger">Identifiant manquant.</p>;
   }
@@ -202,18 +356,61 @@ export function ReunionLivePage() {
 
   const points = [...reunion.points_ordre_jour].sort((a, b) => a.ordre - b.ordre);
   const traites = points.filter((p) => p.est_traite).length;
-  const presents = reunion.participants.filter((p) => p.statut === 'present').length;
   const progress = points.length === 0 ? 0 : Math.round((traites / points.length) * 100);
   const peutModifier = peutModifierReunionRole(role, profil?.fonction, userId, reunion);
   const peutGerer = peutGererReunionRole(role, profil?.fonction, userId, reunion);
   /** Organisateur ou ayant-droit : conduire, clôturer, enregistrer. */
   const peutConduireLive = peutGerer || peutModifier;
   const estOrganisateur = Boolean(userId && reunion.cree_par && reunion.cree_par === userId);
+  const estAdmin = role === 'administrateur';
+  /** Seul l’organisateur (ou admin) peut changer les présences manuellement. */
+  const peutChangerPresence = estOrganisateur || estAdmin;
   /** Invité simple : voit le live sans modifier ni clôturer. */
   const estInviteLectureSeule = !peutConduireLive;
 
+  const nomParticipant = (pid: string) => {
+    const profilP = profilMap.get(pid);
+    return profilP
+      ? `${profilP.prenom} ${profilP.nom}`
+      : `Profil ${pid.slice(0, 8)}…`;
+  };
+
+  const enLive = reunion.statut === 'en_cours' || reunion.statut === 'en_pause';
+  const participantsAvecPresenceLocale = appliquerPresenceLocale(
+    reunion.participants,
+    userId,
+    enLive,
+  );
+  const participantsTries = trierParticipantsLive(
+    participantsAvecPresenceLocale,
+    reunion,
+    triPresence,
+    nomParticipant,
+  );
+  const participantsAffiches = filtrePresentsSeulement
+    ? participantsTries.filter((p) => p.statut === 'present')
+    : participantsTries;
+  const presents = participantsAvecPresenceLocale.filter((p) => p.statut === 'present').length;
+
   return (
-    <div className="flex min-h-screen flex-col bg-ogefrem-navy text-white">
+    <div className="relative flex min-h-screen flex-col bg-ogefrem-navy text-white">
+      {enPause && (
+        <div
+          className="pointer-events-none fixed inset-0 z-30 flex items-center justify-center bg-ogefrem-navy/75 backdrop-blur-sm"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="rounded-2xl border border-warning/40 bg-warning/15 px-8 py-6 text-center shadow-xl">
+            <Pause className="mx-auto h-12 w-12 text-warning" aria-hidden />
+            <p className="mt-3 text-xl font-bold text-white">Réunion en pause</p>
+            <p className="mt-1 text-sm text-white/75">
+              {peutConduireLive
+                ? 'Reprenez quand vous êtes prêt(e).'
+                : 'En attente de reprise par l’organisateur…'}
+            </p>
+          </div>
+        </div>
+      )}
       {/* Barre focus */}
       <header className="sticky top-0 z-20 border-b border-white/10 bg-ogefrem-navy/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
@@ -252,7 +449,7 @@ export function ReunionLivePage() {
                 {isRealtimeConfigured() ? (
                   <span className="text-xs text-white/50">Temps réel</span>
                 ) : (
-                  <span className="text-xs text-white/50">Sync 8s</span>
+                  <span className="text-xs text-white/50">Sync 2s</span>
                 )}
               </div>
               <h1 className="truncate text-base font-semibold sm:text-lg">{reunion.titre}</h1>
@@ -300,6 +497,15 @@ export function ReunionLivePage() {
                 <Button
                   variant="secondary"
                   size="sm"
+                  className="!bg-white/10 !text-white hover:!bg-white/20"
+                  onClick={() => setShowAnnuler(true)}
+                >
+                  <XCircle className="h-4 w-4" aria-hidden />
+                  Annuler le live
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
                   className="!bg-white !text-ogefrem-navy hover:!bg-white/90"
                   onClick={() => setShowCloture(true)}
                 >
@@ -337,8 +543,8 @@ export function ReunionLivePage() {
           className="border-b border-white/10 bg-white/5 px-4 py-2 text-center text-sm text-white/80"
           role="status"
         >
-          Mode ayant-droit — vous pouvez quitter le live ou clôturer la réunion.
-          La clôture enregistre l’audio, la transcription et crée le compte rendu brouillon.
+          Mode ayant-droit — vous pouvez quitter le live, l’annuler (sans enregistrement)
+          ou clôturer la réunion.
         </div>
       )}
 
@@ -370,48 +576,127 @@ export function ReunionLivePage() {
             />
 
             <section aria-labelledby="live-participants-title" className="space-y-3">
-              <h2
-                id="live-participants-title"
-                className="flex items-center gap-2 text-lg font-semibold"
-              >
-                <Users className="h-5 w-5 text-ogefrem-yellow" aria-hidden />
-                Présences
-              </h2>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2
+                  id="live-participants-title"
+                  className="flex items-center gap-2 text-lg font-semibold"
+                >
+                  <Users className="h-5 w-5 text-ogefrem-yellow" aria-hidden />
+                  Présences
+                </h2>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-xs text-white/70">
+                    <span className="sr-only">Tri des présences</span>
+                    <select
+                      value={triPresence}
+                      onChange={(e) => setTriPresence(e.target.value as TriPresenceLive)}
+                      className="h-8 rounded-lg border border-white/20 bg-ogefrem-navy px-2 text-xs text-white"
+                      aria-label="Tri des présences"
+                    >
+                      <option value="arrivee">Ordre d&apos;arrivée</option>
+                      <option value="statut">Par statut</option>
+                      <option value="alphabetique">Alphabétique</option>
+                    </select>
+                  </label>
+                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-white/20 bg-white/5 px-2.5 py-1.5 text-xs text-white/80">
+                    <input
+                      type="checkbox"
+                      checked={filtrePresentsSeulement}
+                      onChange={(e) => setFiltrePresentsSeulement(e.target.checked)}
+                      className="rounded border-white/30"
+                    />
+                    Présents seulement
+                  </label>
+                </div>
+              </div>
               {reunion.participants.length === 0 ? (
                 <p className="rounded-xl border border-dashed border-white/20 p-6 text-center text-white/60">
                   Aucun participant.
                 </p>
+              ) : participantsAffiches.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-white/20 p-6 text-center text-white/60">
+                  Aucun participant présent pour le moment.
+                </p>
               ) : (
                 <ul className="grid gap-2 sm:grid-cols-2">
-                  {reunion.participants.map((p) => {
-                    const profilP = profilMap.get(p.profil_id);
-                    const nom = profilP
-                      ? `${profilP.prenom} ${profilP.nom}`
-                      : `Profil ${p.profil_id.slice(0, 8)}…`;
+                  {participantsAffiches.map((p) => {
+                    const nom = nomParticipant(p.profil_id);
+                    const estOrg = Boolean(
+                      reunion.cree_par && p.profil_id === reunion.cree_par,
+                    );
+                    const estMoi = Boolean(userId && p.profil_id === userId);
+                    const estPresent = p.statut === 'present';
                     return (
                       <li
                         key={p.id}
-                        className="flex items-center justify-between gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2.5"
+                        className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 transition ${
+                          estOrg
+                            ? 'border-ogefrem-yellow/50 bg-ogefrem-yellow/10'
+                            : estPresent
+                              ? 'border-success/35 bg-success/10'
+                              : 'border-white/15 bg-white/5'
+                        }`}
                       >
-                        <span className="min-w-0 truncate text-sm font-medium">{nom}</span>
-                        <select
-                          className="h-9 shrink-0 rounded-lg border border-white/20 bg-ogefrem-navy px-2 text-xs text-white disabled:opacity-50"
-                          value={p.statut}
-                          disabled={!peutModifier || participantMut.isPending}
-                          onChange={(e) =>
-                            participantMut.mutate({
-                              participantId: p.id,
-                              statut: e.target.value as StatutParticipant,
-                            })
-                          }
-                          aria-label={`Présence de ${nom}`}
-                        >
-                          {STATUTS_PARTICIPANT.map((s) => (
-                            <option key={s} value={s}>
-                              {LIBELLES_PARTICIPANT[s]}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="flex min-w-0 items-center gap-2">
+                          {estPresent && (
+                            <span
+                              className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-success"
+                              aria-hidden
+                              title="Présent en live"
+                            />
+                          )}
+                          <div className="min-w-0">
+                            <span className="block truncate text-sm font-medium">{nom}</span>
+                            <span className="flex flex-wrap items-center gap-1.5">
+                              {estOrg && (
+                                <span className="inline-flex items-center gap-0.5 rounded-md bg-ogefrem-yellow/25 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-ogefrem-yellow">
+                                  <Crown className="h-3 w-3" aria-hidden />
+                                  Organisateur
+                                </span>
+                              )}
+                              {estMoi && (
+                                <span className="text-[10px] font-semibold uppercase text-white/50">
+                                  Vous
+                                </span>
+                              )}
+                              {estPresent && p.present_le && (
+                                <span className="text-[10px] text-white/45">
+                                  Entré {formatDateHeure(p.present_le)}
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                        {peutChangerPresence ? (
+                          <select
+                            className="h-9 shrink-0 rounded-lg border border-white/20 bg-ogefrem-navy px-2 text-xs text-white disabled:opacity-50"
+                            value={p.statut}
+                            disabled={participantMut.isPending}
+                            onChange={(e) =>
+                              participantMut.mutate({
+                                participantId: p.id,
+                                statut: e.target.value as StatutParticipant,
+                              })
+                            }
+                            aria-label={`Présence de ${nom}`}
+                          >
+                            {STATUTS_PARTICIPANT.map((s) => (
+                              <option key={s} value={s}>
+                                {LIBELLES_PARTICIPANT[s]}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span
+                            className={`shrink-0 rounded-md px-2 py-1 text-xs ${
+                              estPresent
+                                ? 'bg-success/20 font-semibold text-success'
+                                : 'bg-white/10 text-white/80'
+                            }`}
+                          >
+                            {LIBELLES_PARTICIPANT[p.statut]}
+                          </span>
+                        )}
                       </li>
                     );
                   })}
@@ -451,6 +736,15 @@ export function ReunionLivePage() {
             loading={cloturerMut.isPending}
             onCancel={() => setShowCloture(false)}
             onConfirm={() => cloturerMut.mutate()}
+          />
+        )}
+        {showAnnuler && (
+          <AnnulerLiveModal
+            titre={reunion.titre}
+            estTest={reunion.titre.trim().startsWith('[TEST LIVE]')}
+            loading={annulerMut.isPending}
+            onCancel={() => setShowAnnuler(false)}
+            onConfirm={() => annulerMut.mutate()}
           />
         )}
       </AnimatePresence>
@@ -539,6 +833,73 @@ function ClotureModal({
           </Button>
           <Button loading={loading} onClick={onConfirm}>
             Confirmer la clôture
+          </Button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function AnnulerLiveModal({
+  titre,
+  estTest,
+  loading,
+  onCancel,
+  onConfirm,
+}: {
+  titre: string;
+  estTest: boolean;
+  loading: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const trapRef = useFocusTrap(true, onCancel);
+  const motionSafe = useMotionSafe();
+
+  return (
+    <motion.div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center"
+      initial={motionSafe ? { opacity: 0 } : false}
+      animate={{ opacity: 1 }}
+      exit={motionSafe ? { opacity: 0 } : undefined}
+      role="presentation"
+      onClick={(e: MouseEvent<HTMLDivElement>) => {
+        if (e.target === e.currentTarget && !loading) onCancel();
+      }}
+    >
+      <motion.div
+        ref={trapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="annuler-live-title"
+        className="w-full max-w-md rounded-2xl bg-surface p-6 text-text shadow-lg"
+        initial={motionSafe ? { opacity: 0, y: 24 } : false}
+        animate={{ opacity: 1, y: 0 }}
+        exit={motionSafe ? { opacity: 0, y: 16 } : undefined}
+        transition={{ duration: 0.28, ease: easeOutExpo }}
+      >
+        <h2 id="annuler-live-title" className="text-xl font-bold text-text">
+          Annuler le live ?
+        </h2>
+        <p className="mt-1 text-sm text-text-muted">{titre}</p>
+
+        <p className="mt-4 text-sm text-text-muted">
+          {estTest
+            ? 'Le test sera annulé et archivé. Aucun audio, aucune transcription ni compte rendu ne sera conservé.'
+            : 'La réunion reviendra à l’état planifié. Aucun audio, aucune transcription ni compte rendu ne sera conservé.'}
+        </p>
+
+        <div className="mt-6 flex flex-wrap justify-end gap-2">
+          <Button variant="ghost" onClick={onCancel} disabled={loading}>
+            Continuer le live
+          </Button>
+          <Button
+            variant="secondary"
+            className="!bg-danger !text-white hover:!bg-danger/90"
+            loading={loading}
+            onClick={onConfirm}
+          >
+            Confirmer l’annulation
           </Button>
         </div>
       </motion.div>

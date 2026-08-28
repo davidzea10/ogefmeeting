@@ -75,6 +75,7 @@ export class NotificationController {
     // Best-effort : rappels actions + réunions (max 1x / type / jour)
     await notificationService.notifierActionsEnRetard().catch(() => 0);
     await notificationService.notifierRappelsReunions().catch(() => 0);
+    await notificationService.notifierReunionsHeureDepassee().catch(() => 0);
     const count = await notificationService.compterNonLues(req.user.id);
     res.status(200).json({ success: true, data: { non_lues: count } });
   }

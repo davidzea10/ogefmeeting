@@ -342,6 +342,136 @@ export class NotificationService {
 
     return crees;
   }
+
+  /**
+   * Réunions planifiées dont l’heure prévue est dépassée (non démarrées).
+   * Déclenché en best-effort (ex. compteur non-lues). Max 1 notif / type / réunion / destinataire.
+   */
+  async notifierReunionsHeureDepassee(): Promise<number> {
+    const supabase = requireSupabaseAdmin();
+    const now = new Date();
+
+    // On évite une boucle infinie sur des réunions trop anciennes.
+    const fenetrePastMs = 6 * 60 * 60 * 1000;
+    const debutFenetre = new Date(now.getTime() - fenetrePastMs);
+
+    const { data: reunions, error } = await supabase
+      .from(TABLES.reunions)
+      .select('id, titre, date_prevue, lieu, cree_par, statut')
+      .eq('statut', 'planifiee')
+      .gte('date_prevue', debutFenetre.toISOString())
+      .lte('date_prevue', now.toISOString())
+      .limit(80);
+
+    if (error || !reunions?.length) return 0;
+
+    let crees = 0;
+
+    for (const reunion of reunions) {
+      const datePrevue = new Date(reunion.date_prevue as string);
+      if (Number.isNaN(datePrevue.getTime())) continue;
+      if (datePrevue.getTime() > now.getTime()) continue;
+
+      const dateLabel = datePrevue.toLocaleString('fr-FR', {
+        dateStyle: 'full',
+        timeStyle: 'short',
+      });
+      const lieuPart = reunion.lieu ? ` — ${reunion.lieu}` : '';
+
+      const metaCle = {
+        reunion_id: reunion.id,
+        kind: 'heure_depassee',
+        date_prevue: reunion.date_prevue,
+      };
+
+      const destinataireIds = new Set<string>();
+      if (reunion.cree_par) destinataireIds.add(reunion.cree_par as string);
+
+      const { data: participants } = await supabase
+        .from(TABLES.participantsReunion)
+        .select('profil_id, statut')
+        .eq('reunion_id', reunion.id)
+        .in('statut', ['invite', 'confirme', 'present']);
+
+      for (const p of participants ?? []) {
+        if (p.profil_id) destinataireIds.add(p.profil_id as string);
+      }
+
+      if (destinataireIds.size === 0) continue;
+
+      const ids = [...destinataireIds];
+      const { data: profils } = await supabase
+        .from(TABLES.profils)
+        .select('id, email, prenom, nom, est_actif')
+        .in('id', ids)
+        .eq('est_actif', true);
+
+      if (!profils?.length) continue;
+
+      const organisateurId = reunion.cree_par as string | null;
+
+      const organisateur = profils.find((p) => organisateurId && p.id === organisateurId);
+      const autres = profils.filter((p) => !organisateurId || p.id !== organisateurId);
+
+      // Organisateur : message orienté action
+      if (organisateur) {
+        const { data: deja } = await supabase
+          .from(TABLES.notifications)
+          .select('id')
+          .eq('profil_id', organisateur.id)
+          .eq('type', 'reunion_heure_depassee')
+          .contains('metadonnees', metaCle)
+          .maybeSingle();
+
+        if (!deja) {
+          await this.creerPourProfils([organisateur as DestinataireNotif], {
+            type: 'reunion_heure_depassee',
+            titre: 'Réunion en retard',
+            message:
+              `La réunion « ${reunion.titre} » devait commencer à ${dateLabel}${lieuPart}, ` +
+              `mais l’heure est dépassée.\n\n` +
+              `Lancez le live ou modifiez la date.`,
+            lien: `/reunions/${reunion.id}`,
+            emailSujet: `[Ogefmeeting] Réunion en retard — ${reunion.titre}`,
+            emailBoutonLibelle: 'Voir la réunion',
+            metadonnees: metaCle,
+          });
+          crees += 1;
+        }
+      }
+
+      // Invités : message orienté attente
+      const destinatairesInvites: DestinataireNotif[] = [];
+      for (const profil of autres) {
+        const { data: deja } = await supabase
+          .from(TABLES.notifications)
+          .select('id')
+          .eq('profil_id', profil.id)
+          .eq('type', 'reunion_heure_depassee')
+          .contains('metadonnees', metaCle)
+          .maybeSingle();
+        if (!deja) destinatairesInvites.push(profil as DestinataireNotif);
+      }
+
+      if (destinatairesInvites.length > 0) {
+        await this.creerPourProfils(destinatairesInvites, {
+          type: 'reunion_heure_depassee',
+          titre: 'Réunion en retard',
+          message:
+            `La réunion « ${reunion.titre} » devait commencer à ${dateLabel}${lieuPart}, ` +
+            `mais l’heure est dépassée.\n\n` +
+            `Attendez que l’organisateur lance le live.`,
+          lien: `/reunions/${reunion.id}`,
+          emailSujet: `[Ogefmeeting] Réunion en retard — ${reunion.titre}`,
+          emailBoutonLibelle: 'Voir la réunion',
+          metadonnees: metaCle,
+        });
+        crees += destinatairesInvites.length;
+      }
+    }
+
+    return crees;
+  }
 }
 
 export const notificationService = new NotificationService();

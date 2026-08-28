@@ -56,15 +56,18 @@ export class ReunionController {
     const data = await reunionService.modifier(
       req.params.id as string,
       req.body as ModifierReunionInput,
+      req.user?.id ?? null,
     );
     res.status(200).json({ success: true, data });
   }
 
   async archiver(req: Request, res: Response): Promise<void> {
-    if (!utilisateurPeutApprouver(req.user)) {
+    if (!req.user) throw new AppError(401, 'Authentification requise.');
+    const reunion = await reunionService.obtenirParId(req.params.id as string);
+    if (!utilisateurPeutGererConduite(req.user, reunion)) {
       throw new AppError(
         403,
-        'Seuls un secrétaire, chef de service, sous-directeur ou directeur peuvent archiver une réunion.',
+        'Seuls l’organisateur ou un ayant-droit peuvent archiver une réunion.',
       );
     }
     const data = await reunionService.archiver(req.params.id as string);
@@ -104,6 +107,19 @@ export class ReunionController {
       );
     }
     const data = await reunionService.cloturer(req.params.id as string);
+    res.status(200).json({ success: true, data });
+  }
+
+  async annulerLive(req: Request, res: Response): Promise<void> {
+    if (!req.user) throw new AppError(401, 'Authentification requise.');
+    const reunion = await reunionService.obtenirParId(req.params.id as string);
+    if (!utilisateurPeutGererConduite(req.user, reunion)) {
+      throw new AppError(
+        403,
+        'Seuls l’organisateur ou un ayant-droit peuvent annuler le live.',
+      );
+    }
+    const data = await reunionService.annulerLive(req.params.id as string);
     res.status(200).json({ success: true, data });
   }
 
@@ -183,11 +199,34 @@ export class ReunionController {
   }
 
   async modifierParticipant(req: Request, res: Response): Promise<void> {
-    await this.assurerPeutEditerReunion(req, req.params.id as string);
+    if (!req.user) throw new AppError(401, 'Authentification requise.');
+    const reunion = await reunionService.obtenirParId(req.params.id as string);
+    const estOrganisateur = Boolean(
+      reunion.cree_par && reunion.cree_par === req.user.id,
+    );
+    const estAdmin = req.user.role === 'administrateur';
+    // Présences : organisateur (ou admin) uniquement — en live ou après clôture.
+    if (!estOrganisateur && !estAdmin) {
+      throw new AppError(
+        403,
+        'Seul l’organisateur peut modifier le statut de présence des participants.',
+      );
+    }
     const data = await reunionService.modifierParticipant(
       req.params.id as string,
       req.params.participantId as string,
       (req.body as { statut: string }).statut,
+      { estOrganisateur: true },
+    );
+    res.status(200).json({ success: true, data });
+  }
+
+  /** Participant connecté : marque sa propre présence en live. */
+  async rejoindreLive(req: Request, res: Response): Promise<void> {
+    if (!req.user) throw new AppError(401, 'Authentification requise.');
+    const data = await reunionService.rejoindreLive(
+      req.params.id as string,
+      req.user.id,
     );
     res.status(200).json({ success: true, data });
   }

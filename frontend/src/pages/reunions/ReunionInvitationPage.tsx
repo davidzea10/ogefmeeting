@@ -100,7 +100,7 @@ export function ReunionInvitationPage() {
         <div className="rounded-xl border border-border bg-surface p-6 text-sm text-text-muted">
           Vous n’êtes pas dans la liste des participants de cette réunion.
         </div>
-      ) : reunionTerminee && !dejaConfirme && !dejaAbsent ? (
+      ) : reunionTerminee && !dejaConfirme ? (
         <div className="flex items-start gap-3 rounded-xl border border-warning/40 bg-warning/10 p-5 text-text">
           <Info className="mt-0.5 h-5 w-5 shrink-0 text-warning" aria-hidden />
           <div>
@@ -108,6 +108,9 @@ export function ReunionInvitationPage() {
             <p className="mt-1 text-sm text-text-muted">
               Cette réunion a déjà eu lieu et est clôturée. Vous ne pouvez plus confirmer
               votre présence.
+              {dejaAbsent
+                ? ' Votre statut a été enregistré comme absent (vous n’étiez pas présent en live).'
+                : ''}
             </p>
             <Link to={`/reunions/${id}`} className="mt-3 inline-block">
               <Button size="sm" variant="outline">
@@ -120,9 +123,13 @@ export function ReunionInvitationPage() {
         <div className="flex items-start gap-3 rounded-xl border border-success/30 bg-success/10 p-5 text-success">
           <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" aria-hidden />
           <div>
-            <p className="font-semibold">Participation confirmée</p>
+            <p className="font-semibold">
+              {moi?.statut === 'present' ? 'Présence enregistrée' : 'Participation confirmée'}
+            </p>
             <p className="mt-1 text-sm opacity-90">
-              Vous êtes bien inscrit(e) à cette réunion.
+              {moi?.statut === 'present'
+                ? 'Vous avez participé à cette réunion (mode live).'
+                : 'Vous êtes bien inscrit(e) à cette réunion.'}
               {reunionTerminee ? ' La réunion est déjà clôturée.' : ''}
             </p>
             <Link to={`/reunions/${id}`} className="mt-3 inline-block">
@@ -138,22 +145,15 @@ export function ReunionInvitationPage() {
             <p className="mt-1 text-sm text-text-muted">
               Vous avez indiqué que vous ne participerez pas.
             </p>
-            {!reunionTerminee && (
-              <Button
-                className="mt-3"
-                size="sm"
-                variant="outline"
-                loading={mut.isPending}
-                onClick={() => mut.mutate('confirme')}
-              >
-                Confirmer finalement
-              </Button>
-            )}
-            {reunionTerminee && (
-              <p className="mt-2 text-sm text-text-muted">
-                La réunion a déjà eu lieu et est clôturée.
-              </p>
-            )}
+            <Button
+              className="mt-3"
+              size="sm"
+              variant="outline"
+              loading={mut.isPending}
+              onClick={() => mut.mutate('confirme')}
+            >
+              Confirmer finalement
+            </Button>
           </div>
         </div>
       ) : (

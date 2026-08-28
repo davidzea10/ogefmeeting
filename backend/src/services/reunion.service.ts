@@ -320,9 +320,23 @@ export class ReunionService {
     };
   }
 
-  async modifier(id: string, input: ModifierReunionInput): Promise<Reunion> {
-    await this.assurerExiste(id);
+  async modifier(
+    id: string,
+    input: ModifierReunionInput,
+    modifieParProfilId?: string | null,
+  ): Promise<Reunion> {
+    const reunionAvant = await this.assurerExiste(id);
+    if (reunionAvant.statut === 'cloturee' || reunionAvant.statut === 'archivee') {
+      throw new AppError(
+        400,
+        'Impossible de modifier une réunion clôturée (ou archivée).',
+      );
+    }
     const supabase = requireSupabaseAdmin();
+
+    const etaitDepasseeAvantModification =
+      reunionAvant.statut === 'planifiee' &&
+      new Date(reunionAvant.date_prevue as string).getTime() < Date.now();
 
     const { direction_ids, ...rest } = input;
     const updatePayload: Record<string, unknown> = { ...rest };
@@ -349,6 +363,81 @@ export class ReunionService {
 
     const reunion = data as Reunion;
     const directionMap = await this.chargerDirectionIds([id]);
+
+    if (
+      etaitDepasseeAvantModification &&
+      reunion.statut === 'planifiee' &&
+      reunion.date_prevue
+    ) {
+      try {
+        const dateLabel = new Date(reunion.date_prevue as string).toLocaleString(
+          'fr-FR',
+          { dateStyle: 'full', timeStyle: 'short' },
+        );
+        const lieuPart = reunion.lieu ? ` — ${reunion.lieu}` : '';
+
+        const metaCle = {
+          reunion_id: reunion.id,
+          kind: 'heure_depassee_modifiee',
+          date_prevue: reunion.date_prevue,
+        };
+
+        const { data: participants } = await supabase
+          .from(TABLES.participantsReunion)
+          .select('profil_id, statut')
+          .eq('reunion_id', reunion.id)
+          .in('statut', ['invite', 'confirme', 'present']);
+
+        const destinataireIds = new Set<string>();
+        if (reunion.cree_par) destinataireIds.add(reunion.cree_par as string);
+        if (modifieParProfilId) destinataireIds.add(modifieParProfilId);
+        for (const p of participants ?? []) {
+          if (p.profil_id) destinataireIds.add(p.profil_id as string);
+        }
+
+        const ids = [...destinataireIds];
+        if (ids.length > 0) {
+          const { data: profils } = await supabase
+            .from(TABLES.profils)
+            .select('id, email, prenom, nom, est_actif')
+            .in('id', ids)
+            .eq('est_actif', true);
+
+          const destinataires: any[] = [];
+          for (const profil of profils ?? []) {
+            const { data: deja } = await supabase
+              .from(TABLES.notifications)
+              .select('id')
+              .eq('profil_id', profil.id)
+              .eq('type', 'reunion_heure_depassee_modifiee')
+              .contains('metadonnees', metaCle)
+              .maybeSingle();
+            if (!deja) destinataires.push(profil);
+          }
+
+          if (destinataires.length > 0) {
+            await notificationService.creerPourProfils(
+              destinataires,
+              {
+                type: 'reunion_heure_depassee_modifiee',
+                titre: 'Réunion replanifiée',
+                message:
+                  `L’heure prévue de la réunion « ${reunion.titre} » a été replanifiée.\n\n` +
+                  `Nouvelle heure : ${dateLabel}${lieuPart}.\n\n` +
+                  `Attendez que l’organisateur lance le live.`,
+                lien: `/reunions/${reunion.id}`,
+                emailSujet: `[Ogefmeeting] Réunion replanifiée — ${reunion.titre}`,
+                emailBoutonLibelle: 'Voir la réunion',
+                metadonnees: metaCle,
+              },
+            );
+          }
+        }
+      } catch {
+        /* best-effort */
+      }
+    }
+
     return this.enrichirAvecDirections(reunion, directionMap);
   }
 
@@ -356,7 +445,7 @@ export class ReunionService {
   async archiver(id: string): Promise<Reunion> {
     const reunion = await this.assurerExiste(id);
 
-    if (reunion.statut === 'en_cours') {
+    if (reunion.statut === 'en_cours' || reunion.statut === 'en_pause') {
       throw new AppError(400, 'Impossible d’archiver une réunion en cours. Clôturez-la d’abord.');
     }
 
@@ -387,13 +476,13 @@ export class ReunionService {
 
     const supabase = requireSupabaseAdmin();
     const maintenant = new Date().toISOString();
+    const etaitDepassee =
+      new Date(reunion.date_prevue as string).getTime() < Date.now();
     const { data, error } = await supabase
       .from(TABLES.reunions)
       .update({
         statut: 'en_cours',
         date_debut: maintenant,
-        // Écrase l’heure planifiée par l’heure réelle de démarrage.
-        date_prevue: maintenant,
       })
       .eq('id', id)
       .select('*')
@@ -404,7 +493,11 @@ export class ReunionService {
     }
 
     const demarree = data as Reunion;
-    void this.notifierInvitesReunionDemarree(demarree, demarreParProfilId ?? null);
+    void this.notifierInvitesReunionDemarree(
+      demarree,
+      demarreParProfilId ?? null,
+      etaitDepassee,
+    );
 
     return demarree;
   }
@@ -413,6 +506,7 @@ export class ReunionService {
   private async notifierInvitesReunionDemarree(
     reunion: Pick<Reunion, 'id' | 'titre' | 'lieu'>,
     demarreParProfilId: string | null,
+    notifierOrganisateur?: boolean,
   ): Promise<void> {
     try {
       const supabase = requireSupabaseAdmin();
@@ -465,6 +559,42 @@ export class ReunionService {
         emailBoutonLibelle: 'Rejoindre le live',
         metadonnees: metaCle,
       });
+
+      // Optionnel : notifier le démarrage à l’organisateur/ayant-droit si l’heure était dépassée.
+      if (notifierOrganisateur && demarreParProfilId) {
+        const { data: organisateur } = await supabase
+          .from(TABLES.profils)
+          .select('id, email, prenom, nom, est_actif')
+          .eq('id', demarreParProfilId)
+          .eq('est_actif', true)
+          .maybeSingle();
+
+        if (organisateur) {
+          const { data: deja } = await supabase
+            .from(TABLES.notifications)
+            .select('id')
+            .eq('profil_id', organisateur.id)
+            .eq('type', 'reunion_demarree')
+            .contains('metadonnees', metaCle)
+            .maybeSingle();
+
+          if (!deja) {
+            await notificationService.creerPourProfils(
+              [organisateur as any],
+              {
+                type: 'reunion_demarree',
+                titre: 'La réunion a commencé',
+                message:
+                  `Vous avez démarré « ${reunion.titre} »${lieuPart}.`,
+                lien: `/reunions/${reunion.id}/live`,
+                emailSujet: `[Ogefmeeting] En cours — ${reunion.titre}`,
+                emailBoutonLibelle: 'Rejoindre le live',
+                metadonnees: metaCle,
+              },
+            );
+          }
+        }
+      }
     } catch {
       /* best-effort */
     }
@@ -585,11 +715,15 @@ export class ReunionService {
     }
 
     const supabase = requireSupabaseAdmin();
+    const dateDebut = reunion.date_debut ?? new Date().toISOString();
     const { data, error } = await supabase
       .from(TABLES.reunions)
       .update({
         statut: 'cloturee',
         date_fin: new Date().toISOString(),
+        // Heure réelle de début = référence officielle (écrase la planification).
+        date_prevue: dateDebut,
+        date_debut: dateDebut,
       })
       .eq('id', id)
       .select('*')
@@ -599,12 +733,110 @@ export class ReunionService {
       handleSupabaseError(error, 'Impossible de clôturer la réunion.');
     }
 
+    // Absents automatiques : tout participant non passé « présent » en live.
+    await supabase
+      .from(TABLES.participantsReunion)
+      .update({ statut: 'absent' })
+      .eq('reunion_id', id)
+      .neq('statut', 'present');
+
     const reunionCloturee = data as Reunion;
     // Si un CR est déjà validé, envoi automatique du PDF aux participants
     void tenterEnvoiRapportSiPret(id);
     void this.notifierInvitesReunionCloturee(reunionCloturee);
 
     return reunionCloturee;
+  }
+
+  /**
+   * Annule un live en cours : retour à « planifiée », sans conserver audio / STT / CR brouillon.
+   * Les réunions de test `[TEST LIVE]` sont archivées pour ne pas rester dans le planning.
+   */
+  async annulerLive(id: string): Promise<Reunion> {
+    const reunion = await this.assurerExiste(id);
+
+    if (reunion.statut !== 'en_cours' && reunion.statut !== 'en_pause') {
+      throw new AppError(
+        400,
+        `Impossible d’annuler le live d’une réunion au statut « ${reunion.statut} ».`,
+      );
+    }
+
+    const supabase = requireSupabaseAdmin();
+
+    // Purge audio (stockage + DB)
+    const { data: audios } = await supabase
+      .from(TABLES.enregistrements)
+      .select('id, chemin_stockage')
+      .eq('reunion_id', id);
+
+    const chemins = (audios ?? [])
+      .map((a) => a.chemin_stockage as string)
+      .filter(Boolean);
+    if (chemins.length > 0) {
+      await supabase.storage.from('recordings').remove(chemins);
+    }
+    await supabase.from(TABLES.enregistrements).delete().eq('reunion_id', id);
+
+    // Purge transcriptions
+    await supabase.from(TABLES.transcriptions).delete().eq('reunion_id', id);
+
+    // Purge comptes rendus brouillon éventuels (créés par erreur avant clôture)
+    await supabase
+      .from(TABLES.comptesRendus)
+      .delete()
+      .eq('reunion_id', id)
+      .eq('statut', 'brouillon');
+
+    // Remet les points ODJ comme non traités
+    await supabase
+      .from(TABLES.pointsOrdreJour)
+      .update({ est_traite: false })
+      .eq('reunion_id', id);
+
+    // Présences live → repasse en « confirmé » (l’invitation reste valide)
+    await supabase
+      .from(TABLES.participantsReunion)
+      .update({ statut: 'confirme', present_le: null })
+      .eq('reunion_id', id)
+      .eq('statut', 'present');
+
+    const estTestLive = reunion.titre.trim().startsWith('[TEST LIVE]');
+
+    if (estTestLive) {
+      const { data, error } = await supabase
+        .from(TABLES.reunions)
+        .update({
+          statut: 'archivee',
+          date_debut: null,
+          date_fin: null,
+        })
+        .eq('id', id)
+        .select('*')
+        .single();
+
+      if (error) {
+        handleSupabaseError(error, 'Impossible d’annuler le test live.');
+      }
+      return data as Reunion;
+    }
+
+    const { data, error } = await supabase
+      .from(TABLES.reunions)
+      .update({
+        statut: 'planifiee',
+        date_debut: null,
+        date_fin: null,
+      })
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (error) {
+      handleSupabaseError(error, 'Impossible d’annuler le live.');
+    }
+
+    return data as Reunion;
   }
 
   /** Informe les invités qui n’ont pas répondu que la réunion est déjà clôturée. */
@@ -725,6 +957,12 @@ export class ReunionService {
     input: GererParticipantsInput,
   ): Promise<ParticipantReunion[]> {
     const reunion = await this.assurerExiste(id);
+    if (reunion.statut === 'cloturee' || reunion.statut === 'archivee') {
+      throw new AppError(
+        400,
+        'Impossible de modifier des participants : la réunion est clôturée.',
+      );
+    }
     const supabase = requireSupabaseAdmin();
 
     const { data: existants, error: existantsError } = await supabase
@@ -885,6 +1123,124 @@ export class ReunionService {
       handleSupabaseError(error, 'Impossible d’enregistrer votre réponse.');
     }
 
+    const misAJour = data as ParticipantReunion;
+    void this.alerterOrganisateurReponseInvitation(reunion, profilId, reponse);
+
+    return misAJour;
+  }
+
+  /** Alerte in-app pour l’organisateur (visible aussi dans l’onglet Informations). */
+  private async alerterOrganisateurReponseInvitation(
+    reunion: Pick<Reunion, 'id' | 'titre' | 'cree_par'>,
+    repondantProfilId: string,
+    reponse: 'confirme' | 'absent',
+  ): Promise<void> {
+    try {
+      if (!reunion.cree_par || reunion.cree_par === repondantProfilId) return;
+      const supabase = requireSupabaseAdmin();
+
+      const [{ data: organisateur }, { data: repondant }] = await Promise.all([
+        supabase
+          .from(TABLES.profils)
+          .select('id, email, prenom, nom, est_actif')
+          .eq('id', reunion.cree_par)
+          .eq('est_actif', true)
+          .maybeSingle(),
+        supabase
+          .from(TABLES.profils)
+          .select('prenom, nom')
+          .eq('id', repondantProfilId)
+          .maybeSingle(),
+      ]);
+
+      if (!organisateur) return;
+
+      const nom =
+        repondant
+          ? `${(repondant as { prenom?: string }).prenom ?? ''} ${(repondant as { nom?: string }).nom ?? ''}`.trim()
+          : 'Un participant';
+      const verbe = reponse === 'confirme' ? 'a confirmé sa présence' : 'a décliné l’invitation';
+
+      await notificationService.creerPourProfils(
+        [organisateur as { id: string; email?: string | null; prenom?: string; nom?: string }],
+        {
+          type: 'invitation_repondue',
+          titre: reponse === 'confirme' ? 'Présence confirmée' : 'Invitation déclinée',
+          message: `${nom || 'Un participant'} ${verbe} pour « ${reunion.titre} ».`,
+          lien: `/reunions/${reunion.id}?tab=informations`,
+          emailSujet: `[Ogefmeeting] ${verbe} — ${reunion.titre}`,
+          emailBoutonLibelle: 'Voir la réunion',
+          metadonnees: {
+            reunion_id: reunion.id,
+            kind: 'reponse_invitation',
+            reponse,
+            profil_id: repondantProfilId,
+          },
+        },
+      );
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  /**
+   * Marque le participant connecté comme « présent » dès qu’il entre en mode live.
+   */
+  async rejoindreLive(
+    reunionId: string,
+    profilId: string,
+  ): Promise<ParticipantReunion> {
+    const reunion = await this.assurerExiste(reunionId);
+
+    if (reunion.statut !== 'en_cours' && reunion.statut !== 'en_pause') {
+      throw new AppError(
+        400,
+        'Vous ne pouvez marquer votre présence que pendant une réunion en cours.',
+      );
+    }
+
+    const supabase = requireSupabaseAdmin();
+    const { data: participant, error: findError } = await supabase
+      .from(TABLES.participantsReunion)
+      .select('*')
+      .eq('reunion_id', reunionId)
+      .eq('profil_id', profilId)
+      .maybeSingle();
+
+    if (findError) {
+      handleSupabaseError(findError, 'Impossible de trouver votre participation.');
+    }
+    if (!participant) {
+      throw new AppError(404, 'Vous n’êtes pas participant de cette réunion.');
+    }
+
+    const actuel = participant as ParticipantReunion;
+    if (actuel.statut === 'present') {
+      if (actuel.present_le) return actuel;
+      const { data: corrige, error: corrigeErr } = await supabase
+        .from(TABLES.participantsReunion)
+        .update({ present_le: new Date().toISOString() })
+        .eq('id', actuel.id)
+        .select('*')
+        .single();
+      if (corrigeErr) {
+        handleSupabaseError(corrigeErr, 'Impossible de mettre à jour la présence.');
+      }
+      return corrige as ParticipantReunion;
+    }
+
+    const maintenant = new Date().toISOString();
+    const { data, error } = await supabase
+      .from(TABLES.participantsReunion)
+      .update({ statut: 'present', present_le: maintenant })
+      .eq('id', actuel.id)
+      .select('*')
+      .single();
+
+    if (error) {
+      handleSupabaseError(error, 'Impossible de marquer votre présence.');
+    }
+
     return data as ParticipantReunion;
   }
 
@@ -893,7 +1249,13 @@ export class ReunionService {
    * suppression des points retirés. Préserve est_traite sauf si fourni explicitement.
    */
   async gererOrdreJour(id: string, input: GererOrdreJourInput): Promise<PointOrdreJour[]> {
-    await this.assurerExiste(id);
+    const reunion = await this.assurerExiste(id);
+    if (reunion.statut === 'cloturee' || reunion.statut === 'archivee') {
+      throw new AppError(
+        400,
+        'Impossible de modifier l’ordre du jour : la réunion est clôturée.',
+      );
+    }
     const supabase = requireSupabaseAdmin();
 
     const { data: existingRows, error: fetchError } = await supabase
@@ -979,7 +1341,19 @@ export class ReunionService {
     pointId: string,
     estTraite: boolean,
   ): Promise<PointOrdreJour> {
-    await this.assurerExiste(reunionId);
+    const reunion = await this.assurerExiste(reunionId);
+    if (reunion.statut === 'cloturee' || reunion.statut === 'archivee') {
+      throw new AppError(
+        400,
+        'Impossible de modifier un point : la réunion est clôturée.',
+      );
+    }
+    if (reunion.statut !== 'en_cours' && reunion.statut !== 'en_pause') {
+      throw new AppError(
+        400,
+        `Impossible de modifier un point au statut « ${reunion.statut} ».`,
+      );
+    }
     const supabase = requireSupabaseAdmin();
 
     const { data, error } = await supabase
@@ -1001,13 +1375,48 @@ export class ReunionService {
     reunionId: string,
     participantId: string,
     statut: string,
+    _opts?: { estOrganisateur?: boolean },
   ): Promise<ParticipantReunion> {
-    await this.assurerExiste(reunionId);
+    const reunion = await this.assurerExiste(reunionId);
+
+    const live = reunion.statut === 'en_cours' || reunion.statut === 'en_pause';
+    const cloturee = reunion.statut === 'cloturee';
+
+    if (!live && !cloturee) {
+      throw new AppError(
+        400,
+        `Impossible de modifier la présence au statut « ${reunion.statut} ».`,
+      );
+    }
+
+    // Après clôture : correction manuelle (présent / absent uniquement).
+    if (cloturee && statut !== 'present' && statut !== 'absent') {
+      throw new AppError(
+        400,
+        'Après clôture, seuls les statuts « présent » et « absent » sont autorisés.',
+      );
+    }
+
     const supabase = requireSupabaseAdmin();
+
+    const patch: { statut: string; present_le?: string | null } = { statut };
+    if (statut === 'present') {
+      const { data: actuel } = await supabase
+        .from(TABLES.participantsReunion)
+        .select('present_le')
+        .eq('id', participantId)
+        .eq('reunion_id', reunionId)
+        .maybeSingle();
+      if (!actuel?.present_le) {
+        patch.present_le = new Date().toISOString();
+      }
+    } else if (live) {
+      patch.present_le = null;
+    }
 
     const { data, error } = await supabase
       .from(TABLES.participantsReunion)
-      .update({ statut })
+      .update(patch)
       .eq('id', participantId)
       .eq('reunion_id', reunionId)
       .select('*')

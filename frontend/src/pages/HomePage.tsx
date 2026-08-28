@@ -58,7 +58,9 @@ export function HomePage() {
         page: 1,
         limite: 8,
         statut: 'planifiee',
-        date_apres: new Date().toISOString(),
+          // On garde un petit historique pour pouvoir afficher les réunions « en retard »
+          // dès que l’heure prévue est passée (sans attendre une tâche de fond).
+          date_apres: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
         tri: 'date_prevue',
         ordre: 'asc',
       }),
@@ -159,6 +161,31 @@ export function HomePage() {
     })),
   });
 
+  const reunionsDepasseesInvitees = useMemo(() => {
+    if (estAdmin || !profilId) return [] as Reunion[];
+    const now = Date.now();
+    const eligible = countdownDetails
+      .map((q) => q.data)
+      .filter((detail): detail is NonNullable<typeof detail> => Boolean(detail))
+      .filter((detail) => {
+        if (detail.statut !== 'planifiee') return false;
+        const target = new Date(detail.date_prevue).getTime();
+        if (Number.isNaN(target) || target < now - 6 * 60 * 60 * 1000) return false;
+        if (target > now) return false;
+        const moi = detail.participants.find((p) => p.profil_id === profilId);
+        return (
+          moi?.statut === 'invite' ||
+          moi?.statut === 'confirme' ||
+          moi?.statut === 'present'
+        );
+      })
+      .sort(
+        (a, b) =>
+          new Date(a.date_prevue).getTime() - new Date(b.date_prevue).getTime(),
+      );
+    return eligible.slice(0, 3);
+  }, [countdownDetails, estAdmin, profilId]);
+
   const prochaineReunionInvitee = useMemo(() => {
     if (estAdmin || !profilId) return null;
     const now = Date.now();
@@ -168,7 +195,7 @@ export function HomePage() {
       .filter((detail) => {
         if (detail.statut !== 'planifiee') return false;
         const target = new Date(detail.date_prevue).getTime();
-        if (Number.isNaN(target) || target < now - 30 * 60 * 1000) return false;
+        if (Number.isNaN(target) || target < now) return false;
         const moi = detail.participants.find((p) => p.profil_id === profilId);
         return (
           moi?.statut === 'invite' ||
@@ -262,8 +289,22 @@ export function HomePage() {
         </div>
       </section>
 
-      {!estAdmin && prochaineReunionInvitee && (
-        <ReunionCountdownCard reunion={prochaineReunionInvitee} />
+      {!estAdmin && reunionsDepasseesInvitees.length > 0 && (
+        <div className="space-y-4">
+          {reunionsDepasseesInvitees.map((r) => (
+            <ReunionCountdownCard
+              key={r.id}
+              reunion={r}
+              estOrganisateur={Boolean(profilId && r.cree_par === profilId)}
+            />
+          ))}
+        </div>
+      )}
+      {!estAdmin && reunionsDepasseesInvitees.length === 0 && prochaineReunionInvitee && (
+        <ReunionCountdownCard
+          reunion={prochaineReunionInvitee}
+          estOrganisateur={Boolean(profilId && prochaineReunionInvitee.cree_par === profilId)}
+        />
       )}
 
       {estValidateur ? (

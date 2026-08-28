@@ -1,5 +1,6 @@
 import { useAnnouncerStore } from '@/components/a11y/LiveAnnouncer';
 import { Breadcrumbs } from '@/components/layout/Breadcrumbs';
+import { ConfirmationsPresencePanel } from '@/components/reunions/ConfirmationsPresencePanel';
 import { EnregistrementsSection } from '@/components/reunions/EnregistrementsSection';
 import { ReunionStatusBadge } from '@/components/reunions/ReunionStatusBadge';
 import { ReunionTabs, type TabId } from '@/components/reunions/ReunionTabs';
@@ -13,6 +14,7 @@ import {
   LIBELLES_PARTICIPANT,
   LIBELLES_TYPE,
 } from '@/lib/labels';
+import { listerNotifications } from '@/lib/notifications-api';
 import {
   archiverReunion,
   approuverReunion,
@@ -96,6 +98,12 @@ export function ReunionDetailPage() {
     queryFn: listerDirections,
   });
 
+  const alertesConfirmationsQuery = useQuery({
+    queryKey: ['notifications', 'confirmations-reunion', id],
+    queryFn: () => listerNotifications({ page: 1, limite: 50 }),
+    enabled: Boolean(id) && Boolean(peutGerer),
+  });
+
   const actionsQuery = useQuery({
     queryKey: ['actions-reunion', id],
     queryFn: () => listerActions({ reunion_id: id!, limite: 50 }),
@@ -121,6 +129,20 @@ export function ReunionDetailPage() {
     }
     return map;
   }, [profilsQuery.data]);
+
+  const alertesConfirmations = useMemo(() => {
+    if (!id) return [];
+    return (alertesConfirmationsQuery.data?.items ?? [])
+      .filter(
+        (n) =>
+          n.type === 'invitation_repondue' &&
+          (n.metadonnees as { reunion_id?: string } | null)?.reunion_id === id,
+      )
+      .sort(
+        (a, b) =>
+          new Date(b.cree_le).getTime() - new Date(a.cree_le).getTime(),
+      );
+  }, [alertesConfirmationsQuery.data, id]);
 
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ['reunion', id] });
@@ -262,15 +284,25 @@ export function ReunionDetailPage() {
     monInvitation?.statut === 'invite' &&
     reunion.statut !== 'cloturee' &&
     reunion.statut !== 'archivee';
-  const invitationExpiree =
-    monInvitation?.statut === 'invite' &&
-    (reunion.statut === 'cloturee' || reunion.statut === 'archivee');
-  const peutModifier = peutModifierReunionRole(
-    role,
-    profil?.fonction,
-    userId,
-    reunion,
+  const montrerInvitationExpiree =
+    Boolean(monInvitation) &&
+    (reunion.statut === 'cloturee' || reunion.statut === 'archivee') &&
+    monInvitation!.statut !== 'present';
+  const reunionVerrouillee =
+    reunion.statut === 'cloturee' || reunion.statut === 'archivee';
+  const peutModifier =
+    !reunionVerrouillee &&
+    peutModifierReunionRole(role, profil?.fonction, userId, reunion);
+  const estOrganisateur = Boolean(
+    userId && reunion.cree_par && reunion.cree_par === userId,
   );
+  const estAdmin = role === 'administrateur';
+  /** Présences : organisateur (ou admin) en live ou après clôture. */
+  const peutChangerPresence =
+    (estOrganisateur || estAdmin) &&
+    (reunion.statut === 'en_cours' ||
+      reunion.statut === 'en_pause' ||
+      reunion.statut === 'cloturee');
   const peutVoirArchives = peutVoirArchivesMediaRole(
     role,
     profil?.fonction,
@@ -446,7 +478,7 @@ export function ReunionDetailPage() {
         </div>
       )}
 
-      {invitationExpiree && (
+      {montrerInvitationExpiree && (
         <div className="rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm text-text">
           Cette réunion a déjà eu lieu et est clôturée. Vous ne pouvez plus confirmer votre
           présence.
@@ -457,31 +489,40 @@ export function ReunionDetailPage() {
 
       <ReunionTabs tabs={tabs} active={tab} onChange={setTab}>
         {tab === 'informations' && (
-          <dl className="grid gap-4 sm:grid-cols-2">
-            <InfoItem label="Description" value={reunion.description || '—'} />
-            <InfoItem label="Type" value={LIBELLES_TYPE[reunion.type_reunion]} />
-            <InfoItem
-              label={reunion.date_debut ? 'Date / heure de début' : 'Date prévue'}
-              value={formatDateHeure(reunion.date_debut ?? reunion.date_prevue)}
+          <div className="space-y-6">
+            <dl className="grid gap-4 sm:grid-cols-2">
+              <InfoItem label="Description" value={reunion.description || '—'} />
+              <InfoItem label="Type" value={LIBELLES_TYPE[reunion.type_reunion]} />
+              <InfoItem
+                label={reunion.date_debut ? 'Date / heure de début' : 'Date prévue'}
+                value={formatDateHeure(reunion.date_debut ?? reunion.date_prevue)}
+              />
+              <InfoItem label="Lieu" value={reunion.lieu || '—'} />
+              <InfoItem
+                label={directionIds.length > 1 ? 'Directions' : 'Direction'}
+                value={libelleDirections}
+              />
+              <InfoItem
+                label="Début réel"
+                value={reunion.date_debut ? formatDateHeure(reunion.date_debut) : '—'}
+              />
+              <InfoItem
+                label="Fin réelle"
+                value={reunion.date_fin ? formatDateHeure(reunion.date_fin) : '—'}
+              />
+              <InfoItem
+                label="Créée le"
+                value={formatDateHeure(reunion.cree_le)}
+              />
+            </dl>
+
+            <ConfirmationsPresencePanel
+              participants={reunion.participants}
+              profilMap={profilMap}
+              alertes={alertesConfirmations}
+              montrerAlertes={peutGerer}
             />
-            <InfoItem label="Lieu" value={reunion.lieu || '—'} />
-            <InfoItem
-              label={directionIds.length > 1 ? 'Directions' : 'Direction'}
-              value={libelleDirections}
-            />
-            <InfoItem
-              label="Début réel"
-              value={reunion.date_debut ? formatDateHeure(reunion.date_debut) : '—'}
-            />
-            <InfoItem
-              label="Fin réelle"
-              value={reunion.date_fin ? formatDateHeure(reunion.date_fin) : '—'}
-            />
-            <InfoItem
-              label="Créée le"
-              value={formatDateHeure(reunion.cree_le)}
-            />
-          </dl>
+          </div>
         )}
 
         {tab === 'participants' && (
@@ -505,7 +546,7 @@ export function ReunionDetailPage() {
                         <p className="font-semibold text-text">{nom}</p>
                         <p className="text-xs text-text-muted">{profil?.email}</p>
                         <div className="mt-2">
-                          {peutModifier ? (
+                          {peutChangerPresence ? (
                             <select
                               className="h-10 w-full rounded-lg border border-border bg-surface px-2 text-sm"
                               value={p.statut}
@@ -518,7 +559,10 @@ export function ReunionDetailPage() {
                               }
                               aria-label={`Statut de ${nom}`}
                             >
-                              {STATUTS_PARTICIPANT.map((s) => (
+                              {(reunion.statut === 'cloturee'
+                                ? (['present', 'absent'] as const)
+                                : STATUTS_PARTICIPANT
+                              ).map((s) => (
                                 <option key={s} value={s}>
                                   {LIBELLES_PARTICIPANT[s]}
                                 </option>
@@ -564,7 +608,7 @@ export function ReunionDetailPage() {
                               {profil?.email ?? '—'}
                             </td>
                             <td className="px-4 py-3">
-                              {peutModifier ? (
+                              {peutChangerPresence ? (
                                 <select
                                   className="h-9 rounded-lg border border-border bg-surface px-2 text-sm"
                                   value={p.statut}
@@ -577,7 +621,10 @@ export function ReunionDetailPage() {
                                   }
                                   aria-label={`Statut de ${nom}`}
                                 >
-                                  {STATUTS_PARTICIPANT.map((s) => (
+                                  {(reunion.statut === 'cloturee'
+                                    ? (['present', 'absent'] as const)
+                                    : STATUTS_PARTICIPANT
+                                  ).map((s) => (
                                     <option key={s} value={s}>
                                       {LIBELLES_PARTICIPANT[s]}
                                     </option>

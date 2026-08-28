@@ -19,8 +19,11 @@ import { Link } from 'react-router-dom';
 
 const LIBELLE_TYPE: Record<string, string> = {
   invitation_reunion: 'Invitation',
+  invitation_repondue: 'Réponse invitation',
   reunion_demarree: 'Réunion en cours',
   reunion_cloturee: 'Réunion clôturée',
+  reunion_heure_depassee: 'Réunion en retard',
+  reunion_heure_depassee_modifiee: 'Réunion replanifiée',
   reunion_a_valider: 'À valider',
   reunion_approuvee: 'Réunion approuvée',
   reunion_refusee: 'Réunion refusée',

@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { isDeepgramConfigured } from '../services/deepgram.service.js';
 import { transcriptionsService } from '../services/transcriptions.service.js';
 import { reunionService } from '../services/reunion.service.js';
 import { AppError } from '../utils/errors.js';
@@ -21,6 +22,20 @@ function peutVoirArchives(
  * Contrôleur Transcriptions.
  */
 export class TranscriptionsController {
+  /** Indique si la transcription live (Deepgram) est disponible. */
+  async statutStt(_req: Request, res: Response): Promise<void> {
+    const disponible = isDeepgramConfigured();
+    res.status(200).json({
+      success: true,
+      data: {
+        disponible,
+        message: disponible
+          ? null
+          : 'Transcription live indisponible : ajoutez DEEPGRAM_API_KEY dans le .env du backend.',
+      },
+    });
+  }
+
   async sauvegarder(req: Request, res: Response): Promise<void> {
     if (!req.user) throw new AppError(401, 'Authentification requise.');
 

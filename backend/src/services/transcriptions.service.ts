@@ -60,21 +60,19 @@ export class TranscriptionsService {
     return (data ?? []) as Transcription[];
   }
 
-  async obtenirParId(id: string): Promise<Transcription> {
+  async supprimerParReunion(reunionId: string): Promise<number> {
+    await reunionService.obtenirParId(reunionId);
     const supabase = requireSupabaseAdmin();
     const { data, error } = await supabase
       .from(TABLES.transcriptions)
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
+      .delete()
+      .eq('reunion_id', reunionId)
+      .select('id');
 
     if (error) {
-      handleSupabaseError(error, 'Impossible de charger la transcription.');
+      handleSupabaseError(error, 'Impossible de supprimer les transcriptions.');
     }
-    if (!data) {
-      throw new AppError(404, 'Transcription introuvable.');
-    }
-    return data as Transcription;
+    return data?.length ?? 0;
   }
 }
 

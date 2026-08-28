@@ -365,6 +365,8 @@ export type ParticipantReunion = {
   profil_id: string;
   statut: StatutParticipant;
   cree_le: string;
+  /** Horodatage d'entrée en mode live (présence effective). */
+  present_le: string | null;
 };
 
 export type PointOrdreJour = {
@@ -529,8 +531,11 @@ export type ParametresApplication = {
 
 export const TYPES_NOTIFICATION = [
   'invitation_reunion',
+  'invitation_repondue',
   'reunion_demarree',
   'reunion_cloturee',
+  'reunion_heure_depassee',
+  'reunion_heure_depassee_modifiee',
   'reunion_a_valider',
   'reunion_approuvee',
   'reunion_refusee',

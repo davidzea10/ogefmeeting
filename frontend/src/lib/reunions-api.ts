@@ -126,6 +126,10 @@ export function cloturerReunion(id: string) {
   return apiFetch<Reunion>(`/api/reunions/${id}/cloturer`, { method: 'POST' });
 }
 
+export function annulerLiveReunion(id: string) {
+  return apiFetch<Reunion>(`/api/reunions/${id}/annuler-live`, { method: 'POST' });
+}
+
 export function mettreReunionEnPause(id: string) {
   return apiFetch<Reunion>(`/api/reunions/${id}/pause`, { method: 'POST' });
 }
@@ -160,6 +164,14 @@ export function modifierParticipantStatut(
       body: JSON.stringify({ statut }),
     },
   );
+}
+
+/** Marque le participant connecté comme présent en mode live. */
+export function rejoindreLiveReunion(reunionId: string) {
+  return apiFetch<ParticipantReunion>(`/api/reunions/${reunionId}/rejoindre-live`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
 }
 
 /** Confirmer ou décliner sa propre invitation (depuis le mail / notif). */

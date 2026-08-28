@@ -88,6 +88,14 @@ reunionsRouter.post(
 );
 
 reunionsRouter.post(
+  '/:id/annuler-live',
+  requireAuth,
+  requirePermission(PERMISSIONS.REUNIONS_DEMARRER),
+  validateParams(idParamSchema),
+  asyncHandler((req, res) => reunionController.annulerLive(req, res)),
+);
+
+reunionsRouter.post(
   '/:id/pause',
   requireAuth,
   requirePermission(PERMISSIONS.REUNIONS_DEMARRER),
@@ -136,6 +144,15 @@ reunionsRouter.post(
   validateParams(idParamSchema),
   validateBody(repondreInvitationSchema),
   asyncHandler((req, res) => reunionController.repondreInvitation(req, res)),
+);
+
+/** Participant : se marquer présent en entrant dans le live */
+reunionsRouter.post(
+  '/:id/rejoindre-live',
+  requireAuth,
+  requirePermission(PERMISSIONS.REUNIONS_LIRE),
+  validateParams(idParamSchema),
+  asyncHandler((req, res) => reunionController.rejoindreLive(req, res)),
 );
 
 reunionsRouter.put(

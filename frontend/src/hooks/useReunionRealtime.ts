@@ -4,8 +4,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
 /**
- * Abonne Realtime aux changements de la réunion (+ points ODJ).
- * Fallback : polling 8s si Supabase non configuré.
+ * Abonne Realtime aux changements de la réunion (+ points ODJ + participants).
+ * Fallback : polling 3s si Supabase Realtime non configuré.
  */
 export function useReunionRealtime(reunionId: string | undefined) {
   const queryClient = useQueryClient();
@@ -14,7 +14,7 @@ export function useReunionRealtime(reunionId: string | undefined) {
     if (!reunionId) return;
 
     const invalidate = () => {
-      void queryClient.invalidateQueries({ queryKey: ['reunion', reunionId] });
+      void queryClient.refetchQueries({ queryKey: ['reunion', reunionId] });
     };
 
     const supabase = getSupabaseBrowser();
@@ -59,7 +59,7 @@ export function useReunionRealtime(reunionId: string | undefined) {
       };
     }
 
-    const poll = window.setInterval(invalidate, 8000);
+    const poll = window.setInterval(invalidate, 2000);
     return () => window.clearInterval(poll);
   }, [reunionId, queryClient]);
 }

@@ -20,6 +20,12 @@ const reunionIdParam = z.object({
   reunionId: idParamSchema.shape.id,
 });
 
+/** Public : permet un échec rapide côté UI sans attendre le timeout WebSocket. */
+transcriptionsRouter.get(
+  '/stt-status',
+  asyncHandler((req, res) => transcriptionsController.statutStt(req, res)),
+);
+
 transcriptionsRouter.post(
   '/',
   requireAuth,

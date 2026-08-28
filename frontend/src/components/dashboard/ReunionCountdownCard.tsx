@@ -29,10 +29,11 @@ function pad(n: number) {
 
 type Props = {
   reunion: Reunion;
+  estOrganisateur?: boolean;
 };
 
 /** Grand compte à rebours vers la prochaine réunion où l’utilisateur est invité. */
-export function ReunionCountdownCard({ reunion }: Props) {
+export function ReunionCountdownCard({ reunion, estOrganisateur = false }: Props) {
   const targetMs = useMemo(
     () => new Date(reunion.date_prevue).getTime(),
     [reunion.date_prevue],
@@ -45,7 +46,10 @@ export function ReunionCountdownCard({ reunion }: Props) {
   }, []);
 
   const parts = splitCountdown(targetMs, now);
-  const started = parts.totalMs === 0;
+  const isEnCours =
+    reunion.statut === 'en_cours' || reunion.statut === 'en_pause';
+  const isOverdue = reunion.statut === 'planifiee' && parts.totalMs === 0;
+  const retardMs = Math.max(0, now - targetMs);
 
   return (
     <section
@@ -88,9 +92,20 @@ export function ReunionCountdownCard({ reunion }: Props) {
           </Link>
         </div>
 
-        {started ? (
+        {isEnCours ? (
           <p className="rounded-xl bg-ogefrem-blue/10 px-4 py-3 text-center text-base font-semibold text-ogefrem-blue sm:text-lg">
             La réunion a commencé — rejoignez-la maintenant.
+          </p>
+        ) : isOverdue ? (
+          <p className="rounded-xl bg-ogefrem-blue/10 px-4 py-3 text-center text-base font-semibold text-ogefrem-blue sm:text-lg">
+            {estOrganisateur
+              ? "L’heure de la réunion est dépassée — lancez le live ou modifiez la date."
+              : 'L’heure de la réunion est dépassée — attendez que l’organisateur lance.'}
+            {retardMs > 0 ? (
+              <span className="mt-1 block text-sm font-normal text-ogefrem-blue/80">
+                Retard : {Math.round(retardMs / 60_000)} min
+              </span>
+            ) : null}
           </p>
         ) : (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">

@@ -24,6 +24,8 @@ type Props = {
 export type EnregistrementLivePanelHandle = {
   /** Arrête l'enregistrement en cours et attend la fin de l'envoi (clôture). */
   preparerCloture: () => Promise<void>;
+  /** Arrête sans uploader (annulation du live). */
+  abandonner: () => void;
 };
 
 type Etat = 'idle' | 'recording' | 'paused' | 'uploading' | 'ready' | 'error';
@@ -83,8 +85,32 @@ export const EnregistrementLivePanel = forwardRef<EnregistrementLivePanelHandle,
   const [qualiteLabel, setQualiteLabel] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const clotureUploadRef = useRef<((err?: Error) => void) | null>(null);
+  const abandonSansUploadRef = useRef(false);
+
+  const abandonner = useCallback(() => {
+    abandonSansUploadRef.current = true;
+    clotureUploadRef.current = null;
+    const rec = recorderRef.current;
+    if (rec && rec.state !== 'inactive') {
+      try {
+        rec.ondataavailable = null;
+        rec.onstop = null;
+        rec.stop();
+      } catch {
+        /* ignore */
+      }
+    }
+    recorderRef.current = null;
+    chunksRef.current = [];
+    stopMeter();
+    stopTracks();
+    setEtat('idle');
+    setChronoMs(0);
+    setErreur(null);
+  }, []);
 
   const preparerCloture = useCallback(async (): Promise<void> => {
+    abandonSansUploadRef.current = false;
     const rec = recorderRef.current;
     if (!rec || rec.state === 'inactive') return;
 
@@ -121,7 +147,10 @@ export const EnregistrementLivePanel = forwardRef<EnregistrementLivePanelHandle,
     });
   }, []);
 
-  useImperativeHandle(ref, () => ({ preparerCloture }), [preparerCloture]);
+  useImperativeHandle(ref, () => ({ preparerCloture, abandonner }), [
+    preparerCloture,
+    abandonner,
+  ]);
 
   const stopMeter = () => {
     if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
@@ -232,6 +261,7 @@ export const EnregistrementLivePanel = forwardRef<EnregistrementLivePanelHandle,
 
   async function demarrer() {
     if (!peutEnregistrer || reunionEnPause) return;
+    abandonSansUploadRef.current = false;
     setErreur(null);
     setEnregistrement(null);
     setUrlLocale(null);
@@ -323,6 +353,14 @@ export const EnregistrementLivePanel = forwardRef<EnregistrementLivePanelHandle,
 
   async function finaliser(recorderMime: string) {
     stopMeter();
+    if (abandonSansUploadRef.current) {
+      abandonSansUploadRef.current = false;
+      chunksRef.current = [];
+      stopTracks();
+      setEtat('idle');
+      setChronoMs(0);
+      return;
+    }
     const type =
       recorderMime || chunksRef.current.find((c) => c.type)?.type || 'audio/webm';
     const blob = new Blob(chunksRef.current, { type });

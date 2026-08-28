@@ -1,4 +1,5 @@
 import { ensureFreshToken } from '@/lib/auth-api';
+import { obtenirStatutStt } from '@/lib/transcriptions-api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -11,6 +12,7 @@ export type SegmentTranscriptionLive = {
 };
 
 type ServerMessage =
+  | { type: 'connecting'; reunionId: string }
   | { type: 'ready'; reunionId: string; language: string; model: string }
   | { type: 'transcript'; text: string; is_final: boolean }
   | { type: 'error'; message: string }
@@ -53,6 +55,96 @@ function floatTo16BitPCM(float32: Float32Array): ArrayBuffer {
 
 let segmentSeq = 0;
 
+function parseServerMessage(raw: unknown): ServerMessage | null {
+  if (typeof raw !== 'string') return null;
+  try {
+    return JSON.parse(raw) as ServerMessage;
+  } catch {
+    return null;
+  }
+}
+
+/** Attend le message `ready` ou une erreur explicite du proxy backend. */
+function attendrePret(ws: WebSocket): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let timeout: ReturnType<typeof window.setTimeout> | undefined;
+    let backendVu = false;
+
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      if (timeout) window.clearTimeout(timeout);
+      fn();
+    };
+
+    const planifierTimeout = (delaiMs: number, message: string) => {
+      if (timeout) window.clearTimeout(timeout);
+      timeout = window.setTimeout(() => {
+        finish(() => reject(new Error(message)));
+      }, delaiMs);
+    };
+
+    planifierTimeout(
+      12_000,
+      'Délai dépassé — backend WebSocket inaccessible. Vérifiez que le serveur Node tourne (port 4000) et VITE_API_URL.',
+    );
+
+    ws.onmessage = (ev) => {
+      const msg = parseServerMessage(ev.data);
+      if (!msg) return;
+
+      if (msg.type === 'connecting') {
+        backendVu = true;
+        planifierTimeout(
+          18_000,
+          'Le backend répond mais Deepgram ne répond pas. Vérifiez DEEPGRAM_API_KEY (clé, quota ou réseau).',
+        );
+        return;
+      }
+
+      if (msg.type === 'ready') {
+        finish(resolve);
+        return;
+      }
+
+      if (msg.type === 'error') {
+        finish(() => reject(new Error(msg.message)));
+      }
+    };
+
+    ws.onerror = () => {
+      finish(() =>
+        reject(
+          new Error(
+            'Connexion WebSocket impossible. Vérifiez VITE_API_URL et que le backend est démarré.',
+          ),
+        ),
+      );
+    };
+
+    ws.onclose = () => {
+      if (backendVu) {
+        finish(() =>
+          reject(
+            new Error(
+              'Connexion transcription fermée avant initialisation (Deepgram ou réseau).',
+            ),
+          ),
+        );
+        return;
+      }
+      finish(() =>
+        reject(
+          new Error(
+            'Connexion WebSocket fermée — backend inaccessible. Démarrez le serveur backend.',
+          ),
+        ),
+      );
+    };
+  });
+}
+
 export function useTranscriptionLive(reunionId: string) {
   const [actif, setActif] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -67,6 +159,7 @@ export function useTranscriptionLive(reunionId: string) {
   const ctxRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const pingRef = useRef<number | null>(null);
   const langueRef = useRef<LangueTranscription>(langue);
 
   useEffect(() => {
@@ -76,6 +169,11 @@ export function useTranscriptionLive(reunionId: string) {
   const texteComplet = [...segments.map((s) => s.text), interim].filter(Boolean).join(' ').trim();
 
   const arreter = useCallback(() => {
+    if (pingRef.current != null) {
+      window.clearInterval(pingRef.current);
+      pingRef.current = null;
+    }
+
     try {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({ type: 'close' }));
@@ -117,6 +215,14 @@ export function useTranscriptionLive(reunionId: string) {
     arreter();
 
     try {
+      const stt = await obtenirStatutStt();
+      if (!stt.disponible) {
+        throw new Error(
+          stt.message ??
+            'Transcription live indisponible (Deepgram non configuré côté backend).',
+        );
+      }
+
       const token =
         (await ensureFreshToken()) ?? useAuthStore.getState().accessToken ?? null;
 
@@ -134,36 +240,7 @@ export function useTranscriptionLive(reunionId: string) {
       ws.binaryType = 'arraybuffer';
       wsRef.current = ws;
 
-      await new Promise<void>((resolve, reject) => {
-        const timeout = window.setTimeout(() => {
-          reject(new Error('Délai dépassé — backend WebSocket inaccessible'));
-        }, 12000);
-
-        ws.onmessage = (ev) => {
-          if (typeof ev.data !== 'string') return;
-          let msg: ServerMessage;
-          try {
-            msg = JSON.parse(ev.data) as ServerMessage;
-          } catch {
-            return;
-          }
-
-          if (msg.type === 'ready') {
-            window.clearTimeout(timeout);
-            resolve();
-            return;
-          }
-          if (msg.type === 'error') {
-            window.clearTimeout(timeout);
-            reject(new Error(msg.message));
-          }
-        };
-
-        ws.onerror = () => {
-          window.clearTimeout(timeout);
-          reject(new Error('Erreur WebSocket (vérifiez que le backend tourne)'));
-        };
-      });
+      await attendrePret(ws);
 
       const Ctx =
         window.AudioContext ||
@@ -193,13 +270,8 @@ export function useTranscriptionLive(reunionId: string) {
       mute.connect(ctx.destination);
 
       ws.onmessage = (ev) => {
-        if (typeof ev.data !== 'string') return;
-        let msg: ServerMessage;
-        try {
-          msg = JSON.parse(ev.data) as ServerMessage;
-        } catch {
-          return;
-        }
+        const msg = parseServerMessage(ev.data);
+        if (!msg) return;
 
         if (msg.type === 'transcript') {
           if (msg.is_final) {
@@ -227,9 +299,21 @@ export function useTranscriptionLive(reunionId: string) {
       };
 
       ws.onclose = () => {
+        if (pingRef.current != null) {
+          window.clearInterval(pingRef.current);
+          pingRef.current = null;
+        }
         setActif(false);
         setConnecting(false);
+        setErreur((prev) => prev ?? 'Connexion transcription interrompue.');
       };
+
+      pingRef.current = window.setInterval(() => {
+        const socket = wsRef.current;
+        if (socket?.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: 'ping' }));
+        }
+      }, 25_000);
 
       setActif(true);
       setConnecting(false);

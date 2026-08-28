@@ -1,6 +1,12 @@
 import { apiFetch } from '@/lib/api-client';
 import type { Transcription } from '@ogefmeeting/shared';
 
+export function obtenirStatutStt() {
+  return apiFetch<{ disponible: boolean; message: string | null }>(
+    '/api/transcriptions/stt-status',
+  );
+}
+
 export function sauvegarderTranscription(payload: {
   reunion_id: string;
   langue: string;
