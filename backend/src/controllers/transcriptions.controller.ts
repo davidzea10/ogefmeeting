@@ -2,8 +2,13 @@ import type { Request, Response } from 'express';
 import { isDeepgramConfigured } from '../services/deepgram.service.js';
 import { transcriptionsService } from '../services/transcriptions.service.js';
 import { reunionService } from '../services/reunion.service.js';
+import {
+  obtenirEtatTranscriptionLive,
+  publierTranscriptionLive,
+} from '../ws/transcription-broadcast.js';
 import { AppError } from '../utils/errors.js';
 import {
+  profilLimiteAuxParticipations,
   utilisateurPeutApprouver,
   utilisateurPeutGererConduite,
 } from '../utils/reunion-acces.js';
@@ -69,6 +74,60 @@ export class TranscriptionsController {
 
     const data = await transcriptionsService.listerParReunion(reunionId);
     res.status(200).json({ success: true, data });
+  }
+
+  /** Diffuse le texte STT en cours à tous les participants (organisateur / ayant-droit). */
+  async synchroniserLive(req: Request, res: Response): Promise<void> {
+    if (!req.user) throw new AppError(401, 'Authentification requise.');
+
+    const body = req.body as {
+      reunion_id: string;
+      texte_complet: string;
+      texte_interim?: string | null;
+    };
+
+    const reunion = await reunionService.obtenirParId(body.reunion_id);
+    if (!utilisateurPeutGererConduite(req.user, reunion)) {
+      throw new AppError(403, 'Droits insuffisants pour publier la transcription live.');
+    }
+
+    await reunionService.synchroniserTranscriptionLive(
+      body.reunion_id,
+      body.texte_complet ?? '',
+      body.texte_interim ?? null,
+    );
+
+    publierTranscriptionLive(
+      body.reunion_id,
+      body.texte_complet ?? '',
+      body.texte_interim ?? '',
+    );
+
+    res.status(200).json({ success: true, data: { ok: true } });
+  }
+
+  /** Lecture STT live pour tous les participants (fallback polling). */
+  async obtenirLive(req: Request, res: Response): Promise<void> {
+    if (!req.user) throw new AppError(401, 'Authentification requise.');
+
+    const reunionId = req.params.reunionId as string;
+    const reunion = await reunionService.obtenirParId(reunionId, {
+      limiterAuProfilId: profilLimiteAuxParticipations(req.user),
+    });
+
+    const memoire = obtenirEtatTranscriptionLive(reunionId);
+    if (memoire.texte_complet || memoire.interim) {
+      res.status(200).json({ success: true, data: memoire });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        texte_complet: reunion.transcription_live_texte ?? '',
+        interim: reunion.transcription_live_interim ?? '',
+      },
+    });
   }
 }
 

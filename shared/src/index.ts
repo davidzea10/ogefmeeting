@@ -354,6 +354,9 @@ export type Reunion = {
   valide_par_nom?: string | null;
   cree_le: string;
   modifie_le: string;
+  /** Texte STT en cours (partagé live, tous participants). */
+  transcription_live_texte?: string | null;
+  transcription_live_interim?: string | null;
 };
 
 /** @deprecated Utiliser Reunion */

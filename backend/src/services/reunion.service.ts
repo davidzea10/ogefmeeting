@@ -18,12 +18,54 @@ import type {
 import { AppError } from '../utils/errors.js';
 import { handleSupabaseError } from '../utils/supabase-error.js';
 import { tenterEnvoiRapportSiPret } from './cr-notification.service.js';
+import { effacerTranscriptionLiveBroadcast } from '../ws/transcription-broadcast.js';
 import { notificationService } from './notification.service.js';
 
 export type ScopeReunion = {
   /** Si défini : ne renvoyer que les réunions où ce profil est participant */
   limiterAuProfilId?: string | null;
 };
+
+/** Met à jour statut présent ; retente sans present_le si la colonne n'existe pas encore. */
+async function marquerParticipantPresent(
+  supabase: ReturnType<typeof requireSupabaseAdmin>,
+  participantId: string,
+  maintenant: string,
+): Promise<ParticipantReunion> {
+  const avecHorodatage = await supabase
+    .from(TABLES.participantsReunion)
+    .update({ statut: 'present', present_le: maintenant })
+    .eq('id', participantId)
+    .select('*')
+    .single();
+
+  if (!avecHorodatage.error) {
+    return avecHorodatage.data as ParticipantReunion;
+  }
+
+  const msg = avecHorodatage.error.message ?? '';
+  const colonneAbsente =
+    msg.includes('present_le') ||
+    avecHorodatage.error.code === '42703' ||
+    msg.includes('schema cache');
+
+  if (!colonneAbsente) {
+    handleSupabaseError(avecHorodatage.error, 'Impossible de marquer votre présence.');
+  }
+
+  const sansHorodatage = await supabase
+    .from(TABLES.participantsReunion)
+    .update({ statut: 'present' })
+    .eq('id', participantId)
+    .select('*')
+    .single();
+
+  if (sansHorodatage.error) {
+    handleSupabaseError(sansHorodatage.error, 'Impossible de marquer votre présence.');
+  }
+
+  return sansHorodatage.data as ParticipantReunion;
+}
 
 function formaterDateFr(iso: string): string {
   try {
@@ -741,6 +783,7 @@ export class ReunionService {
       .neq('statut', 'present');
 
     const reunionCloturee = data as Reunion;
+    await this.effacerTranscriptionLive(id);
     // Si un CR est déjà validé, envoi automatique du PDF aux participants
     void tenterEnvoiRapportSiPret(id);
     void this.notifierInvitesReunionCloturee(reunionCloturee);
@@ -836,6 +879,7 @@ export class ReunionService {
       handleSupabaseError(error, 'Impossible d’annuler le live.');
     }
 
+    await this.effacerTranscriptionLive(id);
     return data as Reunion;
   }
 
@@ -1217,31 +1261,79 @@ export class ReunionService {
     const actuel = participant as ParticipantReunion;
     if (actuel.statut === 'present') {
       if (actuel.present_le) return actuel;
-      const { data: corrige, error: corrigeErr } = await supabase
-        .from(TABLES.participantsReunion)
-        .update({ present_le: new Date().toISOString() })
-        .eq('id', actuel.id)
-        .select('*')
-        .single();
-      if (corrigeErr) {
-        handleSupabaseError(corrigeErr, 'Impossible de mettre à jour la présence.');
+      try {
+        const { data: corrige, error: corrigeErr } = await supabase
+          .from(TABLES.participantsReunion)
+          .update({ present_le: new Date().toISOString() })
+          .eq('id', actuel.id)
+          .select('*')
+          .single();
+        if (!corrigeErr) return corrige as ParticipantReunion;
+      } catch {
+        /* colonne present_le absente */
       }
-      return corrige as ParticipantReunion;
+      return actuel;
     }
 
     const maintenant = new Date().toISOString();
-    const { data, error } = await supabase
-      .from(TABLES.participantsReunion)
-      .update({ statut: 'present', present_le: maintenant })
-      .eq('id', actuel.id)
-      .select('*')
-      .single();
+    return marquerParticipantPresent(supabase, actuel.id, maintenant);
+  }
 
-    if (error) {
-      handleSupabaseError(error, 'Impossible de marquer votre présence.');
+  /** Publie le texte STT en cours pour tous les participants du live. */
+  async synchroniserTranscriptionLive(
+    reunionId: string,
+    texte: string,
+    interim: string | null,
+  ): Promise<void> {
+    const reunion = await this.assurerExiste(reunionId);
+    if (reunion.statut !== 'en_cours' && reunion.statut !== 'en_pause') {
+      throw new AppError(400, 'La transcription live n’est active qu’en réunion en cours.');
     }
 
-    return data as ParticipantReunion;
+    const supabase = requireSupabaseAdmin();
+    const patch: Record<string, string | null> = {
+      transcription_live_texte: texte.trim() || null,
+      transcription_live_interim: interim?.trim() || null,
+    };
+
+    const { error } = await supabase.from(TABLES.reunions).update(patch).eq('id', reunionId);
+
+    if (error) {
+      const msg = error.message ?? '';
+      if (
+        msg.includes('transcription_live') ||
+        error.code === '42703' ||
+        msg.includes('schema cache')
+      ) {
+        return;
+      }
+      handleSupabaseError(error, 'Impossible de synchroniser la transcription live.');
+    }
+  }
+
+  /** Efface le texte STT partagé (clôture / annulation). */
+  async effacerTranscriptionLive(reunionId: string): Promise<void> {
+    effacerTranscriptionLiveBroadcast(reunionId);
+    const supabase = requireSupabaseAdmin();
+    const { error } = await supabase
+      .from(TABLES.reunions)
+      .update({
+        transcription_live_texte: null,
+        transcription_live_interim: null,
+      })
+      .eq('id', reunionId);
+
+    if (error) {
+      const msg = error.message ?? '';
+      if (
+        msg.includes('transcription_live') ||
+        error.code === '42703' ||
+        msg.includes('schema cache')
+      ) {
+        return;
+      }
+      handleSupabaseError(error, 'Impossible d’effacer la transcription live.');
+    }
   }
 
   /**

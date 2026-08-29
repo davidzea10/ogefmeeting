@@ -48,7 +48,7 @@ import {
   Users,
   XCircle,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 export function ReunionLivePage() {
@@ -65,20 +65,50 @@ export function ReunionLivePage() {
   const [showAnnuler, setShowAnnuler] = useState(false);
   const [triPresence, setTriPresence] = useState<TriPresenceLive>('arrivee');
   const [filtrePresentsSeulement, setFiltrePresentsSeulement] = useState(false);
-  const etaitEnLiveRef = useRef(false);
-  const tentativesRejoindreRef = useRef(0);
-  const presenceServeurOkRef = useRef(false);
+  const statutPrecedentRef = useRef<string | undefined>(undefined);
   const audioPanelRef = useRef<EnregistrementLivePanelHandle>(null);
   const transcriptionPanelRef = useRef<TranscriptionLivePanelHandle>(null);
 
   useReunionRealtime(id);
 
   const reunionQuery = useQuery({
-    queryKey: ['reunion', id],
-    queryFn: () => obtenirReunion(id!),
+    queryKey: ['reunion', id, userId],
+    queryFn: async () => {
+      let data = await obtenirReunion(id!);
+      if (
+        userId &&
+        (data.statut === 'en_cours' || data.statut === 'en_pause')
+      ) {
+        const moi = data.participants.find((p) => p.profil_id === userId);
+        if (moi && moi.statut !== 'present') {
+          try {
+            await rejoindreLiveReunion(id!);
+            data = await obtenirReunion(id!);
+          } catch {
+            data = {
+              ...data,
+              participants: data.participants.map((p) =>
+                p.profil_id === userId
+                  ? {
+                      ...p,
+                      statut: 'present' as const,
+                      present_le: p.present_le ?? new Date().toISOString(),
+                    }
+                  : p,
+              ),
+            };
+          }
+        }
+      }
+      return data;
+    },
     enabled: Boolean(id),
-    /** Sync pause / présences / clôture même si Realtime Supabase indisponible. */
-    refetchInterval: 2000,
+    /** Présences + STT partagé — polling rapide pendant le live. */
+    refetchInterval: (query) => {
+      const statut = query.state.data?.statut;
+      if (statut === 'en_cours' || statut === 'en_pause') return 1500;
+      return false;
+    },
     refetchIntervalInBackground: true,
   });
 
@@ -109,94 +139,22 @@ export function ReunionLivePage() {
     await queryClient.invalidateQueries({ queryKey: ['reunions'] });
   };
 
-  /** Entrée live → présence automatique (invite/confirme → présent). */
-  const rejoindreMut = useMutation({
-    mutationFn: () => rejoindreLiveReunion(id!),
-    onMutate: async () => {
-      await queryClient.cancelQueries({ queryKey: ['reunion', id] });
-      const previous = queryClient.getQueryData<Awaited<ReturnType<typeof obtenirReunion>>>([
-        'reunion',
-        id,
-      ]);
-      if (previous && userId) {
-        queryClient.setQueryData(['reunion', id], {
-          ...previous,
-          participants: previous.participants.map((p) =>
-            p.profil_id === userId ? { ...p, statut: 'present' as const } : p,
-          ),
-        });
-      }
-      return { previous };
-    },
-    onSuccess: (participant) => {
-      presenceServeurOkRef.current = true;
-      tentativesRejoindreRef.current = 0;
-      queryClient.setQueryData<Awaited<ReturnType<typeof obtenirReunion>>>(
-        ['reunion', id],
-        (old) => {
-          if (!old) return old;
-          return {
-            ...old,
-            participants: old.participants.map((p) =>
-              p.id === participant.id ? participant : p,
-            ),
-          };
-        },
-      );
-      void invalidate();
-    },
-    onError: (e: Error) => {
-      announce(e.message || 'Impossible de marquer votre présence.');
-      // On garde l’affichage optimiste « présent » pour l’utilisateur connecté.
-    },
-  });
-
-  useEffect(() => {
-    presenceServeurOkRef.current = false;
-    tentativesRejoindreRef.current = 0;
-    etaitEnLiveRef.current = false;
-  }, [id]);
-
-  /** Si le serveur indique déjà « présent », pas besoin de rappeler l’API. */
-  useEffect(() => {
-    if (!reunion || !userId) return;
-    const moi = reunion.participants.find((p) => p.profil_id === userId);
-    if (moi?.statut === 'present' && moi.present_le) {
-      presenceServeurOkRef.current = true;
-    }
-  }, [reunion, userId]);
-
-  /** Marque la présence dès l’entrée live, avec nouvelles tentatives si l’API échoue. */
-  useEffect(() => {
-    if (!id || !userId || !reunion) return;
-    if (reunion.statut !== 'en_cours' && reunion.statut !== 'en_pause') return;
-    if (presenceServeurOkRef.current) return;
-
-    const moi = reunion.participants.find((p) => p.profil_id === userId);
-    if (!moi) return;
-    if (rejoindreMut.isPending) return;
-    if (tentativesRejoindreRef.current >= 8) return;
-
-    const delai = tentativesRejoindreRef.current === 0 ? 0 : 2500;
-    const timer = window.setTimeout(() => {
-      tentativesRejoindreRef.current += 1;
-      rejoindreMut.mutate();
-    }, delai);
-
-    return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- retry contrôlé par tentativesRejoindreRef
-  }, [id, userId, reunion?.statut, reunion?.participants, rejoindreMut.isPending]);
-
-  /** Clôture / annulation par l’organisateur → redirection synchronisée pour tous. */
-  useEffect(() => {
+  /** Clôture / annulation → redirection immédiate pour tous les participants. */
+  useLayoutEffect(() => {
     if (!reunion || !id) return;
 
-    if (reunion.statut === 'en_cours' || reunion.statut === 'en_pause') {
-      etaitEnLiveRef.current = true;
+    const prev = statutPrecedentRef.current;
+    if (prev === undefined) {
+      statutPrecedentRef.current = reunion.statut;
       return;
     }
+    if (prev === reunion.statut) return;
 
-    if (!etaitEnLiveRef.current) return;
+    const etaitLive = prev === 'en_cours' || prev === 'en_pause';
+    statutPrecedentRef.current = reunion.statut;
+
+    if (!etaitLive) return;
+    if (reunion.statut === 'en_cours' || reunion.statut === 'en_pause') return;
 
     audioPanelRef.current?.abandonner();
     transcriptionPanelRef.current?.abandonner();
@@ -204,20 +162,18 @@ export function ReunionLivePage() {
     if (reunion.statut === 'cloturee') {
       announce('La réunion a été clôturée.');
       navigate(`/reunions/${id}`, { replace: true });
-      return;
-    }
-
-    if (reunion.statut === 'planifiee') {
+    } else if (reunion.statut === 'planifiee') {
       announce('Le live a été annulé par l’organisateur.');
       navigate(`/reunions/${id}`, { replace: true });
-      return;
-    }
-
-    if (reunion.statut === 'archivee') {
+    } else if (reunion.statut === 'archivee') {
       announce('Le test live a été annulé.');
       navigate('/teste-live', { replace: true });
     }
   }, [reunion?.statut, id, navigate, announce, reunion]);
+
+  useEffect(() => {
+    statutPrecedentRef.current = undefined;
+  }, [id]);
 
   const participantMut = useMutation({
     mutationFn: ({
@@ -449,7 +405,7 @@ export function ReunionLivePage() {
                 {isRealtimeConfigured() ? (
                   <span className="text-xs text-white/50">Temps réel</span>
                 ) : (
-                  <span className="text-xs text-white/50">Sync 2s</span>
+                  <span className="text-xs text-white/50">Sync 1,5s</span>
                 )}
               </div>
               <h1 className="truncate text-base font-semibold sm:text-lg">{reunion.titre}</h1>
@@ -719,6 +675,9 @@ export function ReunionLivePage() {
               reunionId={id}
               peutControle={peutConduireLive}
               desactive={enPause}
+              enLive={!enPause}
+              textePartage={reunion.transcription_live_texte}
+              interimPartage={reunion.transcription_live_interim}
             />
           </div>
         </div>

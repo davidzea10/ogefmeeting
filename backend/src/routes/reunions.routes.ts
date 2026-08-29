@@ -146,11 +146,10 @@ reunionsRouter.post(
   asyncHandler((req, res) => reunionController.repondreInvitation(req, res)),
 );
 
-/** Participant : se marquer présent en entrant dans le live */
+/** Participant : se marquer présent en entrant dans le live (auth seule, tout invité). */
 reunionsRouter.post(
   '/:id/rejoindre-live',
   requireAuth,
-  requirePermission(PERMISSIONS.REUNIONS_LIRE),
   validateParams(idParamSchema),
   asyncHandler((req, res) => reunionController.rejoindreLive(req, res)),
 );

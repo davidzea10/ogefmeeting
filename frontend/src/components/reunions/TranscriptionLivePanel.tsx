@@ -1,9 +1,14 @@
 import { Button } from '@/components/ui/Button';
+import { useTranscriptionLiveViewer } from '@/hooks/useTranscriptionLiveViewer';
 import { useTranscriptionLive, type LangueTranscription } from '@/hooks/useTranscriptionLive';
 import { cn } from '@/lib/cn';
-import { obtenirStatutStt, sauvegarderTranscription } from '@/lib/transcriptions-api';
+import {
+  obtenirStatutStt,
+  sauvegarderTranscription,
+  synchroniserTranscriptionLive,
+} from '@/lib/transcriptions-api';
 import { Captions, Eraser, Mic, MicOff, Save } from 'lucide-react';
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 
 type Props = {
   reunionId: string;
@@ -11,6 +16,11 @@ type Props = {
   peutControle: boolean;
   /** Désactive le démarrage (ex. réunion en pause). */
   desactive?: boolean;
+  /** Lecture seule invités — WebSocket temps réel + fallback props. */
+  textePartage?: string | null;
+  interimPartage?: string | null;
+  /** Réunion en cours/en pause → active la réception STT partagée. */
+  enLive?: boolean;
 };
 
 export type TranscriptionLivePanelHandle = {
@@ -21,7 +31,33 @@ export type TranscriptionLivePanelHandle = {
 };
 
 export const TranscriptionLivePanel = forwardRef<TranscriptionLivePanelHandle, Props>(
-  function TranscriptionLivePanel({ reunionId, peutControle, desactive }, ref) {
+  function TranscriptionLivePanel(
+    { reunionId, peutControle, desactive, textePartage, interimPartage, enLive = true },
+    ref,
+  ) {
+    const syncTimeoutRef = useRef<number | null>(null);
+
+    const viewer = useTranscriptionLiveViewer(reunionId, !peutControle && enLive);
+
+    const publierTexte = useCallback(
+      (texte: string, interimText: string) => {
+        if (!peutControle) return;
+        if (syncTimeoutRef.current != null) {
+          window.clearTimeout(syncTimeoutRef.current);
+        }
+        syncTimeoutRef.current = window.setTimeout(() => {
+          void synchroniserTranscriptionLive({
+            reunion_id: reunionId,
+            texte_complet: texte,
+            texte_interim: interimText || null,
+          }).catch(() => {
+            /* best-effort — le backend WS diffuse aussi */
+          });
+        }, 150);
+      },
+      [peutControle, reunionId],
+    );
+
     const {
       actif,
       connecting,
@@ -36,7 +72,7 @@ export const TranscriptionLivePanel = forwardRef<TranscriptionLivePanelHandle, P
       demarrer,
       arreter,
       effacer,
-    } = useTranscriptionLive(reunionId);
+    } = useTranscriptionLive(reunionId, { onTexteChange: publierTexte });
 
     const [saving, setSaving] = useState(false);
     const [saveErreur, setSaveErreur] = useState<string | null>(null);
@@ -62,11 +98,18 @@ export const TranscriptionLivePanel = forwardRef<TranscriptionLivePanelHandle, P
         annule = true;
       };
     }, []);
+
     const scrollRef = useRef<HTMLDivElement>(null);
     const texteRef = useRef(texteComplet);
     const sauvegardeOkRef = useRef(sauvegardeOk);
     const langueRef = useRef(langue);
     const actifRef = useRef(actif);
+
+    const texteInvite = (viewer.texteComplet || textePartage || '').trim();
+    const interimInvite = (viewer.interim || interimPartage || '').trim();
+    const enLectureSeule = !peutControle;
+    const aDuTexteInvite = Boolean(texteInvite || interimInvite);
+    const aDuTexteLocal = segments.length > 0 || Boolean(interim) || Boolean(texteComplet);
 
     useEffect(() => {
       texteRef.current = texteComplet;
@@ -81,6 +124,14 @@ export const TranscriptionLivePanel = forwardRef<TranscriptionLivePanelHandle, P
       actifRef.current = actif;
     }, [actif]);
 
+    useEffect(() => {
+      return () => {
+        if (syncTimeoutRef.current != null) {
+          window.clearTimeout(syncTimeoutRef.current);
+        }
+      };
+    }, []);
+
     /** Pause réunion → arrêt du flux STT. */
     useEffect(() => {
       if (desactive && actif) {
@@ -92,7 +143,9 @@ export const TranscriptionLivePanel = forwardRef<TranscriptionLivePanelHandle, P
       const el = scrollRef.current;
       if (!el) return;
       el.scrollTop = el.scrollHeight;
-    }, [segments, interim]);
+    }, [segments, interim, texteInvite, interimInvite]);
+
+    const viewerErreur = viewer.erreur;
 
     const changerLangue = (l: LangueTranscription) => {
       if (actif) return;
@@ -159,38 +212,40 @@ export const TranscriptionLivePanel = forwardRef<TranscriptionLivePanelHandle, P
               <Captions className="h-4 w-4 shrink-0" aria-hidden />
               Transcription
             </h2>
-            <div className="mt-2 flex items-center gap-1" role="group" aria-label="Langue de transcription">
-              <button
-                type="button"
-                disabled={actif}
-                onClick={() => changerLangue('fr')}
-                className={cn(
-                  'rounded-md px-2.5 py-1 text-xs font-semibold transition',
-                  langue === 'fr'
-                    ? 'bg-ogefrem-yellow text-ogefrem-navy'
-                    : 'bg-white/10 text-white/70 hover:bg-white/15',
-                  actif && 'opacity-50',
-                )}
-              >
-                Français
-              </button>
-              <button
-                type="button"
-                disabled={actif}
-                onClick={() => changerLangue('en')}
-                className={cn(
-                  'rounded-md px-2.5 py-1 text-xs font-semibold transition',
-                  langue === 'en'
-                    ? 'bg-ogefrem-yellow text-ogefrem-navy'
-                    : 'bg-white/10 text-white/70 hover:bg-white/15',
-                  actif && 'opacity-50',
-                )}
-              >
-                English
-              </button>
-            </div>
+            {peutControle && (
+              <div className="mt-2 flex items-center gap-1" role="group" aria-label="Langue de transcription">
+                <button
+                  type="button"
+                  disabled={actif}
+                  onClick={() => changerLangue('fr')}
+                  className={cn(
+                    'rounded-md px-2.5 py-1 text-xs font-semibold transition',
+                    langue === 'fr'
+                      ? 'bg-ogefrem-yellow text-ogefrem-navy'
+                      : 'bg-white/10 text-white/70 hover:bg-white/15',
+                    actif && 'opacity-50',
+                  )}
+                >
+                  Français
+                </button>
+                <button
+                  type="button"
+                  disabled={actif}
+                  onClick={() => changerLangue('en')}
+                  className={cn(
+                    'rounded-md px-2.5 py-1 text-xs font-semibold transition',
+                    langue === 'en'
+                      ? 'bg-ogefrem-yellow text-ogefrem-navy'
+                      : 'bg-white/10 text-white/70 hover:bg-white/15',
+                    actif && 'opacity-50',
+                  )}
+                >
+                  English
+                </button>
+              </div>
+            )}
           </div>
-          {actif && (
+          {(actif || (enLectureSeule && (aDuTexteInvite || viewer.connecte))) && (
             <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-danger/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" aria-hidden />
               Live
@@ -204,7 +259,7 @@ export const TranscriptionLivePanel = forwardRef<TranscriptionLivePanelHandle, P
           aria-live="polite"
           aria-relevant="additions"
         >
-          {sttDisponible === false && sttIndispoMessage ? (
+          {sttDisponible === false && sttIndispoMessage && peutControle ? (
             <p
               className="rounded-lg border border-warning/40 bg-warning/15 px-3 py-2 text-sm text-amber-100"
               role="status"
@@ -213,22 +268,43 @@ export const TranscriptionLivePanel = forwardRef<TranscriptionLivePanelHandle, P
             </p>
           ) : null}
 
-          {segments.length === 0 && !interim && !erreur && sttDisponible !== false && (
+          {peutControle && !aDuTexteLocal && !erreur && sttDisponible !== false && (
             <p className="text-sm leading-relaxed text-white/45">
-              {peutControle
-                ? 'Choisissez la langue, puis démarrez la transcription.'
-                : 'La transcription apparaîtra ici lorsque le secrétaire la démarrera.'}
+              Choisissez la langue, puis démarrez la transcription.
             </p>
           )}
 
-          {segments.map((seg) => (
-            <p key={seg.id} className="text-sm leading-relaxed text-white/90">
-              {seg.text}
+          {enLectureSeule && !aDuTexteInvite && !erreur && !viewerErreur && (
+            <p className="text-sm leading-relaxed text-white/45">
+              {viewer.connecte
+                ? 'En attente de la transcription de l’organisateur…'
+                : 'Connexion à la transcription live…'}
             </p>
-          ))}
+          )}
 
-          {interim ? (
+          {viewerErreur && enLectureSeule ? (
+            <p className="text-xs text-white/45" role="status">
+              Sync secours actif ({viewerErreur})
+            </p>
+          ) : null}
+
+          {peutControle &&
+            segments.map((seg) => (
+              <p key={seg.id} className="text-sm leading-relaxed text-white/90">
+                {seg.text}
+              </p>
+            ))}
+
+          {peutControle && interim ? (
             <p className="text-sm italic leading-relaxed text-white/45">{interim}</p>
+          ) : null}
+
+          {enLectureSeule && texteInvite ? (
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-white/90">{texteInvite}</p>
+          ) : null}
+
+          {enLectureSeule && interimInvite ? (
+            <p className="text-sm italic leading-relaxed text-white/45">{interimInvite}</p>
           ) : null}
 
           {erreur ? (

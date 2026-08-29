@@ -145,7 +145,10 @@ function attendrePret(ws: WebSocket): Promise<void> {
   });
 }
 
-export function useTranscriptionLive(reunionId: string) {
+export function useTranscriptionLive(
+  reunionId: string,
+  options?: { onTexteChange?: (texte: string, interim: string) => void },
+) {
   const [actif, setActif] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -161,12 +164,22 @@ export function useTranscriptionLive(reunionId: string) {
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const pingRef = useRef<number | null>(null);
   const langueRef = useRef<LangueTranscription>(langue);
+  const onTexteChangeRef = useRef(options?.onTexteChange);
 
   useEffect(() => {
     langueRef.current = langue;
   }, [langue]);
 
+  useEffect(() => {
+    onTexteChangeRef.current = options?.onTexteChange;
+  }, [options?.onTexteChange]);
+
   const texteComplet = [...segments.map((s) => s.text), interim].filter(Boolean).join(' ').trim();
+
+  useEffect(() => {
+    if (!actif) return;
+    onTexteChangeRef.current?.(texteComplet, interim);
+  }, [actif, texteComplet, interim]);
 
   const arreter = useCallback(() => {
     if (pingRef.current != null) {

@@ -9,6 +9,7 @@ import {
   normaliserLangueDeepgram,
 } from '../services/deepgram.service.js';
 import { env } from '../config/env.js';
+import { ajouterChunkTranscriptionLive } from './transcription-broadcast.js';
 
 type ClientMessage =
   | { type: 'ping' }
@@ -178,6 +179,8 @@ async function handleClient(client: WebSocket, req: IncomingMessage): Promise<vo
         text,
         is_final: Boolean(payload.is_final),
       });
+
+      ajouterChunkTranscriptionLive(reunionId, text, Boolean(payload.is_final));
     } catch (err) {
       logger.debug({ err }, 'Message Deepgram non JSON / ignoré');
     }

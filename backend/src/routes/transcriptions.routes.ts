@@ -20,6 +20,12 @@ const reunionIdParam = z.object({
   reunionId: idParamSchema.shape.id,
 });
 
+const liveSyncSchema = z.object({
+  reunion_id: z.string().uuid(),
+  texte_complet: z.string().max(500_000),
+  texte_interim: z.string().max(50_000).nullable().optional(),
+});
+
 /** Public : permet un échec rapide côté UI sans attendre le timeout WebSocket. */
 transcriptionsRouter.get(
   '/stt-status',
@@ -32,6 +38,22 @@ transcriptionsRouter.post(
   requirePermission(PERMISSIONS.REUNIONS_DEMARRER),
   validateBody(sauvegarderSchema),
   asyncHandler((req, res) => transcriptionsController.sauvegarder(req, res)),
+);
+
+transcriptionsRouter.post(
+  '/live-sync',
+  requireAuth,
+  requirePermission(PERMISSIONS.REUNIONS_DEMARRER),
+  validateBody(liveSyncSchema),
+  asyncHandler((req, res) => transcriptionsController.synchroniserLive(req, res)),
+);
+
+transcriptionsRouter.get(
+  '/live/:reunionId',
+  requireAuth,
+  requirePermission(PERMISSIONS.REUNIONS_LIRE),
+  validateParams(reunionIdParam),
+  asyncHandler((req, res) => transcriptionsController.obtenirLive(req, res)),
 );
 
 transcriptionsRouter.get(

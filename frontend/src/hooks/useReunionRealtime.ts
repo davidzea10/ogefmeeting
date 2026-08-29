@@ -59,7 +59,7 @@ export function useReunionRealtime(reunionId: string | undefined) {
       };
     }
 
-    const poll = window.setInterval(invalidate, 2000);
+    const poll = window.setInterval(invalidate, 1500);
     return () => window.clearInterval(poll);
   }, [reunionId, queryClient]);
 }
