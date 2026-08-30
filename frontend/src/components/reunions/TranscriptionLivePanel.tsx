@@ -53,7 +53,7 @@ export const TranscriptionLivePanel = forwardRef<TranscriptionLivePanelHandle, P
           }).catch(() => {
             /* best-effort — le backend WS diffuse aussi */
           });
-        }, 150);
+        }, 800);
       },
       [peutControle, reunionId],
     );

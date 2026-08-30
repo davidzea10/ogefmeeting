@@ -9,6 +9,11 @@ type ViewerMessage =
   | { type: 'pong' }
   | { type: 'error'; message: string };
 
+/** Polling HTTP si WebSocket indisponible (ms). */
+const POLL_WS_DOWN_MS = 4000;
+/** Secours rare quand WebSocket connecté (ms). */
+const POLL_WS_UP_MS = 20_000;
+
 function buildViewWsUrl(reunionId: string, token: string | null): string {
   const httpBase = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:4000';
   const wsBase = httpBase.replace(/^http/i, 'ws').replace(/\/$/, '');
@@ -19,7 +24,7 @@ function buildViewWsUrl(reunionId: string, token: string | null): string {
 
 /**
  * Réception temps réel de la transcription STT (invités / lecture seule).
- * WebSocket principal + polling HTTP de secours.
+ * WebSocket principal + polling HTTP de secours allégé.
  */
 export function useTranscriptionLiveViewer(reunionId: string, actif: boolean) {
   const [texteComplet, setTexteComplet] = useState('');
@@ -27,6 +32,7 @@ export function useTranscriptionLiveViewer(reunionId: string, actif: boolean) {
   const [connecte, setConnecte] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
+  const wsConnecteRef = useRef(false);
 
   useEffect(() => {
     if (!actif || !reunionId) {
@@ -56,6 +62,14 @@ export function useTranscriptionLiveViewer(reunionId: string, actif: boolean) {
       }
     };
 
+    const planifierPoll = () => {
+      if (pollRef.current != null) {
+        window.clearInterval(pollRef.current);
+      }
+      const interval = wsConnecteRef.current ? POLL_WS_UP_MS : POLL_WS_DOWN_MS;
+      pollRef.current = window.setInterval(() => void poll(), interval);
+    };
+
     const connecter = async () => {
       if (annule) return;
       try {
@@ -65,8 +79,10 @@ export function useTranscriptionLiveViewer(reunionId: string, actif: boolean) {
 
         ws.onopen = () => {
           if (annule) return;
+          wsConnecteRef.current = true;
           setConnecte(true);
           setErreur(null);
+          planifierPoll();
         };
 
         ws.onmessage = (ev) => {
@@ -84,14 +100,18 @@ export function useTranscriptionLiveViewer(reunionId: string, actif: boolean) {
         };
 
         ws.onclose = () => {
+          wsConnecteRef.current = false;
           setConnecte(false);
+          planifierPoll();
           if (!annule) {
-            reconnectRef = window.setTimeout(() => void connecter(), 3000);
+            reconnectRef = window.setTimeout(() => void connecter(), 5000);
           }
         };
 
         ws.onerror = () => {
+          wsConnecteRef.current = false;
           setConnecte(false);
+          planifierPoll();
         };
 
         pingRef = window.setInterval(() => {
@@ -106,10 +126,11 @@ export function useTranscriptionLiveViewer(reunionId: string, actif: boolean) {
 
     void connecter();
     void poll();
-    pollRef.current = window.setInterval(() => void poll(), 1200);
+    planifierPoll();
 
     return () => {
       annule = true;
+      wsConnecteRef.current = false;
       if (pingRef != null) window.clearInterval(pingRef);
       if (pollRef.current != null) window.clearInterval(pollRef.current);
       if (reconnectRef != null) window.clearTimeout(reconnectRef);

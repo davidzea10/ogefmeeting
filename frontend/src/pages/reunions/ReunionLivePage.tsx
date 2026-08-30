@@ -103,11 +103,15 @@ export function ReunionLivePage() {
       return data;
     },
     enabled: Boolean(id),
-    /** Présences + STT partagé — polling rapide pendant le live. */
+    /**
+     * Realtime Supabase → pas de polling (useReunionRealtime invalide le cache).
+     * Sinon secours toutes les 5 s.
+     */
     refetchInterval: (query) => {
       const statut = query.state.data?.statut;
-      if (statut === 'en_cours' || statut === 'en_pause') return 1500;
-      return false;
+      if (statut !== 'en_cours' && statut !== 'en_pause') return false;
+      if (isRealtimeConfigured()) return false;
+      return 5000;
     },
     refetchIntervalInBackground: true,
   });

@@ -3,9 +3,12 @@ import { TABLES } from '@ogefmeeting/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
+/** Intervalle de secours si Realtime Supabase indisponible (ms). */
+const POLL_FALLBACK_MS = 5000;
+
 /**
  * Abonne Realtime aux changements de la réunion (+ points ODJ + participants).
- * Fallback : polling 3s si Supabase Realtime non configuré.
+ * Fallback : polling lent si Supabase Realtime non configuré.
  */
 export function useReunionRealtime(reunionId: string | undefined) {
   const queryClient = useQueryClient();
@@ -14,7 +17,7 @@ export function useReunionRealtime(reunionId: string | undefined) {
     if (!reunionId) return;
 
     const invalidate = () => {
-      void queryClient.refetchQueries({ queryKey: ['reunion', reunionId] });
+      void queryClient.invalidateQueries({ queryKey: ['reunion', reunionId] });
     };
 
     const supabase = getSupabaseBrowser();
@@ -59,7 +62,7 @@ export function useReunionRealtime(reunionId: string | undefined) {
       };
     }
 
-    const poll = window.setInterval(invalidate, 1500);
+    const poll = window.setInterval(invalidate, POLL_FALLBACK_MS);
     return () => window.clearInterval(poll);
   }, [reunionId, queryClient]);
 }
