@@ -7,6 +7,7 @@ import {
   enregistrerViewerTranscription,
   retirerViewerTranscription,
 } from './transcription-broadcast.js';
+import { demarrerKeepAliveWs } from './ws-keepalive.js';
 
 function parseQuery(url: string | undefined): URLSearchParams {
   try {
@@ -79,6 +80,7 @@ async function handleViewer(client: WebSocket, req: IncomingMessage): Promise<vo
   }
 
   enregistrerViewerTranscription(reunionId, client);
+  const arreterKeepAlive = demarrerKeepAliveWs(client);
 
   client.on('message', (data) => {
     try {
@@ -92,10 +94,12 @@ async function handleViewer(client: WebSocket, req: IncomingMessage): Promise<vo
   });
 
   client.on('close', () => {
+    arreterKeepAlive();
     retirerViewerTranscription(reunionId, client);
   });
 
   client.on('error', () => {
+    arreterKeepAlive();
     retirerViewerTranscription(reunionId, client);
   });
 }

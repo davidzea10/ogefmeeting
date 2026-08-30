@@ -8,7 +8,7 @@ import {
 import { healthService } from '../services/health.service.js';
 
 /** Marqueur de déploiement — pour vérifier que Render a bien la dernière version */
-export const BUILD_MARKER = '2026-07-24-invitation-email';
+export const BUILD_MARKER = '2026-08-30-render-starter';
 
 /**
  * Contrôleur Health — reçoit la requête HTTP, appelle le service, renvoie la réponse.

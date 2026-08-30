@@ -1,10 +1,11 @@
-# Render — Web Service (backend API)
+# Render — Web Service (backend API) — plan Starter (always-on)
 services:
   - type: web
     name: ogefmeeting-api
     runtime: node
-    plan: free
+    plan: starter
     rootDir: .
+    healthCheckPath: /api/health
     buildCommand: npm install && npm run build -w @ogefmeeting/shared && npm run build -w @ogefmeeting/backend
     startCommand: npm run start -w @ogefmeeting/backend
     envVars:
@@ -13,7 +14,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: AUTH_ENFORCED
-        value: "false"
+        value: "true"
       - key: CORS_ORIGIN
         sync: false
       - key: FRONTEND_URL
@@ -23,4 +24,10 @@ services:
       - key: SUPABASE_ANON_KEY
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: DEEPGRAM_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
         sync: false

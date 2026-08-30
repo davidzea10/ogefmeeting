@@ -10,6 +10,7 @@ import {
 } from '../services/deepgram.service.js';
 import { env } from '../config/env.js';
 import { ajouterChunkTranscriptionLive } from './transcription-broadcast.js';
+import { demarrerKeepAliveWs } from './ws-keepalive.js';
 
 type ClientMessage =
   | { type: 'ping' }
@@ -115,10 +116,12 @@ async function handleClient(client: WebSocket, req: IncomingMessage): Promise<vo
 
   let closed = false;
   let deepgramOpenTimeout: ReturnType<typeof setTimeout> | undefined;
+  const arreterKeepAlive = demarrerKeepAliveWs(client);
 
   const closeBoth = (code = 1000, reason = 'bye') => {
     if (closed) return;
     closed = true;
+    arreterKeepAlive();
     if (deepgramOpenTimeout) clearTimeout(deepgramOpenTimeout);
     try {
       if (deepgram.readyState === WebSocket.OPEN) {

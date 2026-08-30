@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { createServer } from 'node:http';
 import { createApp } from './app.js';
+import { configureHttpServerForProduction } from './config/http-server.js';
 import { corsOrigins, env } from './config/env.js';
 import { logger } from './lib/logger.js';
 import { attachTranscriptionWebSocket } from './ws/transcription.ws.js';
@@ -8,6 +9,7 @@ import { attachTranscriptionViewWebSocket } from './ws/transcription-view.ws.js'
 
 const app = createApp();
 const server = createServer(app);
+configureHttpServerForProduction(server);
 
 attachTranscriptionWebSocket(server);
 attachTranscriptionViewWebSocket(server);

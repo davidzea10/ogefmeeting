@@ -55,18 +55,33 @@ Les croix rouges sur GitHub ne signifient **pas** que le code est cassé : c’e
 
 ---
 
-## Backend sur Render
+## Backend sur Render (plan Starter ~7 $/mois)
 
-Voir `render.yaml`. Variables essentielles :
+Le plan **Starter** est requis pour les réunions live (2 h, WebSocket STT, pas de mise en veille).
+
+Fichier `render.yaml` à la racine :
+
+| Paramètre | Valeur |
+|-----------|--------|
+| `plan` | `starter` |
+| `healthCheckPath` | `/api/health` |
+| `NODE_ENV` | `production` |
+| `AUTH_ENFORCED` | `true` |
+
+Variables à renseigner dans **Render → Environment** (sync manuel si déjà créé) :
 
 | Variable | Description |
 |----------|-------------|
 | `CORS_ORIGIN` | URL Vercel frontend, ex. `https://ogefmeeting-frontend.vercel.app` |
 | `FRONTEND_URL` | Même URL (emails, liens invitations) |
 | `SUPABASE_URL` / clés | Connexion BDD |
-| `AUTH_ENFORCED` | `true` en production |
+| `DEEPGRAM_API_KEY` | Transcription live |
+| `OPENAI_API_KEY` | Génération CR IA |
+| `RESEND_API_KEY` | Emails (optionnel en dev) |
 
-Redéployer Render après changement de `CORS_ORIGIN`.
+Après upgrade Starter ou changement de variables : **Manual Deploy** sur Render.
+
+Vérifier le déploiement : `GET https://votre-api.onrender.com/api/health` → champ `build` = `2026-08-30-render-starter`.
 
 ---
 

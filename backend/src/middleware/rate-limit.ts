@@ -29,12 +29,12 @@ export const generalRateLimiter = rateLimit({
 });
 
 /**
- * Limite assouplie pour le live (~3 req/s en moyenne sur 15 min par IP).
- * Une réunion de 2 h avec STT + présences ne doit pas se bloquer seule.
+ * Limite assouplie pour le live (~4 req/s en moyenne sur 15 min par IP).
+ * Production (Render Starter) : marge pour réunions de 2 h avec ~20 participants.
  */
 export const liveRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 4000,
+  max: process.env.NODE_ENV === 'production' ? 6000 : 4000,
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => !isLiveApiPath(req),
