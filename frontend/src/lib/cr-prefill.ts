@@ -1,4 +1,10 @@
-import type { ModeleCompteRendu, ReunionDetail, SectionCompteRendu } from '@ogefmeeting/shared';
+import type {
+  Direction,
+  ModeleCompteRendu,
+  Profil,
+  ReunionDetail,
+  SectionCompteRendu,
+} from '@ogefmeeting/shared';
 import { formatDateHeure, LIBELLES_PARTICIPANT, LIBELLES_TYPE } from '@/lib/labels';
 
 /**
@@ -14,11 +20,13 @@ export const SECTIONS_CR_DEFAUT: SectionCompteRendu[] = [
 
 export type ContenuCr = Record<string, string>;
 
-function paragraphs(lines: string[]): string {
-  const cleaned = lines.filter((l) => l.trim().length > 0);
-  if (cleaned.length === 0) return '<p></p>';
-  return cleaned.map((l) => `<p>${escapeHtml(l)}</p>`).join('');
-}
+export type LigneParticipantCr = {
+  nom: string;
+  matricule: string;
+  email: string;
+  direction: string;
+  statut: string;
+};
 
 function escapeHtml(text: string): string {
   return text
@@ -28,9 +36,71 @@ function escapeHtml(text: string): string {
     .replace(/"/g, '&quot;');
 }
 
+function paragraphs(lines: string[]): string {
+  const cleaned = lines.filter((l) => l.trim().length > 0);
+  if (cleaned.length === 0) return '<p></p>';
+  return cleaned.map((l) => `<p>${escapeHtml(l)}</p>`).join('');
+}
+
 function listHtml(items: string[]): string {
   if (items.length === 0) return '<p><em>Aucun élément.</em></p>';
   return `<ul>${items.map((i) => `<li>${escapeHtml(i)}</li>`).join('')}</ul>`;
+}
+
+function directionAbregee(
+  directionId: string | null | undefined,
+  directions: Map<string, Direction>,
+): string {
+  if (!directionId) return '—';
+  const dir = directions.get(directionId);
+  if (!dir) return '—';
+  if (dir.code?.trim()) return dir.code.trim().toUpperCase();
+  return dir.nom.trim().toUpperCase();
+}
+
+/** Construit les lignes du tableau participants (Noms, matricule, mail, direction, statut). */
+export function construireLignesParticipantsCr(
+  reunion: ReunionDetail,
+  profils: Profil[],
+  directions: Direction[],
+): LigneParticipantCr[] {
+  const profilMap = new Map(profils.map((p) => [p.id, p]));
+  const directionMap = new Map(directions.map((d) => [d.id, d]));
+
+  return reunion.participants.map((p) => {
+    const profil = profilMap.get(p.profil_id);
+    const nom = profil ? `${profil.prenom} ${profil.nom}`.trim() : p.profil_id.slice(0, 8);
+    return {
+      nom: nom || '—',
+      matricule: profil?.matricule?.trim() || '—',
+      email: profil?.email?.trim() || '—',
+      direction: directionAbregee(profil?.direction_id, directionMap),
+      statut: LIBELLES_PARTICIPANT[p.statut] ?? p.statut,
+    };
+  });
+}
+
+/** HTML table pour la section participants du CR. */
+export function participantsTableHtml(lignes: LigneParticipantCr[]): string {
+  if (lignes.length === 0) {
+    return '<p><em>Aucun participant.</em></p>';
+  }
+
+  const header =
+    '<thead><tr>' +
+    '<th>Nom</th><th>Matricule</th><th>Email</th><th>Direction</th><th>Statut</th>' +
+    '</tr></thead>';
+
+  const body = lignes
+    .map(
+      (l) =>
+        `<tr><td>${escapeHtml(l.nom)}</td><td>${escapeHtml(l.matricule)}</td>` +
+        `<td>${escapeHtml(l.email)}</td><td>${escapeHtml(l.direction)}</td>` +
+        `<td>${escapeHtml(l.statut)}</td></tr>`,
+    )
+    .join('');
+
+  return `<table>${header}<tbody>${body}</tbody></table>`;
 }
 
 /**
@@ -39,18 +109,10 @@ function listHtml(items: string[]): string {
 export function preremplirContenuCr(
   reunion: ReunionDetail,
   sections: SectionCompteRendu[],
-  profilNoms: Map<string, string>,
+  profils: Profil[],
+  directions: Direction[] = [],
 ): ContenuCr {
-  const presents = reunion.participants
-    .filter((p) => p.statut === 'present' || p.statut === 'confirme')
-    .map((p) => {
-      const nom = profilNoms.get(p.profil_id) ?? p.profil_id.slice(0, 8);
-      return `${nom} (${LIBELLES_PARTICIPANT[p.statut] ?? p.statut})`;
-    });
-
-  const absents = reunion.participants
-    .filter((p) => p.statut === 'absent')
-    .map((p) => profilNoms.get(p.profil_id) ?? p.profil_id.slice(0, 8));
+  const lignesParticipants = construireLignesParticipantsCr(reunion, profils, directions);
 
   const points = [...reunion.points_ordre_jour]
     .sort((a, b) => a.ordre - b.ordre)
@@ -64,12 +126,7 @@ export function preremplirContenuCr(
       reunion.lieu ? `Lieu : ${reunion.lieu}` : '',
       reunion.description ? `Description : ${reunion.description}` : '',
     ]),
-    participants: [
-      '<p><strong>Présents / confirmés</strong></p>',
-      listHtml(presents),
-      '<p><strong>Absents</strong></p>',
-      listHtml(absents),
-    ].join(''),
+    participants: participantsTableHtml(lignesParticipants),
     ordre_du_jour: listHtml(points),
     points_techniques: listHtml(points),
     prochaine_reunion: '<p></p>',
@@ -106,8 +163,17 @@ export function contenuEstVide(contenu: Record<string, unknown> | null | undefin
   });
 }
 
-export function contenuVersHtml(sections: SectionCompteRendu[], contenu: ContenuCr): string {
-  return sections
+export function contenuVersHtml(
+  sections: SectionCompteRendu[],
+  contenu: ContenuCr,
+  options?: { inclureParticipants?: boolean },
+): string {
+  const inclureParticipants = options?.inclureParticipants !== false;
+  const sectionsFiltrees = inclureParticipants
+    ? sections
+    : sections.filter((s) => s.cle !== 'participants');
+
+  return sectionsFiltrees
     .map((s) => `<h2>${escapeHtml(s.libelle)}</h2>${contenu[s.cle] ?? '<p></p>'}`)
     .join('\n');
 }

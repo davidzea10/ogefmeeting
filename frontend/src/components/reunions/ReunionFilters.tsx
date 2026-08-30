@@ -25,7 +25,7 @@ export const FILTRES_VIDES: ReunionFiltersState = {
   participant_id: '',
   date_debut: '',
   date_fin: '',
-  tri: 'date_prevue',
+  tri: 'cree_le',
   ordre: 'desc',
 };
 
@@ -139,13 +139,13 @@ export function ReunionFilters({ value, onChange, directions, profils }: Props) 
         </label>
 
         <Input
-          label="Du"
+          label="Enregistrée du"
           type="date"
           value={value.date_debut}
           onChange={(e) => patch({ date_debut: e.target.value })}
         />
         <Input
-          label="Au"
+          label="Enregistrée au"
           type="date"
           value={value.date_fin}
           onChange={(e) => patch({ date_fin: e.target.value })}
@@ -163,10 +163,10 @@ export function ReunionFilters({ value, onChange, directions, profils }: Props) 
                 patch({ tri: e.target.value as ReunionFiltersState['tri'] })
               }
             >
-              <option value="date_prevue">Date</option>
+              <option value="cree_le">Enregistrement</option>
+              <option value="date_prevue">Date prévue</option>
               <option value="titre">Titre</option>
               <option value="statut">Statut</option>
-              <option value="cree_le">Création</option>
             </select>
           </label>
           <label className="flex flex-col gap-1.5 text-sm">

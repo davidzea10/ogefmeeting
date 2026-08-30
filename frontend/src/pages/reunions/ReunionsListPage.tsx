@@ -74,8 +74,8 @@ export function ReunionsListPage() {
     const base = {
       page: vue === 'calendrier' ? 1 : page,
       limite: vue === 'calendrier' ? 100 : 10,
-      tri: filtres.tri,
-      ordre: filtres.ordre,
+      tri: vue === 'calendrier' ? 'date_prevue' : filtres.tri,
+      ordre: vue === 'calendrier' ? 'asc' : filtres.ordre,
       recherche: rechercheDebounced || undefined,
       statut: (filtres.statut || undefined) as StatutReunion | undefined,
       type_reunion: (filtres.type_reunion || undefined) as TypeReunion | undefined,
@@ -83,14 +83,14 @@ export function ReunionsListPage() {
       participant_id: filtres.participant_id || undefined,
       date_apres: filtres.date_debut
         ? debutJourneeISO(filtres.date_debut)
-        : vue === 'calendrier'
-          ? startOfMonthISO(moisCalendrier)
-          : undefined,
+        : undefined,
       date_avant: filtres.date_fin
         ? finJourneeISO(filtres.date_fin)
-        : vue === 'calendrier'
-          ? endOfMonthISO(moisCalendrier)
-          : undefined,
+        : undefined,
+      date_prevue_apres:
+        vue === 'calendrier' ? startOfMonthISO(moisCalendrier) : undefined,
+      date_prevue_avant:
+        vue === 'calendrier' ? endOfMonthISO(moisCalendrier) : undefined,
     };
     return base;
   }, [filtres, page, rechercheDebounced, vue, moisCalendrier]);

@@ -127,6 +127,14 @@ comptesRendusRouter.get(
   asyncHandler((req, res) => compteRenduController.exporterPdf(req, res)),
 );
 
+comptesRendusRouter.get(
+  '/:id/export/pdf-participants',
+  requireAuth,
+  requirePermission(PERMISSIONS.CR_LIRE),
+  validateParams(idParamSchema),
+  asyncHandler((req, res) => compteRenduController.exporterPdfParticipants(req, res)),
+);
+
 comptesRendusRouter.post(
   '/:id/generer-ia',
   requireAuth,

@@ -110,7 +110,7 @@ export function LiveOrdreJourPanel({
   async function handleAdd() {
     const parsed = parseDraft(addDraft);
     if ('error' in parsed) {
-      setAddError(parsed.error);
+      setAddError(parsed.error ?? null);
       return;
     }
     const next: PointOrdreJour[] = [
@@ -145,7 +145,7 @@ export function LiveOrdreJourPanel({
     if (!current) return;
     const parsed = parseDraft(editDraft);
     if ('error' in parsed) {
-      setEditError(parsed.error);
+      setEditError(parsed.error ?? null);
       return;
     }
     const next = points.map((p) =>

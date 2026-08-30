@@ -223,6 +223,8 @@ export class ReunionService {
       participant_id,
       date_apres,
       date_avant,
+      date_prevue_apres,
+      date_prevue_avant,
       recherche,
     } = query;
     const from = (page - 1) * limite;
@@ -273,10 +275,16 @@ export class ReunionService {
       }
     }
     if (date_apres) {
-      builder = builder.gte('date_prevue', date_apres);
+      builder = builder.gte('cree_le', date_apres);
     }
     if (date_avant) {
-      builder = builder.lte('date_prevue', date_avant);
+      builder = builder.lte('cree_le', date_avant);
+    }
+    if (date_prevue_apres) {
+      builder = builder.gte('date_prevue', date_prevue_apres);
+    }
+    if (date_prevue_avant) {
+      builder = builder.lte('date_prevue', date_prevue_avant);
     }
     if (recherche) {
       builder = builder.ilike('titre', `%${recherche}%`);

@@ -48,10 +48,20 @@ export const listerReunionsQuerySchema = paginationQuerySchema.extend({
   participant_id: uuidSchema.optional(),
   date_apres: z.string().datetime({ message: 'date_apres doit être une date ISO valide.' }).optional(),
   date_avant: z.string().datetime({ message: 'date_avant doit être une date ISO valide.' }).optional(),
+  /** Filtre calendrier : borne basse sur date_prevue */
+  date_prevue_apres: z
+    .string()
+    .datetime({ message: 'date_prevue_apres doit être une date ISO valide.' })
+    .optional(),
+  /** Filtre calendrier : borne haute sur date_prevue */
+  date_prevue_avant: z
+    .string()
+    .datetime({ message: 'date_prevue_avant doit être une date ISO valide.' })
+    .optional(),
   recherche: z.string().trim().optional(),
   tri: z
     .enum(['date_prevue', 'titre', 'statut', 'cree_le'])
-    .default('date_prevue'),
+    .default('cree_le'),
 });
 
 export type ListerReunionsQuery = z.infer<typeof listerReunionsQuerySchema>;

@@ -1,6 +1,7 @@
 import { ReunionStatusBadge } from '@/components/reunions/ReunionStatusBadge';
+import { ReunionDateCell } from '@/components/reunions/ReunionDateCell';
 import { Button } from '@/components/ui/Button';
-import { formatDateHeure, LIBELLES_TYPE } from '@/lib/labels';
+import { LIBELLES_TYPE } from '@/lib/labels';
 import { peutGererReunionRole, peutModifierReunionRole } from '@/lib/roles';
 import { useAuthStore } from '@/stores/auth.store';
 import type { Reunion } from '@ogefmeeting/shared';
@@ -117,10 +118,12 @@ export function ReunionTable({
                   >
                     {reunion.titre}
                   </Link>
-                  <p className="mt-1 text-xs text-text-muted">
-                    {formatDateHeure(reunion.date_prevue)}
-                    {reunion.lieu ? ` · ${reunion.lieu}` : ''}
-                  </p>
+                  <div className="mt-1 text-xs text-text-muted">
+                    <ReunionDateCell reunion={reunion} />
+                    {reunion.lieu ? (
+                      <p className="mt-1 text-text-muted/80">{reunion.lieu}</p>
+                    ) : null}
+                  </div>
                   <p className="mt-0.5 text-xs text-text-muted">
                     {LIBELLES_TYPE[reunion.type_reunion]}
                   </p>
@@ -151,7 +154,7 @@ export function ReunionTable({
                 Titre
               </th>
               <th scope="col" className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-text-muted">
-                Date
+                Date prévue
               </th>
               <th scope="col" className="px-4 py-3.5 text-xs font-semibold uppercase tracking-wide text-text-muted">
                 Type
@@ -195,8 +198,8 @@ export function ReunionTable({
                       {reunion.titre}
                     </Link>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3.5 text-text-muted">
-                    {formatDateHeure(reunion.date_prevue)}
+                  <td className="px-4 py-3.5">
+                    <ReunionDateCell reunion={reunion} />
                   </td>
                   <td className="px-4 py-3.5">
                     <span className="inline-flex rounded-md bg-surface-muted px-2 py-0.5 text-xs font-medium text-text-muted">

@@ -71,3 +71,20 @@ export function debutJourneeISO(dateLocal: string): string {
 export function finJourneeISO(dateLocal: string): string {
   return new Date(`${dateLocal}T23:59:59.999`).toISOString();
 }
+
+/** Nombre de jours calendaires avant la date prévue (0 = aujourd'hui, négatif = passé). */
+export function joursRestantsAvantReunion(datePrevueIso: string): number {
+  const now = new Date();
+  const target = new Date(datePrevueIso);
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfTarget = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+  return Math.round((startOfTarget.getTime() - startOfToday.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+/** Libellé court pour une réunion planifiée (J-5, Demain, Aujourd'hui…). */
+export function libelleJoursRestantsReunion(jours: number): string {
+  if (jours < 0) return `Il y a ${Math.abs(jours)} j.`;
+  if (jours === 0) return "Aujourd'hui";
+  if (jours === 1) return 'Demain';
+  return `J-${jours}`;
+}

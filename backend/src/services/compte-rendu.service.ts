@@ -17,7 +17,13 @@ import type {
 } from '../schemas/compte-rendu.schemas.js';
 import { AppError } from '../utils/errors.js';
 import { handleSupabaseError } from '../utils/supabase-error.js';
-import { genererPdfCompteRendu, nomFichierPdfCr } from './cr-pdf.service.js';
+import {
+  genererPdfCompteRendu,
+  genererPdfListeParticipants,
+  nomFichierPdfCr,
+  nomFichierPdfParticipants,
+  type PdfParticipantLigne,
+} from './cr-pdf.service.js';
 import {
   brouillonVersContenuSections,
   crIaService,
@@ -148,18 +154,21 @@ export class CompteRenduService {
   async modifier(
     id: string,
     input: ModifierCompteRenduInput,
-    options: { ajustementDirecteur?: boolean } = {},
+    options: { peutAjuster?: boolean } = {},
   ): Promise<CompteRendu> {
     const actuel = await this.assurerExiste(id);
 
-    if (actuel.statut === 'valide' || actuel.statut === 'archive') {
-      throw new AppError(400, 'Un compte rendu validé ou archivé ne peut plus être modifié.');
+    if (actuel.statut === 'archive') {
+      throw new AppError(400, 'Un compte rendu archivé ne peut plus être modifié.');
     }
 
-    if (actuel.statut === 'soumis' && !options.ajustementDirecteur) {
+    if (
+      (actuel.statut === 'soumis' || actuel.statut === 'valide') &&
+      !options.peutAjuster
+    ) {
       throw new AppError(
         400,
-        'Un compte rendu soumis est en attente de validation. Seul un directeur peut encore l’ajuster.',
+        'Ce compte rendu ne peut être modifié que par l’organisateur, le secrétariat ou la direction.',
       );
     }
 
@@ -186,6 +195,8 @@ export class CompteRenduService {
         contenu: input.contenu ?? actuel.contenu,
         contenu_html:
           input.contenu_html !== undefined ? input.contenu_html : actuel.contenu_html,
+        afficher_participants_corps:
+          input.afficher_participants_corps ?? actuel.afficher_participants_corps ?? true,
         version: nouvelleVersion,
       })
       .eq('id', id)
@@ -491,33 +502,11 @@ export class CompteRenduService {
 
     const { data: participantsRows } = await supabase
       .from(TABLES.participantsReunion)
-      .select('statut, profils(prenom, nom, email, fonction, directions(nom))')
+      .select('statut, profils(prenom, nom, email, matricule, fonction, directions(code, nom))')
       .eq('reunion_id', compte_rendu.reunion_id)
       .order('cree_le', { ascending: true });
 
-    type ProfilJoin = {
-      prenom?: string;
-      nom?: string;
-      email?: string | null;
-      fonction?: string | null;
-      directions?: { nom?: string } | { nom?: string }[] | null;
-    };
-
-    const participants = (participantsRows ?? []).map((row) => {
-      const rawProfil = (row as { profils?: ProfilJoin | ProfilJoin[] | null }).profils;
-      const profil = Array.isArray(rawProfil) ? rawProfil[0] : rawProfil;
-      const rawDir = profil?.directions;
-      const direction = Array.isArray(rawDir) ? rawDir[0] : rawDir;
-      const prenom = profil?.prenom?.trim() ?? '';
-      const nom = profil?.nom?.trim() ?? '';
-      return {
-        nom: `${prenom} ${nom}`.trim() || '—',
-        email: profil?.email ?? null,
-        direction: direction?.nom ?? null,
-        fonction: profil?.fonction ?? null,
-        statut: String((row as { statut?: string }).statut ?? 'invite'),
-      };
-    });
+    const participants = this.mapperParticipantsPdf(participantsRows ?? []);
 
     const parametres = await parametresService.obtenir();
 
@@ -546,6 +535,89 @@ export class CompteRenduService {
     );
 
     return { buffer, filename };
+  }
+
+  /**
+   * PDF annexe : liste des participants (toujours disponible, même si absente du CR principal).
+   */
+  async exporterPdfParticipants(id: string): Promise<{ buffer: Buffer; filename: string }> {
+    const compte_rendu = await this.assurerExiste(id);
+    const supabase = requireSupabaseAdmin();
+
+    const { data: reunion, error: reunionError } = await supabase
+      .from(TABLES.reunions)
+      .select('titre, date_prevue, lieu')
+      .eq('id', compte_rendu.reunion_id)
+      .single();
+
+    if (reunionError || !reunion) {
+      handleSupabaseError(reunionError, 'Réunion associée introuvable.');
+    }
+
+    const { data: participantsRows } = await supabase
+      .from(TABLES.participantsReunion)
+      .select('statut, profils(prenom, nom, email, matricule, fonction, directions(code, nom))')
+      .eq('reunion_id', compte_rendu.reunion_id)
+      .order('cree_le', { ascending: true });
+
+    const participants = this.mapperParticipantsPdf(participantsRows ?? []);
+    const parametres = await parametresService.obtenir();
+
+    const buffer = await genererPdfListeParticipants({
+      compteRendu: compte_rendu,
+      reunion: reunion as Pick<
+        import('@ogefmeeting/shared').Reunion,
+        'titre' | 'date_prevue' | 'lieu'
+      >,
+      participants,
+      enTetePdf: parametres.en_tete_pdf,
+      sousTitrePdf: parametres.sous_titre_pdf,
+    });
+
+    const filename = nomFichierPdfParticipants(
+      (reunion as { titre: string }).titre,
+      compte_rendu.version,
+    );
+
+    return { buffer, filename };
+  }
+
+  private mapperParticipantsPdf(
+    participantsRows: Array<Record<string, unknown>>,
+  ): PdfParticipantLigne[] {
+    type ProfilJoin = {
+      prenom?: string;
+      nom?: string;
+      email?: string | null;
+      matricule?: string | null;
+      fonction?: string | null;
+      directions?: { code?: string | null; nom?: string } | { code?: string | null; nom?: string }[] | null;
+    };
+
+    return participantsRows.map((row) => {
+      const rawProfil = (row as { profils?: ProfilJoin | ProfilJoin[] | null }).profils;
+      const profil = Array.isArray(rawProfil) ? rawProfil[0] : rawProfil;
+      const rawDir = profil?.directions;
+      const direction = Array.isArray(rawDir) ? rawDir[0] : rawDir;
+      const prenom = profil?.prenom?.trim() ?? '';
+      const nom = profil?.nom?.trim() ?? '';
+      const codeDir = direction?.code?.trim();
+      const nomDir = direction?.nom?.trim();
+      const directionLabel = codeDir
+        ? codeDir.toUpperCase()
+        : nomDir
+          ? nomDir.toUpperCase()
+          : null;
+
+      return {
+        nom: `${prenom} ${nom}`.trim() || '—',
+        matricule: profil?.matricule ?? null,
+        email: profil?.email ?? null,
+        direction: directionLabel,
+        fonction: profil?.fonction ?? null,
+        statut: String((row as { statut?: string }).statut ?? 'invite'),
+      };
+    });
   }
 
   /**

@@ -433,6 +433,8 @@ export type CompteRendu = {
   statut: StatutCompteRendu;
   contenu: Record<string, unknown>;
   contenu_html: string | null;
+  /** Si false, la liste participants n'apparaît pas dans le corps du CR / PDF principal. */
+  afficher_participants_corps: boolean;
   version: number;
   soumis_le: string | null;
   valide_le: string | null;

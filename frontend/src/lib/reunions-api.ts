@@ -23,6 +23,9 @@ export type ListerReunionsParams = {
   participant_id?: string;
   date_apres?: string;
   date_avant?: string;
+  /** Calendrier : filtre sur la date prévue de la réunion */
+  date_prevue_apres?: string;
+  date_prevue_avant?: string;
   recherche?: string;
 };
 

@@ -42,6 +42,7 @@ export function modifierCompteRendu(
   payload: {
     contenu?: Record<string, unknown>;
     contenu_html?: string | null;
+    afficher_participants_corps?: boolean;
     modifie_par?: string | null;
     historiser?: boolean;
   },
@@ -168,6 +169,38 @@ export async function telechargerPdfCompteRendu(id: string): Promise<{
   const disposition = response.headers.get('Content-Disposition') ?? '';
   const match = /filename="?([^"]+)"?/i.exec(disposition);
   const filename = match?.[1] ?? `compte-rendu-${id}.pdf`;
+  const blob = await response.blob();
+  return { blob, filename };
+}
+
+/** Télécharge le PDF annexe « liste des participants ». */
+export async function telechargerPdfParticipantsCompteRendu(id: string): Promise<{
+  blob: Blob;
+  filename: string;
+}> {
+  const token = (await ensureFreshToken()) ?? useAuthStore.getState().accessToken;
+  const headers = new Headers();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+
+  const response = await fetch(
+    `${API_URL}/api/comptes-rendus/${id}/export/pdf-participants`,
+    { headers },
+  );
+
+  if (!response.ok) {
+    let message = `Erreur HTTP ${response.status}`;
+    try {
+      const payload = (await response.json()) as { error?: { message?: string } };
+      if (payload?.error?.message) message = payload.error.message;
+    } catch {
+      /* ignore */
+    }
+    throw new ApiClientError(message, response.status);
+  }
+
+  const disposition = response.headers.get('Content-Disposition') ?? '';
+  const match = /filename="?([^"]+)"?/i.exec(disposition);
+  const filename = match?.[1] ?? `participants-${id}.pdf`;
   const blob = await response.blob();
   return { blob, filename };
 }

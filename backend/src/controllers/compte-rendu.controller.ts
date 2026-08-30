@@ -16,7 +16,6 @@ import {
   profilLimiteAuxParticipations,
   utilisateurPeutRedigerCompteRendu,
 } from '../utils/reunion-acces.js';
-import { PERMISSIONS, roleAutorise } from '../utils/permissions.js';
 
 export class CompteRenduController {
   async creer(req: Request, res: Response): Promise<void> {
@@ -43,13 +42,10 @@ export class CompteRenduController {
 
   async modifier(req: Request, res: Response): Promise<void> {
     await this.assurerPeutRedigerCr(req, req.params.id as string);
-    const ajustementDirecteur = Boolean(
-      req.user && roleAutorise(req.user.role, PERMISSIONS.CR_VALIDER),
-    );
     const data = await compteRenduService.modifier(
       req.params.id as string,
       req.body as ModifierCompteRenduInput,
-      { ajustementDirecteur },
+      { peutAjuster: true },
     );
     res.status(200).json({ success: true, data });
   }
@@ -112,6 +108,19 @@ export class CompteRenduController {
       limiterAuProfilId: profilLimiteAuxParticipations(req.user),
     });
     const { buffer, filename } = await compteRenduService.exporterPdf(
+      req.params.id as string,
+    );
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', String(buffer.length));
+    res.status(200).send(buffer);
+  }
+
+  async exporterPdfParticipants(req: Request, res: Response): Promise<void> {
+    await compteRenduService.obtenirParId(req.params.id as string, {
+      limiterAuProfilId: profilLimiteAuxParticipations(req.user),
+    });
+    const { buffer, filename } = await compteRenduService.exporterPdfParticipants(
       req.params.id as string,
     );
     res.setHeader('Content-Type', 'application/pdf');

@@ -55,10 +55,13 @@ export function peutModifierContenuCr(
   ctx?: ContexteOrganisateurCr,
 ): boolean {
   if (!peutRedigerCr(role, ctx)) return false;
-  if (statut === 'brouillon' || statut === 'en_revision') return true;
-  // Directeur / admin : peuvent ajuster un CR déjà soumis avant validation
-  if (statut === 'soumis' && peutValiderCr(role)) return true;
-  return false;
+  if (statut === 'archive') return false;
+  return (
+    statut === 'brouillon' ||
+    statut === 'en_revision' ||
+    statut === 'soumis' ||
+    statut === 'valide'
+  );
 }
 
 export function peutSoumettreCr(
@@ -95,7 +98,7 @@ export function messageWorkflowCr(statut: StatutCompteRendu): string {
     case 'soumis':
       return 'Soumis — en attente de validation. Le directeur peut ajuster le contenu, commenter, valider ou renvoyer.';
     case 'valide':
-      return 'Validé — rapport officiel. Dès que la réunion est clôturée, le PDF est envoyé aux participants (renvoi possible via le bouton).';
+      return 'Validé — rapport officiel. Vous pouvez encore réajuster le contenu ; le PDF sera régénéré à l’export.';
     case 'archive':
       return 'Archivé — consultation uniquement.';
     default:

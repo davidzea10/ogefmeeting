@@ -15,13 +15,22 @@ export const modifierCompteRenduSchema = z
   .object({
     contenu: z.record(z.string(), z.unknown()).optional(),
     contenu_html: z.string().optional().nullable(),
+    /** Inclure la liste participants dans le corps du CR / PDF principal */
+    afficher_participants_corps: z.boolean().optional(),
     modifie_par: uuidSchema.optional().nullable(),
     /** true = historiser la version précédente (sauvegarde manuelle). false = auto-save silencieux */
     historiser: z.boolean().optional().default(false),
   })
-  .refine((data) => data.contenu !== undefined || data.contenu_html !== undefined, {
-    message: 'Au moins contenu ou contenu_html doit être fourni.',
-  });
+  .refine(
+    (data) =>
+      data.contenu !== undefined ||
+      data.contenu_html !== undefined ||
+      data.afficher_participants_corps !== undefined,
+    {
+      message:
+        'Au moins contenu, contenu_html ou afficher_participants_corps doit être fourni.',
+    },
+  );
 
 export type ModifierCompteRenduInput = z.infer<typeof modifierCompteRenduSchema>;
 

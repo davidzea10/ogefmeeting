@@ -1,6 +1,7 @@
 import { useAnnouncerStore } from '@/components/a11y/LiveAnnouncer';
 import { Breadcrumbs } from '@/components/layout/Breadcrumbs';
 import { CrSectionEditor } from '@/components/comptes-rendus/CrSectionEditor';
+import { CrParticipantsTable } from '@/components/comptes-rendus/CrParticipantsTable';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import {
@@ -16,6 +17,7 @@ import {
   rejeterCompteRendu,
   soumettreCompteRendu,
   telechargerPdfCompteRendu,
+  telechargerPdfParticipantsCompteRendu,
   validerCompteRendu,
 } from '@/lib/comptes-rendus-api';
 import {
@@ -39,7 +41,7 @@ import {
   type NiveauDetailCr,
 } from '@/lib/cr-workflow';
 import { formatDateHeure } from '@/lib/labels';
-import { listerProfils, obtenirReunion } from '@/lib/reunions-api';
+import { listerDirections, listerProfils, obtenirReunion } from '@/lib/reunions-api';
 import { useAuthStore } from '@/stores/auth.store';
 import type { SectionCompteRendu } from '@ogefmeeting/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -54,6 +56,7 @@ import {
   Save,
   Send,
   Sparkles,
+  Users,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -88,6 +91,7 @@ export function CompteRenduEditorPage() {
   const [commentaireAction, setCommentaireAction] = useState('');
   const [noteLibre, setNoteLibre] = useState('');
   const [niveauDetailCr, setNiveauDetailCr] = useState<NiveauDetailCr>('detaille');
+  const [afficherParticipantsCorps, setAfficherParticipantsCorps] = useState(true);
   const initDone = useRef(false);
 
   const crQuery = useQuery({
@@ -110,6 +114,11 @@ export function CompteRenduEditorPage() {
   const profilsQuery = useQuery({
     queryKey: ['profils', 'cr'],
     queryFn: () => listerProfils({ limite: 100 }),
+  });
+
+  const directionsQuery = useQuery({
+    queryKey: ['directions', 'cr'],
+    queryFn: listerDirections,
   });
 
   const versionsQuery = useQuery({
@@ -137,7 +146,7 @@ export function CompteRenduEditorPage() {
 
   useEffect(() => {
     if (!crQuery.data || !reunionQuery.data || initDone.current) return;
-    if (!modelesQuery.isFetched || !profilsQuery.isFetched) return;
+    if (!modelesQuery.isFetched || !profilsQuery.isFetched || !directionsQuery.isFetched) return;
 
     const modele =
       modelesQuery.data?.find((m) => m.id === reunionQuery.data!.modele_id) ??
@@ -146,14 +155,13 @@ export function CompteRenduEditorPage() {
 
     const secs = sectionsDepuisModele(modele);
     setSections(secs);
+    setAfficherParticipantsCorps(crQuery.data.afficher_participants_corps ?? true);
 
-    const profilMap = new Map<string, string>();
-    for (const p of profilsQuery.data?.items ?? []) {
-      profilMap.set(p.id, `${p.prenom} ${p.nom}`);
-    }
+    const profils = profilsQuery.data?.items ?? [];
+    const directions = directionsQuery.data ?? [];
 
     if (contenuEstVide(crQuery.data.contenu)) {
-      const prefill = preremplirContenuCr(reunionQuery.data, secs, profilMap);
+      const prefill = preremplirContenuCr(reunionQuery.data, secs, profils, directions);
       setContenu(prefill);
       setDirty(true);
     } else {
@@ -173,6 +181,8 @@ export function CompteRenduEditorPage() {
     modelesQuery.isFetched,
     profilsQuery.data,
     profilsQuery.isFetched,
+    directionsQuery.data,
+    directionsQuery.isFetched,
   ]);
 
   const invalidateCr = async (reunionId?: string) => {
@@ -185,11 +195,17 @@ export function CompteRenduEditorPage() {
     }
   };
 
+  const buildContenuHtml = () =>
+    contenuVersHtml(sections, contenu, {
+      inclureParticipants: afficherParticipantsCorps,
+    });
+
   const saveMut = useMutation({
     mutationFn: (opts: { historiser: boolean }) =>
       modifierCompteRendu(id!, {
         contenu,
-        contenu_html: contenuVersHtml(sections, contenu),
+        contenu_html: buildContenuHtml(),
+        afficher_participants_corps: afficherParticipantsCorps,
         modifie_par: profilId ?? null,
         historiser: opts.historiser,
       }),
@@ -209,7 +225,8 @@ export function CompteRenduEditorPage() {
       if (dirty) {
         await modifierCompteRendu(id!, {
           contenu,
-          contenu_html: contenuVersHtml(sections, contenu),
+          contenu_html: buildContenuHtml(),
+          afficher_participants_corps: afficherParticipantsCorps,
           modifie_par: profilId ?? null,
           historiser: true,
         });
@@ -261,6 +278,22 @@ export function CompteRenduEditorPage() {
     onSuccess: async (data) => {
       await invalidateCr(data.reunion_id);
       announce('Compte rendu archivé.');
+    },
+    onError: (e: Error) => announce(e.message),
+  });
+
+  const pdfParticipantsMut = useMutation({
+    mutationFn: () => telechargerPdfParticipantsCompteRendu(id!),
+    onSuccess: ({ blob, filename }) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      announce('PDF liste participants téléchargé.');
     },
     onError: (e: Error) => announce(e.message),
   });
@@ -335,7 +368,7 @@ export function CompteRenduEditorPage() {
       saveMut.mutate({ historiser: false });
     }, 30_000);
     return () => window.clearTimeout(t);
-  }, [contenu, dirty, editable]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [contenu, dirty, editable, afficherParticipantsCorps]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const statusLabel = useMemo(() => {
     if (saveMut.isPending || soumettreMut.isPending) return 'Enregistrement…';
@@ -351,6 +384,7 @@ export function CompteRenduEditorPage() {
     rejeterMut.isPending ||
     archiverMut.isPending ||
     pdfMut.isPending ||
+    pdfParticipantsMut.isPending ||
     noteMut.isPending ||
     genererIaMut.isPending ||
     envoyerParticipantsMut.isPending;
@@ -631,7 +665,18 @@ export function CompteRenduEditorPage() {
             onClick={() => pdfMut.mutate()}
           >
             <Download className="h-4 w-4" aria-hidden />
-            Télécharger PDF
+            Télécharger PDF CR
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            loading={pdfParticipantsMut.isPending}
+            disabled={workflowBusy}
+            onClick={() => pdfParticipantsMut.mutate()}
+          >
+            <Users className="h-4 w-4" aria-hidden />
+            PDF liste participants
           </Button>
 
           <Button
@@ -651,16 +696,16 @@ export function CompteRenduEditorPage() {
 
         {!editable && (
           <p className="rounded-lg bg-surface-muted px-3 py-2 text-sm text-text-muted">
-            {cr.statut === 'soumis'
-              ? 'Compte rendu soumis — en attente de validation. Seul un directeur peut encore ajuster le contenu.'
-              : `Ce compte rendu est en lecture seule (statut : ${
-                  LIBELLES_STATUT_CR[cr.statut] ?? cr.statut
-                }).`}
+            {`Ce compte rendu est en lecture seule (statut : ${
+              LIBELLES_STATUT_CR[cr.statut] ?? cr.statut
+            }).`}
           </p>
         )}
-        {editable && cr.statut === 'soumis' && (
+        {editable && (cr.statut === 'soumis' || cr.statut === 'valide') && (
           <p className="rounded-lg border border-ogefrem-blue/20 bg-ogefrem-blue/5 px-3 py-2 text-sm text-ogefrem-blue">
-            Vous pouvez ajuster le contenu avant de valider ou de renvoyer en révision.
+            {cr.statut === 'valide'
+              ? 'Compte rendu validé — vous pouvez encore réajuster le contenu. Le PDF sera régénéré à l’export.'
+              : 'Compte rendu soumis — vous pouvez ajuster le contenu avant validation ou renvoi en révision.'}
           </p>
         )}
       </header>
@@ -754,20 +799,69 @@ export function CompteRenduEditorPage() {
       )}
 
       <div className="space-y-3">
-        {sections.map((section, index) => (
-          <CrSectionEditor
-            key={section.cle}
-            sectionCle={section.cle}
-            libelle={section.libelle}
-            valueHtml={contenu[section.cle] ?? '<p></p>'}
-            editable={editable}
-            defaultOpen={index < 3}
-            onChange={(cle, html) => {
-              setContenu((prev) => ({ ...prev, [cle]: html }));
-              setDirty(true);
-            }}
-          />
-        ))}
+        {sections.map((section, index) => {
+          if (section.cle === 'participants') {
+            return (
+              <section
+                key={section.cle}
+                className="rounded-xl border border-border bg-surface p-4 shadow-sm"
+              >
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-text">
+                    <Users className="h-4 w-4 text-ogefrem-blue" aria-hidden />
+                    {section.libelle}
+                  </h3>
+                  {editable && (
+                    <label className="flex cursor-pointer items-center gap-2 text-sm text-text">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-border text-ogefrem-blue"
+                        checked={afficherParticipantsCorps}
+                        onChange={(e) => {
+                          setAfficherParticipantsCorps(e.target.checked);
+                          setDirty(true);
+                        }}
+                      />
+                      Inclure dans le corps du compte rendu
+                    </label>
+                  )}
+                </div>
+                {!afficherParticipantsCorps && (
+                  <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                    La liste n’apparaît pas dans le CR ni dans le PDF principal. Elle reste
+                    disponible via « PDF liste participants » (envoi ou impression séparés).
+                  </p>
+                )}
+                <CrParticipantsTable
+                  reunion={reunion}
+                  profils={profilsQuery.data?.items ?? []}
+                  directions={directionsQuery.data ?? []}
+                  valueHtml={contenu.participants}
+                  editable={editable}
+                  onChange={(html) => {
+                    setContenu((prev) => ({ ...prev, participants: html }));
+                    setDirty(true);
+                  }}
+                />
+              </section>
+            );
+          }
+
+          return (
+            <CrSectionEditor
+              key={section.cle}
+              sectionCle={section.cle}
+              libelle={section.libelle}
+              valueHtml={contenu[section.cle] ?? '<p></p>'}
+              editable={editable}
+              defaultOpen={index < 3}
+              onChange={(cle, html) => {
+                setContenu((prev) => ({ ...prev, [cle]: html }));
+                setDirty(true);
+              }}
+            />
+          );
+        })}
       </div>
     </div>
   );
