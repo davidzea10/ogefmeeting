@@ -513,6 +513,10 @@ export type DashboardResume = {
   reunions_a_venir: number;
   reunions_en_cours: number;
   reunions_mois: number;
+  /** Réunions du mois où le profil est participant (hors créateur seul). */
+  reunions_participations_mois: number;
+  /** Propositions en attente de validation créées par le profil. */
+  reunions_proposees: number;
   cr_brouillons: number;
   cr_soumis: number;
   cr_valides_mois: number;
@@ -522,6 +526,51 @@ export type DashboardResume = {
   actions_en_retard: number;
   mes_actions_ouvertes: number;
   mois_libelle: string;
+};
+
+export type DashboardReunionParDirection = {
+  direction_id: string;
+  nom: string;
+  code: string | null;
+  count: number;
+};
+
+export type DashboardReunionParSemaine = {
+  semaine: number;
+  libelle: string;
+  count: number;
+};
+
+export type DashboardReunionsParStatutMois = {
+  planifiee: number;
+  en_cours: number;
+  en_pause: number;
+  cloturee: number;
+  en_attente_validation: number;
+  refusee: number;
+};
+
+/** Statistiques détaillées réservées à l’administrateur */
+export type DashboardAdminStats = {
+  mois_libelle: string;
+  debut_mois: string;
+  fin_mois: string;
+  reunions_organisees_mois: number;
+  reunions_par_statut_mois: DashboardReunionsParStatutMois;
+  reunions_planifiees: number;
+  reunions_en_cours: number;
+  reunions_cloturees: number;
+  reunions_par_direction: DashboardReunionParDirection[];
+  reunions_par_semaine: DashboardReunionParSemaine[];
+  utilisateurs_total: number;
+  utilisateurs_actifs: number;
+  cr_brouillons: number;
+  cr_soumis: number;
+  cr_valides_mois: number;
+  cr_crees_mois: number;
+  taux_validation_mois: number | null;
+  actions_ouvertes: number;
+  actions_en_retard: number;
 };
 
 export type ParametresApplication = {

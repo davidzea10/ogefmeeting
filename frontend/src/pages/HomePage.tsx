@@ -1,4 +1,6 @@
 import { Breadcrumbs } from '@/components/layout/Breadcrumbs';
+import { AdminDashboard } from '@/components/dashboard/AdminDashboard';
+import { BarRow, StatCard } from '@/components/dashboard/DashboardCharts';
 import { ReunionCountdownCard } from '@/components/dashboard/ReunionCountdownCard';
 import { StaggerItem, StaggerList } from '@/components/motion/StaggerList';
 import { Badge } from '@/components/ui/Badge';
@@ -6,7 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { listerActions } from '@/lib/actions-decisions-api';
 import { listerComptesRendus } from '@/lib/comptes-rendus-api';
-import { obtenirDashboardResume } from '@/lib/dashboard-api';
+import { obtenirDashboardAdmin, obtenirDashboardResume } from '@/lib/dashboard-api';
 import {
   formatDateCourte,
   formatDateHeure,
@@ -25,7 +27,6 @@ import { useAuthStore } from '@/stores/auth.store';
 import type { DashboardResume, FonctionOrganisation, Reunion } from '@ogefmeeting/shared';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import {
-  AlertTriangle,
   CalendarDays,
   CheckSquare,
   ClipboardList,
@@ -47,8 +48,15 @@ export function HomePage() {
   const profilId = profil?.id;
 
   const dashboardQuery = useQuery({
-    queryKey: ['dashboard', 'resume', profilId, estValidateur ? 'staff' : 'agent'],
+    queryKey: ['dashboard', 'resume', profilId, estAdmin ? 'admin-resume' : estValidateur ? 'staff' : 'agent'],
     queryFn: () => obtenirDashboardResume(profilId),
+    enabled: !estAdmin,
+  });
+
+  const adminDashboardQuery = useQuery({
+    queryKey: ['dashboard', 'admin'],
+    queryFn: () => obtenirDashboardAdmin(),
+    enabled: estAdmin,
   });
 
   const reunionsAVenirQuery = useQuery({
@@ -106,7 +114,7 @@ export function HomePage() {
         page: 1,
         limite: 5,
       }),
-    enabled: Boolean(profilId),
+    enabled: Boolean(profilId) && estValidateur && !estAdmin,
   });
 
   /** Agent : invitations à confirmer (participant invite, hors créateur) */
@@ -210,7 +218,8 @@ export function HomePage() {
     return eligible[0] ?? null;
   }, [countdownDetails, estAdmin, profilId]);
 
-  const stats = dashboardQuery.data;
+  const stats = estAdmin ? undefined : dashboardQuery.data;
+  const adminStats = estAdmin ? adminDashboardQuery.data : undefined;
   const greeting = profil
     ? `Bonjour ${profil.prenom}`
     : 'Bienvenue sur Ogefmeeting';
@@ -263,9 +272,11 @@ export function HomePage() {
             </div>
             <h2 className="text-2xl font-bold sm:text-3xl">{greeting}</h2>
             <p className="max-w-2xl text-sm text-white/85 sm:text-base">
-              {estValidateur
-                ? `Vue direction / secrétariat${stats ? ` — ${stats.mois_libelle}` : ''}.`
-                : 'Votre espace personnel : réunions où vous êtes invité(e) ou que vous organisez.'}
+              {estAdmin
+                ? `Vue administration${adminStats ? ` — ${adminStats.mois_libelle}` : ''}.`
+                : estValidateur
+                  ? `Vue direction / secrétariat${stats ? ` — ${stats.mois_libelle}` : ''}.`
+                  : 'Votre espace personnel : réunions où vous êtes invité(e) ou que vous organisez.'}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -307,7 +318,12 @@ export function HomePage() {
         />
       )}
 
-      {estValidateur ? (
+      {estAdmin ? (
+        <AdminDashboard
+          stats={adminStats}
+          loading={adminDashboardQuery.isLoading}
+        />
+      ) : estValidateur ? (
         <StaffDashboard
           stats={stats}
           loading={dashboardQuery.isLoading}
@@ -329,8 +345,6 @@ export function HomePage() {
           propositionsLoading={mesPropositionsQuery.isLoading}
           invitationsAConfirmer={invitationsAConfirmer}
           invitationsLoading={invitationsLoading}
-          mesActionsOuvertes={mesActionsOuvertes}
-          mesActionsLoading={mesActionsQuery.isLoading}
           peutCreer={peutCreer}
         />
       )}
@@ -347,8 +361,6 @@ function AgentDashboard({
   propositionsLoading,
   invitationsAConfirmer,
   invitationsLoading,
-  mesActionsOuvertes,
-  mesActionsLoading,
   peutCreer,
 }: {
   stats: DashboardResume | undefined;
@@ -359,31 +371,33 @@ function AgentDashboard({
   propositionsLoading: boolean;
   invitationsAConfirmer: Reunion[];
   invitationsLoading: boolean;
-  mesActionsOuvertes: {
-    id: string;
-    titre: string;
-    statut: string;
-    date_echeance: string | null;
-    compte_rendu_id: string | null;
-  }[];
-  mesActionsLoading: boolean;
   peutCreer: boolean;
 }) {
   return (
     <>
-      <StaggerList className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <StaggerList className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <StaggerItem>
           <StatCard
             icon={CalendarDays}
             title="Mes réunions à venir"
             value={stats?.reunions_a_venir}
             loading={loading}
-            href="/reunions"
+            href="/reunions?statut=planifiee"
             meta={
               stats?.reunions_en_cours
                 ? `${stats.reunions_en_cours} en cours`
                 : 'Planifiées / invitées'
             }
+          />
+        </StaggerItem>
+        <StaggerItem>
+          <StatCard
+            icon={CalendarDays}
+            title={`Participations — ${stats?.mois_libelle ?? 'ce mois'}`}
+            value={stats?.reunions_participations_mois}
+            loading={loading}
+            href="/reunions"
+            meta="Réunions du mois auxquelles vous participez"
           />
         </StaggerItem>
         <StaggerItem>
@@ -400,23 +414,12 @@ function AgentDashboard({
         <StaggerItem>
           <StatCard
             icon={UserPlus}
-            title="Mes propositions"
-            value={mesReunionsOrganisees.length}
-            loading={propositionsLoading}
-            href="/reunions"
+            title="Mes réunions proposées"
+            value={stats?.reunions_proposees ?? mesReunionsOrganisees.length}
+            loading={loading || propositionsLoading}
+            href="/reunions?statut=en_attente_validation"
             meta="En attente de validation"
-            accent={mesReunionsOrganisees.length > 0}
-          />
-        </StaggerItem>
-        <StaggerItem>
-          <StatCard
-            icon={CheckSquare}
-            title="Mes actions"
-            value={stats?.mes_actions_ouvertes}
-            loading={loading}
-            href="/actions"
-            meta="Assignées à moi"
-            accent={(stats?.mes_actions_ouvertes ?? 0) > 0}
+            accent={(stats?.reunions_proposees ?? mesReunionsOrganisees.length) > 0}
           />
         </StaggerItem>
       </StaggerList>
@@ -508,8 +511,11 @@ function AgentDashboard({
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-            <CardTitle className="text-base">Réunions que j’organise</CardTitle>
-            <Link to="/reunions" className="text-xs font-semibold text-ogefrem-blue hover:underline">
+            <CardTitle className="text-base">Mes réunions proposées</CardTitle>
+            <Link
+              to="/reunions?statut=en_attente_validation"
+              className="text-xs font-semibold text-ogefrem-blue hover:underline"
+            >
               Tout voir
             </Link>
           </CardHeader>
@@ -519,7 +525,7 @@ function AgentDashboard({
             )}
             {!propositionsLoading && mesReunionsOrganisees.length === 0 && (
               <p className="text-sm text-text-muted">
-                Aucune proposition en attente de validation.
+                Aucune réunion proposée en attente de validation.
               </p>
             )}
             {mesReunionsOrganisees.length > 0 && (
@@ -538,48 +544,6 @@ function AgentDashboard({
                       </p>
                     </div>
                     <Badge variant="warning">{LIBELLES_STATUT[r.statut]}</Badge>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-            <CardTitle className="text-base">Mes actions assignées</CardTitle>
-            <Link to="/actions" className="text-xs font-semibold text-ogefrem-blue hover:underline">
-              Toutes
-            </Link>
-          </CardHeader>
-          <CardContent>
-            {mesActionsLoading && (
-              <p className="text-sm text-text-muted">Chargement…</p>
-            )}
-            {!mesActionsLoading && mesActionsOuvertes.length === 0 && (
-              <p className="text-sm text-text-muted">
-                Aucune action ouverte qui vous est assignée.
-              </p>
-            )}
-            {mesActionsOuvertes.length > 0 && (
-              <ul className="divide-y divide-border">
-                {mesActionsOuvertes.map((a) => (
-                  <li key={a.id} className="flex items-center justify-between gap-3 py-2.5">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-text">{a.titre}</p>
-                      <p className="text-xs text-text-muted">
-                        {a.date_echeance ? `Échéance ${a.date_echeance}` : 'Sans échéance'}
-                      </p>
-                    </div>
-                    <Badge variant={a.statut === 'en_retard' ? 'danger' : 'neutral'}>
-                      {a.statut === 'en_retard' ? (
-                        <span className="inline-flex items-center gap-1">
-                          <AlertTriangle className="h-3 w-3" /> Retard
-                        </span>
-                      ) : (
-                        a.statut
-                      )}
-                    </Badge>
                   </li>
                 ))}
               </ul>
@@ -959,72 +923,5 @@ function StaffDashboard({
         </div>
       </section>
     </>
-  );
-}
-
-function StatCard({
-  icon: Icon,
-  title,
-  value,
-  meta,
-  loading,
-  href,
-  accent,
-}: {
-  icon: typeof CalendarDays;
-  title: string;
-  value: number | undefined;
-  meta: string;
-  loading?: boolean;
-  href: string;
-  accent?: boolean;
-}) {
-  return (
-    <Link to={href} className="block">
-      <Card className={accent ? 'border-ogefrem-blue/40 ring-1 ring-ogefrem-blue/20' : ''}>
-        <CardContent className="flex items-start gap-3 pt-5">
-          <div className="rounded-lg bg-ogefrem-blue/10 p-2.5 text-ogefrem-blue">
-            <Icon className="h-5 w-5" aria-hidden />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm text-text-muted">{title}</p>
-            <p className="text-2xl font-bold text-text">
-              {loading ? '…' : (value ?? '—')}
-            </p>
-            <p className="truncate text-xs text-text-muted">{meta}</p>
-          </div>
-        </CardContent>
-      </Card>
-    </Link>
-  );
-}
-
-function BarRow({
-  label,
-  value,
-  max,
-  color,
-}: {
-  label: string;
-  value: number;
-  max: number;
-  color: string;
-}) {
-  const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
-  return (
-    <div className="space-y-1">
-      <div className="flex justify-between text-xs text-text-muted">
-        <span>{label}</span>
-        <span className="font-semibold text-text">{value}</span>
-      </div>
-      <div className="h-2 overflow-hidden rounded-full bg-surface-muted">
-        <div
-          className={`h-full rounded-full transition-all duration-700 ${color}`}
-          style={{ width: `${pct}%` }}
-          role="img"
-          aria-label={`${label} : ${value}`}
-        />
-      </div>
-    </div>
   );
 }

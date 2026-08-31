@@ -7,6 +7,13 @@ import { PERMISSIONS } from '../utils/permissions.js';
 export const dashboardRouter = Router();
 
 dashboardRouter.get(
+  '/admin',
+  requireAuth,
+  requirePermission(PERMISSIONS.PROFILS_LIRE),
+  asyncHandler((req, res) => dashboardController.admin(req, res)),
+);
+
+dashboardRouter.get(
   '/resume',
   requireAuth,
   requirePermission(PERMISSIONS.REUNIONS_LIRE),

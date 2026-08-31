@@ -23,7 +23,7 @@ import type { Direction, Profil, StatutReunion, TypeReunion } from '@ogefmeeting
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarDays, LayoutList, Plus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 type VueMode = 'tableau' | 'calendrier';
 
@@ -37,6 +37,7 @@ function endOfMonthISO(d: Date) {
 
 export function ReunionsListPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const announce = useAnnouncerStore((s) => s.announce);
   const profil = useAuthStore((s) => s.profil);
@@ -44,7 +45,13 @@ export function ReunionsListPage() {
   const peutCreer = peutCreerReunionRole(role, profil?.fonction);
 
   const [vue, setVue] = useState<VueMode>('tableau');
-  const [filtres, setFiltres] = useState<ReunionFiltersState>(FILTRES_VIDES);
+  const [filtres, setFiltres] = useState<ReunionFiltersState>(() => ({
+    ...FILTRES_VIDES,
+    statut: searchParams.get('statut') ?? '',
+    direction_id: searchParams.get('direction_id') ?? '',
+    date_debut: searchParams.get('date_debut') ?? '',
+    date_fin: searchParams.get('date_fin') ?? '',
+  }));
   const [rechercheDebounced, setRechercheDebounced] = useState('');
   const [page, setPage] = useState(1);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);

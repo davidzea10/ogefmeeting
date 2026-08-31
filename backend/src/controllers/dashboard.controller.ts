@@ -13,6 +13,18 @@ export class DashboardController {
     });
     res.status(200).json({ success: true, data });
   }
+
+  async admin(req: Request, res: Response): Promise<void> {
+    if (req.user?.role !== 'administrateur') {
+      res.status(403).json({
+        success: false,
+        error: { message: 'Accès réservé à l’administrateur.' },
+      });
+      return;
+    }
+    const data = await dashboardService.adminStats();
+    res.status(200).json({ success: true, data });
+  }
 }
 
 export const dashboardController = new DashboardController();
