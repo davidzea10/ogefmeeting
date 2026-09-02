@@ -37,7 +37,7 @@ export const TranscriptionLivePanel = forwardRef<TranscriptionLivePanelHandle, P
   ) {
     const syncTimeoutRef = useRef<number | null>(null);
 
-    const viewer = useTranscriptionLiveViewer(reunionId, !peutControle && enLive);
+    const viewer = useTranscriptionLiveViewer(reunionId, enLive);
 
     const publierTexte = useCallback(
       (texte: string, interimText: string) => {
@@ -53,7 +53,7 @@ export const TranscriptionLivePanel = forwardRef<TranscriptionLivePanelHandle, P
           }).catch(() => {
             /* best-effort — le backend WS diffuse aussi */
           });
-        }, 800);
+        }, 400);
       },
       [peutControle, reunionId],
     );
@@ -105,11 +105,15 @@ export const TranscriptionLivePanel = forwardRef<TranscriptionLivePanelHandle, P
     const langueRef = useRef(langue);
     const actifRef = useRef(actif);
 
-    const texteInvite = (viewer.texteComplet || textePartage || '').trim();
-    const interimInvite = (viewer.interim || interimPartage || '').trim();
-    const enLectureSeule = !peutControle;
-    const aDuTexteInvite = Boolean(texteInvite || interimInvite);
     const aDuTexteLocal = segments.length > 0 || Boolean(interim) || Boolean(texteComplet);
+
+    /** Flux micro local (organisateur / secrétaire qui a démarré le STT). */
+    const fluxLocalActif = peutControle && actif;
+    const textePartageLive = (viewer.texteComplet || textePartage || '').trim();
+    const interimPartageLive = (viewer.interim || interimPartage || '').trim();
+    const texteAffiche = fluxLocalActif && aDuTexteLocal ? texteComplet.trim() : textePartageLive;
+    const interimAffiche = fluxLocalActif && interim ? interim.trim() : interimPartageLive;
+    const aDuTexteAffiche = Boolean(texteAffiche || interimAffiche || (fluxLocalActif && segments.length));
 
     useEffect(() => {
       texteRef.current = texteComplet;
@@ -143,7 +147,7 @@ export const TranscriptionLivePanel = forwardRef<TranscriptionLivePanelHandle, P
       const el = scrollRef.current;
       if (!el) return;
       el.scrollTop = el.scrollHeight;
-    }, [segments, interim, texteInvite, interimInvite]);
+    }, [segments, interim, texteAffiche, interimAffiche]);
 
     const viewerErreur = viewer.erreur;
 
@@ -245,7 +249,7 @@ export const TranscriptionLivePanel = forwardRef<TranscriptionLivePanelHandle, P
               </div>
             )}
           </div>
-          {(actif || (enLectureSeule && (aDuTexteInvite || viewer.connecte))) && (
+          {(fluxLocalActif || (enLive && (aDuTexteAffiche || viewer.connecte))) && (
             <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-danger/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" aria-hidden />
               Live
@@ -268,13 +272,13 @@ export const TranscriptionLivePanel = forwardRef<TranscriptionLivePanelHandle, P
             </p>
           ) : null}
 
-          {peutControle && !aDuTexteLocal && !erreur && sttDisponible !== false && (
+          {peutControle && !aDuTexteLocal && !texteAffiche && !erreur && sttDisponible !== false && (
             <p className="text-sm leading-relaxed text-white/45">
               Choisissez la langue, puis démarrez la transcription.
             </p>
           )}
 
-          {enLectureSeule && !aDuTexteInvite && !erreur && !viewerErreur && (
+          {enLive && !fluxLocalActif && !aDuTexteAffiche && !erreur && !viewerErreur && (
             <p className="text-sm leading-relaxed text-white/45">
               {viewer.connecte
                 ? 'En attente de la transcription de l’organisateur…'
@@ -282,29 +286,29 @@ export const TranscriptionLivePanel = forwardRef<TranscriptionLivePanelHandle, P
             </p>
           )}
 
-          {viewerErreur && enLectureSeule ? (
+          {viewerErreur && !fluxLocalActif ? (
             <p className="text-xs text-white/45" role="status">
               Sync secours actif ({viewerErreur})
             </p>
           ) : null}
 
-          {peutControle &&
+          {fluxLocalActif &&
             segments.map((seg) => (
               <p key={seg.id} className="text-sm leading-relaxed text-white/90">
                 {seg.text}
               </p>
             ))}
 
-          {peutControle && interim ? (
+          {fluxLocalActif && interim ? (
             <p className="text-sm italic leading-relaxed text-white/45">{interim}</p>
           ) : null}
 
-          {enLectureSeule && texteInvite ? (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-white/90">{texteInvite}</p>
+          {!fluxLocalActif && texteAffiche ? (
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-white/90">{texteAffiche}</p>
           ) : null}
 
-          {enLectureSeule && interimInvite ? (
-            <p className="text-sm italic leading-relaxed text-white/45">{interimInvite}</p>
+          {!fluxLocalActif && interimAffiche ? (
+            <p className="text-sm italic leading-relaxed text-white/45">{interimAffiche}</p>
           ) : null}
 
           {erreur ? (

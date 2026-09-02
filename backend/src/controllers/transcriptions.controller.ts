@@ -116,17 +116,15 @@ export class TranscriptionsController {
     });
 
     const memoire = obtenirEtatTranscriptionLive(reunionId);
-    if (memoire.texte_complet || memoire.interim) {
-      res.status(200).json({ success: true, data: memoire });
-      return;
-    }
+    const dbTexte = reunion.transcription_live_texte ?? '';
+    const dbInterim = reunion.transcription_live_interim ?? '';
+    const texte_complet =
+      memoire.texte_complet.length >= dbTexte.length ? memoire.texte_complet : dbTexte;
+    const interim = memoire.interim || dbInterim;
 
     res.status(200).json({
       success: true,
-      data: {
-        texte_complet: reunion.transcription_live_texte ?? '',
-        interim: reunion.transcription_live_interim ?? '',
-      },
+      data: { texte_complet, interim },
     });
   }
 }

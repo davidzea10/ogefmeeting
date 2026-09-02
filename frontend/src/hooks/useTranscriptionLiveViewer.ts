@@ -10,10 +10,8 @@ type ViewerMessage =
   | { type: 'pong' }
   | { type: 'error'; message: string };
 
-/** Polling HTTP si WebSocket indisponible (ms). */
-const POLL_WS_DOWN_MS = 4000;
-/** Secours rare quand WebSocket connecté (ms). */
-const POLL_WS_UP_MS = 20_000;
+/** Polling HTTP de secours (ms) — identique WS up/down (Render multi-instances). */
+const POLL_MS = 3000;
 
 function buildViewWsUrl(reunionId: string, token: string | null): string {
   const httpBase = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:4000';
@@ -69,8 +67,7 @@ export function useTranscriptionLiveViewer(reunionId: string, actif: boolean) {
       if (pollRef.current != null) {
         window.clearInterval(pollRef.current);
       }
-      const interval = wsConnecteRef.current ? POLL_WS_UP_MS : POLL_WS_DOWN_MS;
-      pollRef.current = window.setInterval(() => void poll(), interval);
+      pollRef.current = window.setInterval(() => void poll(), POLL_MS);
     };
 
     const connecter = async () => {

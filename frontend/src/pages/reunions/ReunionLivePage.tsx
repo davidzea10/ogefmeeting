@@ -677,9 +677,7 @@ export function ReunionLivePage() {
               reunionId={id}
               peutControle={peutConduireLive}
               desactive={enPause}
-              enLive={
-                (reunion.statut === 'en_cours' || reunion.statut === 'en_pause') && !enPause
-              }
+              enLive={reunion.statut === 'en_cours' && !enPause}
               textePartage={reunion.transcription_live_texte}
               interimPartage={reunion.transcription_live_interim}
             />
