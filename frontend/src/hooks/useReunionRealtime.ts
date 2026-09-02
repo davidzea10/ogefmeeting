@@ -3,12 +3,14 @@ import { TABLES } from '@ogefmeeting/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
-/** Intervalle de secours si Realtime Supabase indisponible (ms). */
-const POLL_FALLBACK_MS = 5000;
+/** Polling HTTP de secours pendant le live (ms). */
+const POLL_SECOURS_MS = 5000;
+/** Polling plus fréquent si Realtime indisponible (ms). */
+const POLL_SANS_REALTIME_MS = 3000;
 
 /**
  * Abonne Realtime aux changements de la réunion (+ points ODJ + participants).
- * Fallback : polling lent si Supabase Realtime non configuré.
+ * Polling HTTP en parallèle : Realtime peut rater un UPDATE (RLS, canal non SUBSCRIBED).
  */
 export function useReunionRealtime(reunionId: string | undefined) {
   const queryClient = useQueryClient();
@@ -16,11 +18,14 @@ export function useReunionRealtime(reunionId: string | undefined) {
   useEffect(() => {
     if (!reunionId) return;
 
-    const invalidate = () => {
-      void queryClient.invalidateQueries({ queryKey: ['reunion', reunionId] });
+    const refetch = () => {
+      void queryClient.refetchQueries({ queryKey: ['reunion', reunionId] });
     };
 
     const supabase = getSupabaseBrowser();
+    const pollMs =
+      supabase && isRealtimeConfigured() ? POLL_SECOURS_MS : POLL_SANS_REALTIME_MS;
+    let channelCleanup: (() => void) | undefined;
 
     if (supabase && isRealtimeConfigured()) {
       const channel = supabase
@@ -33,7 +38,7 @@ export function useReunionRealtime(reunionId: string | undefined) {
             table: TABLES.reunions,
             filter: `id=eq.${reunionId}`,
           },
-          () => invalidate(),
+          () => refetch(),
         )
         .on(
           'postgres_changes',
@@ -43,7 +48,7 @@ export function useReunionRealtime(reunionId: string | undefined) {
             table: TABLES.pointsOrdreJour,
             filter: `reunion_id=eq.${reunionId}`,
           },
-          () => invalidate(),
+          () => refetch(),
         )
         .on(
           'postgres_changes',
@@ -53,16 +58,21 @@ export function useReunionRealtime(reunionId: string | undefined) {
             table: TABLES.participantsReunion,
             filter: `reunion_id=eq.${reunionId}`,
           },
-          () => invalidate(),
+          () => refetch(),
         )
         .subscribe();
 
-      return () => {
+      channelCleanup = () => {
         void supabase.removeChannel(channel);
       };
     }
 
-    const poll = window.setInterval(invalidate, POLL_FALLBACK_MS);
-    return () => window.clearInterval(poll);
+    refetch();
+    const poll = window.setInterval(refetch, pollMs);
+
+    return () => {
+      window.clearInterval(poll);
+      channelCleanup?.();
+    };
   }, [reunionId, queryClient]);
 }

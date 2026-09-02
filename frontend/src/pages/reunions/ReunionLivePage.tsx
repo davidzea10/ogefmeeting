@@ -104,14 +104,12 @@ export function ReunionLivePage() {
     },
     enabled: Boolean(id),
     /**
-     * Realtime Supabase → pas de polling (useReunionRealtime invalide le cache).
-     * Sinon secours toutes les 5 s.
+     * Realtime + polling de secours (useReunionRealtime) pour détecter clôture / annulation.
      */
     refetchInterval: (query) => {
       const statut = query.state.data?.statut;
       if (statut !== 'en_cours' && statut !== 'en_pause') return false;
-      if (isRealtimeConfigured()) return false;
-      return 5000;
+      return isRealtimeConfigured() ? 5000 : 3000;
     },
     refetchIntervalInBackground: true,
   });
@@ -407,9 +405,9 @@ export function ReunionLivePage() {
                   {LIBELLES_TYPE[reunion.type_reunion]}
                 </Badge>
                 {isRealtimeConfigured() ? (
-                  <span className="text-xs text-white/50">Temps réel</span>
+                  <span className="text-xs text-white/50">Temps réel · secours 5 s</span>
                 ) : (
-                  <span className="text-xs text-white/50">Sync 1,5s</span>
+                  <span className="text-xs text-white/50">Sync 3 s</span>
                 )}
               </div>
               <h1 className="truncate text-base font-semibold sm:text-lg">{reunion.titre}</h1>
@@ -679,7 +677,9 @@ export function ReunionLivePage() {
               reunionId={id}
               peutControle={peutConduireLive}
               desactive={enPause}
-              enLive={!enPause}
+              enLive={
+                (reunion.statut === 'en_cours' || reunion.statut === 'en_pause') && !enPause
+              }
               textePartage={reunion.transcription_live_texte}
               interimPartage={reunion.transcription_live_interim}
             />

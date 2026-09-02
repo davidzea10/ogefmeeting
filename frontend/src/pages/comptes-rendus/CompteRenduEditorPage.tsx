@@ -23,6 +23,7 @@ import {
 import {
   contenuEstVide,
   contenuVersHtml,
+  nettoyerContenuCr,
   preremplirContenuCr,
   sectionsDepuisModele,
   type ContenuCr,
@@ -170,7 +171,7 @@ export function CompteRenduEditorPage() {
         const raw = crQuery.data.contenu[s.cle];
         existing[s.cle] = typeof raw === 'string' ? raw : '<p></p>';
       }
-      setContenu(existing);
+      setContenu(nettoyerContenuCr(existing));
     }
 
     initDone.current = true;
@@ -342,7 +343,7 @@ export function CompteRenduEditorPage() {
           existing[cle] = val;
         }
       }
-      setContenu(existing);
+      setContenu(nettoyerContenuCr(existing));
       setDirty(false);
       setLastSavedAt(new Date());
       await invalidateCr(data.reunion_id);

@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 type ViewerMessage =
   | { type: 'snapshot'; texte_complet: string; interim: string }
   | { type: 'update'; texte_complet: string; interim: string }
+  | { type: 'ended' }
   | { type: 'pong' }
   | { type: 'error'; message: string };
 
@@ -41,6 +42,7 @@ export function useTranscriptionLiveViewer(reunionId: string, actif: boolean) {
     }
 
     let annule = false;
+    let reunionTerminee = false;
     let ws: WebSocket | null = null;
     let pingRef: number | null = null;
     let reconnectRef: number | null = null;
@@ -52,6 +54,7 @@ export function useTranscriptionLiveViewer(reunionId: string, actif: boolean) {
     };
 
     const poll = async () => {
+      if (annule) return;
       try {
         const data = await obtenirTranscriptionLive(reunionId);
         if (!annule && (data.texte_complet || data.interim)) {
@@ -88,6 +91,26 @@ export function useTranscriptionLiveViewer(reunionId: string, actif: boolean) {
         ws.onmessage = (ev) => {
           try {
             const msg = JSON.parse(String(ev.data)) as ViewerMessage;
+            if (msg.type === 'ended') {
+              reunionTerminee = true;
+              annule = true;
+              setConnecte(false);
+              setInterim('');
+              if (pollRef.current != null) {
+                window.clearInterval(pollRef.current);
+                pollRef.current = null;
+              }
+              if (reconnectRef != null) {
+                window.clearTimeout(reconnectRef);
+                reconnectRef = null;
+              }
+              try {
+                ws?.close();
+              } catch {
+                /* ignore */
+              }
+              return;
+            }
             if (msg.type === 'snapshot' || msg.type === 'update') {
               appliquer(msg.texte_complet ?? '', msg.interim ?? '');
             }
@@ -102,6 +125,7 @@ export function useTranscriptionLiveViewer(reunionId: string, actif: boolean) {
         ws.onclose = () => {
           wsConnecteRef.current = false;
           setConnecte(false);
+          if (reunionTerminee || annule) return;
           planifierPoll();
           if (!annule) {
             reconnectRef = window.setTimeout(() => void connecter(), 5000);

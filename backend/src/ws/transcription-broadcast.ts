@@ -148,6 +148,17 @@ export function retirerViewerTranscription(reunionId: string, ws: WebSocket): vo
 export function effacerTranscriptionLiveBroadcast(reunionId: string): void {
   const session = sessions.get(reunionId);
   if (!session) return;
+
+  const endedPayload = { type: 'ended' as const };
+  for (const viewer of session.viewers) {
+    try {
+      envoyerJson(viewer, endedPayload);
+      viewer.close(1000, 'reunion ended');
+    } catch {
+      session.viewers.delete(viewer);
+    }
+  }
+
   session.texteComplet = '';
   session.interim = '';
   if (session.dbSyncTimeout) {
@@ -155,6 +166,5 @@ export function effacerTranscriptionLiveBroadcast(reunionId: string): void {
     session.dbSyncTimeout = null;
   }
   session.dbSyncPending = null;
-  diffuser(reunionId, session);
   sessions.delete(reunionId);
 }

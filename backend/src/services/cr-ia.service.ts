@@ -49,7 +49,6 @@ export type BrouillonCrIa = {
   introduction: string;
   points_ordre_jour: PointOrdreJourIa[];
   conclusion: string;
-  avertissement: string;
 };
 
 const OGEFREM_PRESENTATION = `
@@ -138,7 +137,8 @@ Directions de l'OGEFREM (code — nom — mission) :
 ${formaterDirections()}
 
 STRUCTURE OBLIGATOIRE DU RAPPORT :
-1. INTRODUCTION — cadre, intitulé, objectifs, participants.
+1. INTRODUCTION — contexte, objectifs et déroulement de la séance.
+   Ne PAS répéter le titre, la date, le lieu ni le type de réunion (déjà en en-tête du document).
 2. POINTS DE L'ORDRE DU JOUR — un bloc par point de l'ODJ fourni, avec :
    - un paragraphe d'introduction du point (contenu du point) ;
    - des SOUS-POINTS (sous_points) : un élément par projet, dossier, thème ou sujet
@@ -194,6 +194,8 @@ ${transcription.trim()}
 
 Transcription ≈ ${nbMots} mots.
 
+RAPPEL : l'introduction ne doit pas recopier le titre, la date, le lieu ou le type — déjà visibles en en-tête.
+
 === FORMAT JSON ATTENDU ===
 {
   "niveau_detail": "${niveau}",
@@ -211,8 +213,7 @@ Transcription ≈ ${nbMots} mots.
       ]
     }
   ],
-  "conclusion": "...",
-  "avertissement": "Brouillon généré par IA — à valider par le secrétariat avant publication"
+  "conclusion": "..."
 }
 
 Chaque point ODJ doit avoir au moins un sous_point si la transcription mentionne des éléments concrets.`;
@@ -277,10 +278,6 @@ export function parserBrouillonCrIa(texte: string, niveauFallback: NiveauDetailC
     introduction: String(parsed.introduction ?? parsed.synthese ?? '').trim(),
     points_ordre_jour: points,
     conclusion: String(parsed.conclusion ?? '').trim(),
-    avertissement: String(
-      parsed.avertissement ??
-        'Brouillon généré par IA — à valider par le secrétariat avant publication',
-    ).trim(),
   };
 }
 
@@ -334,8 +331,7 @@ export function brouillonVersContenuSections(
     paragraphsHtml(brouillon.introduction) +
     `<p><em>${escapeHtml(niveauLibelle)}</em></p>`;
   const pointsHtml = pointsOrdreJourVersHtml(brouillon.points_ordre_jour);
-  const conclusionParts = [brouillon.conclusion, brouillon.avertissement].filter(Boolean);
-  const conclusionHtml = paragraphsHtml(conclusionParts.join('\n\n'));
+  const conclusionHtml = paragraphsHtml(brouillon.conclusion);
 
   const mapping: Record<string, string> = {
     contexte: introHtml,

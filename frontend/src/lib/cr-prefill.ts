@@ -5,7 +5,7 @@ import type {
   ReunionDetail,
   SectionCompteRendu,
 } from '@ogefmeeting/shared';
-import { formatDateHeure, LIBELLES_PARTICIPANT, LIBELLES_TYPE } from '@/lib/labels';
+import { LIBELLES_PARTICIPANT } from '@/lib/labels';
 
 /**
  * Sections par défaut — pas de sections globales Décisions / Actions :
@@ -19,6 +19,30 @@ export const SECTIONS_CR_DEFAUT: SectionCompteRendu[] = [
 ];
 
 export type ContenuCr = Record<string, string>;
+
+const AVERTISSEMENT_IA_SUPPRIME =
+  'Brouillon généré par IA — à valider par le secrétariat avant publication';
+
+/** Retire l’avertissement IA legacy des sections CR déjà générées. */
+export function nettoyerContenuCr(contenu: ContenuCr): ContenuCr {
+  const out: ContenuCr = {};
+  for (const [cle, html] of Object.entries(contenu)) {
+    let h = html;
+    if (h.includes(AVERTISSEMENT_IA_SUPPRIME)) {
+      h = h
+        .replace(
+          new RegExp(
+            `<p>\\s*${AVERTISSEMENT_IA_SUPPRIME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*</p>`,
+            'gi',
+          ),
+          '',
+        )
+        .replace(AVERTISSEMENT_IA_SUPPRIME, '');
+    }
+    out[cle] = h;
+  }
+  return out;
+}
 
 export type LigneParticipantCr = {
   nom: string;
@@ -120,11 +144,9 @@ export function preremplirContenuCr(
 
   const prefillByCle: ContenuCr = {
     contexte: paragraphs([
-      `Réunion : ${reunion.titre}`,
-      `Type : ${LIBELLES_TYPE[reunion.type_reunion]}`,
-      `Date prévue : ${formatDateHeure(reunion.date_prevue)}`,
-      reunion.lieu ? `Lieu : ${reunion.lieu}` : '',
-      reunion.description ? `Description : ${reunion.description}` : '',
+      reunion.description?.trim()
+        ? reunion.description.trim()
+        : 'Présentation des objectifs et du déroulement de la séance (titre, date et lieu figurent en en-tête du document).',
     ]),
     participants: participantsTableHtml(lignesParticipants),
     ordre_du_jour: listHtml(points),
