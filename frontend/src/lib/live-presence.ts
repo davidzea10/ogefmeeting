@@ -9,7 +9,7 @@ const ORDRE_STATUT: Record<StatutParticipant, number> = {
   absent: 3,
 };
 
-/** Sur la page live, le participant connecté est toujours affiché « présent ». */
+/** Sur la page live, le participant connecté confirmé est affiché « présent ». */
 export function appliquerPresenceLocale(
   participants: ParticipantReunion[],
   profilId: string | undefined,
@@ -17,15 +17,15 @@ export function appliquerPresenceLocale(
 ): ParticipantReunion[] {
   if (!profilId || !enLive) return participants;
   const maintenant = new Date().toISOString();
-  return participants.map((p) =>
-    p.profil_id === profilId
-      ? {
-          ...p,
-          statut: 'present',
-          present_le: p.present_le ?? maintenant,
-        }
-      : p,
-  );
+  return participants.map((p) => {
+    if (p.profil_id !== profilId) return p;
+    if (p.statut !== 'confirme' && p.statut !== 'present') return p;
+    return {
+      ...p,
+      statut: 'present' as const,
+      present_le: p.present_le ?? maintenant,
+    };
+  });
 }
 
 export function trierParticipantsLive(

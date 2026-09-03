@@ -134,10 +134,68 @@ export class UtilisateurService {
     modifiePar?: string,
   ): Promise<Profil> {
     const supabase = requireSupabaseAdmin();
+    const { email, ...profilPatch } = input as {
+      email?: string;
+    } & Record<string, unknown>;
+
+    const emailNorm =
+      typeof email === 'string' ? email.trim().toLowerCase() : undefined;
+
+    if (emailNorm) {
+      const { data: actuel } = await supabase
+        .from(TABLES.profils)
+        .select('email')
+        .eq('id', id)
+        .maybeSingle();
+
+      const emailActuel = (actuel?.email as string | undefined)?.toLowerCase();
+      if (emailActuel !== emailNorm) {
+        const { data: collision } = await supabase
+          .from(TABLES.profils)
+          .select('id')
+          .eq('email', emailNorm)
+          .neq('id', id)
+          .maybeSingle();
+
+        if (collision) {
+          throw new AppError(409, 'Cette adresse email est déjà utilisée par un autre compte.');
+        }
+
+        const { error: authError } = await supabase.auth.admin.updateUserById(id, {
+          email: emailNorm,
+          email_confirm: true,
+        });
+
+        if (authError) {
+          const msg = authError.message?.toLowerCase() ?? '';
+          if (msg.includes('already') || msg.includes('exists') || msg.includes('registered')) {
+            throw new AppError(409, 'Cette adresse email est déjà utilisée.');
+          }
+          throw new AppError(
+            400,
+            authError.message || 'Impossible de mettre à jour l’email de connexion.',
+          );
+        }
+
+        profilPatch.email = emailNorm;
+      }
+    }
+
+    if (Object.keys(profilPatch).length === 0) {
+      const { data: inchange, error: lectureError } = await supabase
+        .from(TABLES.profils)
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (lectureError) {
+        handleSupabaseError(lectureError, 'Profil introuvable.');
+      }
+      return inchange as Profil;
+    }
 
     const { data, error } = await supabase
       .from(TABLES.profils)
-      .update(input)
+      .update(profilPatch)
       .eq('id', id)
       .select('*')
       .single();
@@ -151,7 +209,10 @@ export class UtilisateurService {
       profil_id: modifiePar ?? null,
       type_entite: 'profil',
       entite_id: id,
-      metadonnees: input,
+      metadonnees: {
+        ...profilPatch,
+        ...(emailNorm ? { email: emailNorm } : {}),
+      },
     });
 
     return data as Profil;

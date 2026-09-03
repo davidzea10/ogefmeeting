@@ -7,6 +7,7 @@ import { logger } from '../lib/logger.js';
 import type { AuthUser } from '../types/auth.types.js';
 import { AppError } from '../utils/errors.js';
 import { autorisePermission, type Permission } from '../utils/permissions.js';
+import { peutGererMembresDirection } from '../utils/direction-membres.js';
 
 function extractBearerToken(req: Request): string | null {
   const header = req.headers.authorization;
@@ -168,4 +169,39 @@ export function requirePermission(...permissions: Permission[]) {
 
     next();
   };
+}
+
+/** Réservé à l’administrateur — toujours contrôlé (même si AUTH_ENFORCED=false). */
+export function requireAdministrateur(req: Request, _res: Response, next: NextFunction): void {
+  if (!req.user) {
+    next(new AppError(401, 'Authentification requise.'));
+    return;
+  }
+
+  if (req.user.role !== 'administrateur') {
+    next(new AppError(403, 'Accès réservé à l’administrateur.'));
+    return;
+  }
+
+  next();
+}
+
+/** Admin ou gestionnaire de direction (directeur / sous-directeur). */
+export function requireGererMembresOuAdmin(req: Request, _res: Response, next: NextFunction): void {
+  if (!env.AUTH_ENFORCED) {
+    next();
+    return;
+  }
+
+  if (!req.user) {
+    next(new AppError(401, 'Authentification requise.'));
+    return;
+  }
+
+  if (!peutGererMembresDirection(req.user)) {
+    next(new AppError(403, 'Permission insuffisante pour gérer les membres.'));
+    return;
+  }
+
+  next();
 }

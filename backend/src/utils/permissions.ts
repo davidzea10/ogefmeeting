@@ -26,6 +26,7 @@ export const PERMISSIONS = {
   PROFILS_LIRE: 'profils:lire',
   PROFILS_MODIFIER: 'profils:modifier',
   UTILISATEURS_INVITER: 'utilisateurs:inviter',
+  MEMBRES_DIRECTION_GERER: 'membres_direction:gerer',
 
   DIRECTIONS_GERER: 'directions:gerer',
   MODELES_GERER: 'modeles:gerer',
@@ -61,6 +62,7 @@ const MATRICE: Record<RoleUtilisateur, Permission[]> = {
     PERMISSIONS.DECISIONS_LIRE,
     PERMISSIONS.DECISIONS_GERER,
     PERMISSIONS.PROFILS_LIRE,
+    PERMISSIONS.MEMBRES_DIRECTION_GERER,
     PERMISSIONS.RECHERCHE,
     PERMISSIONS.AUDIT_LIRE,
   ],

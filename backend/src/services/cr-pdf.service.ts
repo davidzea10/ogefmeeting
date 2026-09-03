@@ -268,7 +268,9 @@ function bottomLimit(doc: PDFKit.PDFDocument): number {
 }
 
 function ensureSpace(doc: PDFKit.PDFDocument, needed: number) {
-  if (doc.y + needed > bottomLimit(doc)) {
+  // Évite une page quasi vide : n’ajoute une page que s’il reste vraiment trop peu d’espace.
+  const restant = bottomLimit(doc) - doc.y;
+  if (restant < Math.min(needed, 36)) {
     doc.addPage();
   }
 }
@@ -306,8 +308,13 @@ function drawFooters(
 
 function drawSignatureBlock(doc: PDFKit.PDFDocument, pageWidth: number) {
   const left = doc.page.margins.left;
-  const blockH = 68;
-  ensureSpace(doc, blockH);
+  const blockH = 58;
+  const restant = bottomLimit(doc) - doc.y;
+  // Si la place est juste insuffisante mais > 40pt, on compacte sur la page courante
+  // plutôt que d’ouvrir une page presque vide pour la seule signature.
+  if (restant < blockH && restant < 40) {
+    doc.addPage();
+  }
 
   const sigY = doc.y;
   doc

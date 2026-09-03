@@ -30,6 +30,7 @@ export type ModifierDirectionInput = z.infer<typeof modifierDirectionSchema>;
 
 export const modifierProfilSchema = z
   .object({
+    email: z.string().trim().email('Email invalide.').optional(),
     prenom: nomOptionnelSchema,
     nom: nomOptionnelSchema,
     direction_id: uuidSchema.optional().nullable(),

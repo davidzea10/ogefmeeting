@@ -14,6 +14,7 @@ import {
   profilService,
   rechercheService,
 } from '../services/admin.service.js';
+import { filtrerDirectionPourListe } from '../utils/direction-membres.js';
 import { profilLimiteAuxParticipations } from '../utils/reunion-acces.js';
 
 export class DirectionController {
@@ -39,7 +40,11 @@ export class DirectionController {
 export class ProfilController {
   async lister(req: Request, res: Response): Promise<void> {
     const query = (req.validated?.query ?? req.query) as ListerProfilsQuery;
-    const data = await profilService.lister(query);
+    const directionScope = filtrerDirectionPourListe(req.user, query.direction_id);
+    const data = await profilService.lister({
+      ...query,
+      direction_id: directionScope,
+    });
     res.status(200).json({ success: true, data });
   }
 

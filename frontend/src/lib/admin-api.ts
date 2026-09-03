@@ -49,6 +49,7 @@ export function creerMembre(payload: {
 export function modifierMembre(
   id: string,
   payload: {
+    email?: string;
     prenom?: string;
     nom?: string;
     direction_id?: string | null;
@@ -132,5 +133,46 @@ export function modifierModele(
   return apiFetch<ModeleCompteRendu>(`/api/modeles-compte-rendu/${id}`, {
     method: 'PUT',
     body: JSON.stringify(payload),
+  });
+}
+
+/** Nettoyage admin (avant lancement) */
+export type ReunionNettoyageItem = {
+  id: string;
+  titre: string;
+  statut: string;
+  date_prevue: string;
+  cree_le: string;
+  est_test_live: boolean;
+};
+
+export function obtenirResumeNettoyage() {
+  return apiFetch<{
+    notifications: number;
+    reunions: ReunionNettoyageItem[];
+    reunions_test_live: number;
+  }>('/api/admin/nettoyage');
+}
+
+export function purgerNotificationsAdmin() {
+  return apiFetch<{ supprimees: number }>('/api/admin/nettoyage/notifications/purger', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+export function purgerReunionsTestLiveAdmin() {
+  return apiFetch<{ supprimees: number; titres: string[] }>(
+    '/api/admin/nettoyage/reunions-test-live/purger',
+    {
+      method: 'POST',
+      body: JSON.stringify({}),
+    },
+  );
+}
+
+export function supprimerReunionDefinitiveAdmin(id: string) {
+  return apiFetch<{ id: string; titre: string }>(`/api/admin/nettoyage/reunions/${id}`, {
+    method: 'DELETE',
   });
 }

@@ -1,4 +1,4 @@
-import { GuestOnly, RequireAdmin, RequireAuth } from '@/components/auth/AuthGuards';
+import { GuestOnly, RequireAdmin, RequireAuth, RequireGestionDirection } from '@/components/auth/AuthGuards';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AuthLayout } from '@/components/layout/AuthLayout';
 import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage';
@@ -19,6 +19,8 @@ import { ReunionEditPage } from '@/pages/reunions/ReunionEditPage';
 import { ReunionInvitationPage } from '@/pages/reunions/ReunionInvitationPage';
 import { ReunionLivePage } from '@/pages/reunions/ReunionLivePage';
 import { ReunionsListPage } from '@/pages/reunions/ReunionsListPage';
+import { GestionDirectionPage } from '@/pages/direction/GestionDirectionPage';
+import { ProfilPage } from '@/pages/profil/ProfilPage';
 import { ResetPasswordPage } from '@/pages/ResetPasswordPage';
 import { Navigate, createBrowserRouter } from 'react-router-dom';
 
@@ -42,7 +44,13 @@ export const router = createBrowserRouter([
           { path: 'actions', element: <ActionsListPage /> },
           { path: 'recherche', element: <RecherchePage /> },
           { path: 'archives', element: <ArchivesPage /> },
-          { path: 'profil', element: <PlaceholderPage title="Mon profil" /> },
+          { path: 'profil', element: <ProfilPage /> },
+          {
+            element: <RequireGestionDirection />,
+            children: [
+              { path: 'gestion-direction', element: <GestionDirectionPage /> },
+            ],
+          },
           {
             element: <RequireAdmin />,
             children: [
@@ -74,12 +82,3 @@ export const router = createBrowserRouter([
     ],
   },
 ]);
-
-function PlaceholderPage({ title }: { title: string }) {
-  return (
-    <div className="mx-auto max-w-3xl rounded-xl border border-dashed border-border bg-surface p-10 text-center">
-      <h2 className="text-2xl font-semibold text-text">{title}</h2>
-      <p className="mt-2 text-text-muted">Module à venir</p>
-    </div>
-  );
-}

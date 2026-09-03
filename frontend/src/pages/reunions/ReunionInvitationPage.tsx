@@ -7,7 +7,7 @@ import { obtenirReunion, repondreInvitationReunion } from '@/lib/reunions-api';
 import { useAuthStore } from '@/stores/auth.store';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, Info, XCircle } from 'lucide-react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 
 /**
  * Page ouverte depuis le mail / la notif : confirmer ou décliner l’invitation.
@@ -16,6 +16,7 @@ export function ReunionInvitationPage() {
   const { id } = useParams<{ id: string }>();
   const announce = useAnnouncerStore((s) => s.announce);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const userId = useAuthStore((s) => s.user?.id);
 
   const reunionQuery = useQuery({
@@ -35,6 +36,16 @@ export function ReunionInvitationPage() {
       );
       await queryClient.invalidateQueries({ queryKey: ['reunion', id] });
       await queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+
+      const reunion = reunionQuery.data;
+      if (
+        reponse === 'confirme' &&
+        reunion &&
+        (reunion.statut === 'en_cours' || reunion.statut === 'en_pause')
+      ) {
+        navigate(`/reunions/${id}/live`, { replace: true });
+      }
     },
     onError: (e: Error) => announce(e.message),
   });
@@ -132,9 +143,18 @@ export function ReunionInvitationPage() {
                 : 'Vous êtes bien inscrit(e) à cette réunion.'}
               {reunionTerminee ? ' La réunion est déjà clôturée.' : ''}
             </p>
-            <Link to={`/reunions/${id}`} className="mt-3 inline-block">
-              <Button size="sm">Voir la réunion</Button>
-            </Link>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(reunion.statut === 'en_cours' || reunion.statut === 'en_pause') && (
+                <Link to={`/reunions/${id}/live`}>
+                  <Button size="sm">Rejoindre le live</Button>
+                </Link>
+              )}
+              <Link to={`/reunions/${id}`}>
+                <Button size="sm" variant="outline">
+                  Voir la réunion
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       ) : dejaAbsent ? (
@@ -160,7 +180,9 @@ export function ReunionInvitationPage() {
         <div className="space-y-4 rounded-xl border border-ogefrem-blue/20 bg-ogefrem-blue/5 p-6">
           <h3 className="text-lg font-semibold text-text">Confirmer votre invitation</h3>
           <p className="text-sm text-text-muted">
-            Vous avez reçu une invitation. Confirmez votre présence ou déclinez.
+            {(reunion.statut === 'en_cours' || reunion.statut === 'en_pause')
+              ? 'La réunion est en cours. Confirmez votre participation pour rejoindre le live.'
+              : 'Vous avez reçu une invitation. Confirmez votre présence ou déclinez.'}
           </p>
           <div className="flex flex-wrap gap-3">
             <Button

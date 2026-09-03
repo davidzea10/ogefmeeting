@@ -19,6 +19,7 @@ type AuthState = {
   role: RoleUtilisateur | null;
   expiresAt: number | null;
   setSession: (session: AuthSession) => void;
+  updateProfil: (profil: Profil) => void;
   clearSession: () => void;
   isAuthenticated: () => boolean;
 };
@@ -42,6 +43,12 @@ export const useAuthStore = create<AuthState>()(
           role: session.profil?.role ?? null,
           expiresAt: Date.now() + session.expires_in * 1000,
         }),
+
+      updateProfil: (profil) =>
+        set((state) => ({
+          profil,
+          role: profil.role ?? state.role,
+        })),
 
       clearSession: () =>
         set({

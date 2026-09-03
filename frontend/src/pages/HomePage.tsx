@@ -2,6 +2,7 @@ import { Breadcrumbs } from '@/components/layout/Breadcrumbs';
 import { AdminDashboard } from '@/components/dashboard/AdminDashboard';
 import { BarRow, StatCard } from '@/components/dashboard/DashboardCharts';
 import { ReunionCountdownCard } from '@/components/dashboard/ReunionCountdownCard';
+import { ReunionLiveJoinBanner } from '@/components/dashboard/ReunionLiveJoinBanner';
 import { StaggerItem, StaggerList } from '@/components/motion/StaggerList';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -24,7 +25,7 @@ import {
 } from '@/lib/roles';
 import { listerReunions, obtenirReunion } from '@/lib/reunions-api';
 import { useAuthStore } from '@/stores/auth.store';
-import type { DashboardResume, FonctionOrganisation, Reunion } from '@ogefmeeting/shared';
+import type { DashboardResume, FonctionOrganisation, Reunion, ReunionDetail } from '@ogefmeeting/shared';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import {
   CalendarDays,
@@ -72,6 +73,34 @@ export function HomePage() {
         tri: 'date_prevue',
         ordre: 'asc',
       }),
+  });
+
+  const reunionsEnCoursQuery = useQuery({
+    queryKey: ['dashboard', 'reunions-en-cours'],
+    queryFn: () =>
+      listerReunions({
+        page: 1,
+        limite: 8,
+        statut: 'en_cours',
+        tri: 'date_prevue',
+        ordre: 'desc',
+      }),
+    enabled: !estAdmin,
+    refetchInterval: 15_000,
+  });
+
+  const reunionsEnPauseQuery = useQuery({
+    queryKey: ['dashboard', 'reunions-en-pause'],
+    queryFn: () =>
+      listerReunions({
+        page: 1,
+        limite: 8,
+        statut: 'en_pause',
+        tri: 'date_prevue',
+        ordre: 'desc',
+      }),
+    enabled: !estAdmin,
+    refetchInterval: 15_000,
   });
 
   const mesPropositionsQuery = useQuery({
@@ -151,6 +180,45 @@ export function HomePage() {
         return moi?.statut === 'invite';
       });
   }, [invitationDetails, profilId, estValidateur]);
+
+  /** Réunions live où l’utilisateur est participant (gros CTA dashboard). */
+  const candidatsLive = useMemo(() => {
+    if (estAdmin || !profilId) return [] as Reunion[];
+    const map = new Map<string, Reunion>();
+    for (const r of [
+      ...(reunionsEnCoursQuery.data?.items ?? []),
+      ...(reunionsEnPauseQuery.data?.items ?? []),
+    ]) {
+      map.set(r.id, r);
+    }
+    return [...map.values()].slice(0, 4);
+  }, [estAdmin, profilId, reunionsEnCoursQuery.data, reunionsEnPauseQuery.data]);
+
+  const liveDetails = useQueries({
+    queries: candidatsLive.map((r) => ({
+      queryKey: ['reunion', 'live-dashboard', r.id],
+      queryFn: () => obtenirReunion(r.id),
+      enabled: !estAdmin && candidatsLive.length > 0,
+      refetchInterval: 15_000,
+    })),
+  });
+
+  const reunionsLiveInvitees = useMemo(() => {
+    if (estAdmin || !profilId) return [] as ReunionDetail[];
+    return liveDetails
+      .map((q) => q.data)
+      .filter((detail): detail is NonNullable<typeof detail> => Boolean(detail))
+      .filter((detail) => {
+        if (detail.statut !== 'en_cours' && detail.statut !== 'en_pause') return false;
+        if (detail.cree_par === profilId) return true;
+        const moi = detail.participants.find((p) => p.profil_id === profilId);
+        return (
+          moi?.statut === 'invite' ||
+          moi?.statut === 'confirme' ||
+          moi?.statut === 'present'
+        );
+      });
+  }, [liveDetails, estAdmin, profilId]);
 
   /** Prochaine réunion validée où l’utilisateur est invité (hors admin). */
   const candidatsCountdown = useMemo(() => {
@@ -300,7 +368,17 @@ export function HomePage() {
         </div>
       </section>
 
-      {!estAdmin && reunionsDepasseesInvitees.length > 0 && (
+      {!estAdmin && reunionsLiveInvitees.length > 0 && (
+        <div className="space-y-4">
+          {reunionsLiveInvitees.map((r) => (
+            <ReunionLiveJoinBanner key={r.id} reunion={r} profilId={profilId} />
+          ))}
+        </div>
+      )}
+
+      {!estAdmin &&
+        reunionsLiveInvitees.length === 0 &&
+        reunionsDepasseesInvitees.length > 0 && (
         <div className="space-y-4">
           {reunionsDepasseesInvitees.map((r) => (
             <ReunionCountdownCard
@@ -311,7 +389,10 @@ export function HomePage() {
           ))}
         </div>
       )}
-      {!estAdmin && reunionsDepasseesInvitees.length === 0 && prochaineReunionInvitee && (
+      {!estAdmin &&
+        reunionsLiveInvitees.length === 0 &&
+        reunionsDepasseesInvitees.length === 0 &&
+        prochaineReunionInvitee && (
         <ReunionCountdownCard
           reunion={prochaineReunionInvitee}
           estOrganisateur={Boolean(profilId && prochaineReunionInvitee.cree_par === profilId)}

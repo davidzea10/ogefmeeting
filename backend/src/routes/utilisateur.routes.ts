@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { utilisateurController } from '../controllers/utilisateur.controller.js';
 import { asyncHandler } from '../middleware/async-handler.js';
-import { requireAuth, requirePermission } from '../middleware/auth.js';
+import { requireAuth, requireGererMembresOuAdmin, requirePermission } from '../middleware/auth.js';
 import { validateBody, validateParams, validateQuery } from '../middleware/validate.js';
 import { modifierProfilSchema } from '../schemas/admin.schemas.js';
 import { idParamSchema } from '../schemas/common.schemas.js';
@@ -34,7 +34,7 @@ export const utilisateursRouter = Router();
 utilisateursRouter.post(
   '/inviter',
   requireAuth,
-  requirePermission(PERMISSIONS.UTILISATEURS_INVITER),
+  requireGererMembresOuAdmin,
   validateBody(inviterUtilisateurSchema),
   asyncHandler((req, res) => utilisateurController.inviter(req, res)),
 );
@@ -42,7 +42,7 @@ utilisateursRouter.post(
 utilisateursRouter.put(
   '/:id',
   requireAuth,
-  requirePermission(PERMISSIONS.PROFILS_MODIFIER),
+  requireGererMembresOuAdmin,
   validateParams(idParamSchema),
   validateBody(modifierProfilSchema),
   asyncHandler((req, res) => utilisateurController.modifierProfilAdmin(req, res)),
@@ -51,7 +51,7 @@ utilisateursRouter.put(
 utilisateursRouter.post(
   '/:id/desactiver',
   requireAuth,
-  requirePermission(PERMISSIONS.UTILISATEURS_INVITER),
+  requireGererMembresOuAdmin,
   validateParams(idParamSchema),
   asyncHandler((req, res) => utilisateurController.desactiverProfil(req, res)),
 );
@@ -59,7 +59,7 @@ utilisateursRouter.post(
 utilisateursRouter.post(
   '/:id/reactiver',
   requireAuth,
-  requirePermission(PERMISSIONS.UTILISATEURS_INVITER),
+  requireGererMembresOuAdmin,
   validateParams(idParamSchema),
   asyncHandler((req, res) => utilisateurController.reactiverProfil(req, res)),
 );

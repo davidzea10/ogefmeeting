@@ -30,6 +30,7 @@ import {
   refuserReunion,
 } from '@/lib/reunions-api';
 import { peutApprouverReunionRole, peutApprouverReunionPourReunion, peutGererReunionRole, peutModifierReunionRole, peutVoirArchivesMediaRole } from '@/lib/roles';
+import { peutRejoindreLive } from '@/lib/invitation-live';
 import { useAuthStore } from '@/stores/auth.store';
 import {
   STATUTS_PARTICIPANT,
@@ -426,12 +427,20 @@ export function ReunionDetailPage() {
             )}
             {reunion.statut === 'en_cours' || reunion.statut === 'en_pause' ? (
               <>
-                <Link to={`/reunions/${id}/live`}>
-                  <Button size="sm">
-                    <Radio className="h-4 w-4" aria-hidden />
-                    {reunion.statut === 'en_pause' ? 'Reprendre le live' : 'Mode live'}
-                  </Button>
-                </Link>
+                {peutRejoindreLive(reunion, userId, { estAdmin }) ? (
+                  <Link to={`/reunions/${id}/live`}>
+                    <Button size="sm">
+                      <Radio className="h-4 w-4" aria-hidden />
+                      {reunion.statut === 'en_pause' ? 'Reprendre le live' : 'Mode live'}
+                    </Button>
+                  </Link>
+                ) : (
+                  <Link to={`/reunions/${id}/invitation`}>
+                    <Button size="sm">
+                      Confirmer pour rejoindre le live
+                    </Button>
+                  </Link>
+                )}
                 {peutGerer && (
                   <Button
                     size="sm"

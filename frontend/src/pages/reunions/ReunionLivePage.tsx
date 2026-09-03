@@ -3,6 +3,7 @@ import { Logo } from '@/components/brand/Logo';
 import { ReunionStatusBadge } from '@/components/reunions/ReunionStatusBadge';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Avatar } from '@/components/ui/Avatar';
 import { useChronometre } from '@/hooks/useChronometre';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { useReunionRealtime } from '@/hooks/useReunionRealtime';
@@ -12,6 +13,7 @@ import {
   trierParticipantsLive,
   type TriPresenceLive,
 } from '@/lib/live-presence';
+import { peutRejoindreLive, monStatutParticipant } from '@/lib/invitation-live';
 import { isRealtimeConfigured } from '@/lib/supabase-browser';
 import { easeOutExpo, useMotionSafe } from '@/lib/motion';
 import { EnregistrementLivePanel, type EnregistrementLivePanelHandle } from '@/components/reunions/EnregistrementLivePanel';
@@ -80,23 +82,19 @@ export function ReunionLivePage() {
         (data.statut === 'en_cours' || data.statut === 'en_pause')
       ) {
         const moi = data.participants.find((p) => p.profil_id === userId);
-        if (moi && moi.statut !== 'present') {
+        const autorise =
+          peutRejoindreLive(data, userId, {
+            estAdmin: useAuthStore.getState().role === 'administrateur',
+          }) &&
+          Boolean(moi) &&
+          (moi!.statut === 'confirme' || moi!.statut === 'present');
+
+        if (moi && moi.statut !== 'present' && autorise) {
           try {
             await rejoindreLiveReunion(id!);
             data = await obtenirReunion(id!);
           } catch {
-            data = {
-              ...data,
-              participants: data.participants.map((p) =>
-                p.profil_id === userId
-                  ? {
-                      ...p,
-                      statut: 'present' as const,
-                      present_le: p.present_le ?? new Date().toISOString(),
-                    }
-                  : p,
-              ),
-            };
+            /* pas d’optimiste si le backend refuse (invitation non confirmée) */
           }
         }
       }
@@ -312,6 +310,32 @@ export function ReunionLivePage() {
     );
   }
 
+  const estAdmin = role === 'administrateur';
+  const monInvitation = monStatutParticipant(reunion, userId);
+  const accesLiveAutorise = peutRejoindreLive(reunion, userId, { estAdmin });
+
+  if (!accesLiveAutorise) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-surface-muted p-8 text-center">
+        <ReunionStatusBadge statut={reunion.statut} />
+        <h1 className="text-xl font-bold text-text">{reunion.titre}</h1>
+        <p className="max-w-md text-base font-medium text-text">
+          {monInvitation?.statut === 'absent'
+            ? 'Vous avez décliné cette invitation. Confirmez votre participation pour rejoindre le live.'
+            : 'Confirmez d’abord votre invitation avant d’accéder au mode live.'}
+        </p>
+        <div className="flex flex-wrap justify-center gap-2">
+          <Link to={`/reunions/${id}/invitation`}>
+            <Button>Confirmer mon invitation</Button>
+          </Link>
+          <Link to={`/reunions/${id}`}>
+            <Button variant="outline">Voir le détail</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   const points = [...reunion.points_ordre_jour].sort((a, b) => a.ordre - b.ordre);
   const traites = points.filter((p) => p.est_traite).length;
   const progress = points.length === 0 ? 0 : Math.round((traites / points.length) * 100);
@@ -320,7 +344,6 @@ export function ReunionLivePage() {
   /** Organisateur ou ayant-droit : conduire, clôturer, enregistrer. */
   const peutConduireLive = peutGerer || peutModifier;
   const estOrganisateur = Boolean(userId && reunion.cree_par && reunion.cree_par === userId);
-  const estAdmin = role === 'administrateur';
   /** Seul l’organisateur (ou admin) peut changer les présences manuellement. */
   const peutChangerPresence = estOrganisateur || estAdmin;
   /** Invité simple : voit le live sans modifier ni clôturer. */
@@ -578,6 +601,7 @@ export function ReunionLivePage() {
               ) : (
                 <ul className="grid gap-2 sm:grid-cols-2">
                   {participantsAffiches.map((p) => {
+                    const profilP = profilMap.get(p.profil_id);
                     const nom = nomParticipant(p.profil_id);
                     const estOrg = Boolean(
                       reunion.cree_par && p.profil_id === reunion.cree_par,
@@ -596,6 +620,12 @@ export function ReunionLivePage() {
                         }`}
                       >
                         <div className="flex min-w-0 items-center gap-2">
+                          <Avatar
+                            name={nom}
+                            src={profilP?.url_avatar}
+                            size="sm"
+                            className="shrink-0 ring-white/20"
+                          />
                           {estPresent && (
                             <span
                               className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-success"

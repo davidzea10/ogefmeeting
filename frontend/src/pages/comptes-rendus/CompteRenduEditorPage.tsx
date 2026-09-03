@@ -519,8 +519,9 @@ export function CompteRenduEditorPage() {
                 onClick={() => {
                   if (
                     window.confirm(
-                      `Générer un ${LIBELLES_NIVEAU_DETAIL_CR[niveauDetailCr].toLowerCase()} avec l’IA ?\n\n` +
+                      `Regénérer un ${LIBELLES_NIVEAU_DETAIL_CR[niveauDetailCr].toLowerCase()} avec l’IA ?\n\n` +
                         'Le contenu actuel sera remplacé (une version sera historisée). ' +
+                        'Le PDF sera reconstruit à l’export. ' +
                         'Chaque projet ou sujet cité apparaîtra comme sous-point de l’ordre du jour.',
                     )
                   ) {
@@ -529,7 +530,7 @@ export function CompteRenduEditorPage() {
                 }}
               >
                 <Sparkles className="h-4 w-4" aria-hidden />
-                Générer avec l’IA
+                Regénérer avec l’IA
               </Button>
               <Button
                 size="sm"

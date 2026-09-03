@@ -2,12 +2,13 @@ import { Logo } from '@/components/brand/Logo';
 import { cn } from '@/lib/cn';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { easeOutExpo, useMotionSafe } from '@/lib/motion';
-import { peutAccederAdministration } from '@/lib/roles';
+import { peutAccederAdministration, peutGererMembresDirection } from '@/lib/roles';
 import { useAuthStore } from '@/stores/auth.store';
 import { useUiStore } from '@/stores/ui.store';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Archive,
+  Building2,
   Bell,
   CalendarDays,
   CheckSquare,
@@ -29,6 +30,7 @@ type NavItem = {
   label: string;
   icon: typeof LayoutDashboard;
   adminOnly?: boolean;
+  gestionDirection?: boolean;
 };
 
 const navItems: NavItem[] = [
@@ -40,6 +42,12 @@ const navItems: NavItem[] = [
   { to: '/recherche', label: 'Recherche', icon: Search },
   { to: '/archives', label: 'Archives', icon: Archive },
   { to: '/profil', label: 'Mon profil', icon: User },
+  {
+    to: '/gestion-direction',
+    label: 'Ma direction',
+    icon: Building2,
+    gestionDirection: true,
+  },
   { to: '/teste-live', label: 'Teste live', icon: Radio, adminOnly: true },
   { to: '/utilisateurs', label: 'Utilisateurs', icon: Users, adminOnly: true },
   { to: '/administration', label: 'Administration', icon: Settings, adminOnly: true },
@@ -55,11 +63,22 @@ function SidebarContent({
   const { toggleSidebar, setMobileSidebarOpen } = useUiStore();
   const motionSafe = useMotionSafe();
   const role = useAuthStore((s) => s.role ?? s.profil?.role ?? null);
+  const profil = useAuthStore((s) => s.profil);
   const estAdmin = peutAccederAdministration(role);
+  const peutGererDirection = peutGererMembresDirection(
+    role,
+    profil?.fonction,
+    profil?.direction_id,
+  );
 
   const itemsVisibles = useMemo(
-    () => navItems.filter((item) => !item.adminOnly || estAdmin),
-    [estAdmin],
+    () =>
+      navItems.filter((item) => {
+        if (item.adminOnly && !estAdmin) return false;
+        if (item.gestionDirection && !peutGererDirection) return false;
+        return true;
+      }),
+    [estAdmin, peutGererDirection],
   );
 
   return (
@@ -123,7 +142,7 @@ function SidebarContent({
         className="flex-1 space-y-1 overflow-y-auto p-3"
         aria-label="Navigation principale"
       >
-        {itemsVisibles.map(({ to, label, icon: Icon }) => (
+        {itemsVisibles.map(({ to, label, icon: Icon, gestionDirection }) => (
           <NavLink
             key={to}
             to={to}
@@ -152,11 +171,15 @@ function SidebarContent({
                       transition={{ duration: 0.2 }}
                       className="truncate"
                     >
-                      {label}
+                      {gestionDirection && estAdmin ? 'Gestion direction' : label}
                     </motion.span>
                   )}
                 </AnimatePresence>
-                {collapsed && <span className="sr-only">{label}</span>}
+                {collapsed && (
+                  <span className="sr-only">
+                    {gestionDirection && estAdmin ? 'Gestion direction' : label}
+                  </span>
+                )}
                 {isActive && <span className="sr-only">(page courante)</span>}
               </>
             )}

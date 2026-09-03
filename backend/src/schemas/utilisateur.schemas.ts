@@ -8,7 +8,6 @@ import { z } from 'zod';
 import { paginationQuerySchema, uuidSchema } from './common.schemas.js';
 
 const fonctionSchema = z.enum(FONCTIONS_ORGANISATION).optional().nullable();
-const nomOptionnelSchema = z.string().trim().max(100).optional().default('');
 const nomObligatoireSchema = z
   .string()
   .trim()
@@ -17,15 +16,11 @@ const nomObligatoireSchema = z
 
 export const modifierMonProfilSchema = z
   .object({
-    prenom: nomOptionnelSchema,
-    nom: nomOptionnelSchema,
-    direction_id: uuidSchema.optional().nullable(),
-    fonction: fonctionSchema,
-    matricule: z.string().trim().max(40).optional().nullable(),
-    url_avatar: z.string().url().optional().nullable(),
+    prenom: nomObligatoireSchema.optional(),
+    nom: nomObligatoireSchema.optional(),
   })
-  .refine((data) => Object.keys(data).length > 0, {
-    message: 'Au moins un champ doit être fourni.',
+  .refine((data) => data.prenom !== undefined || data.nom !== undefined, {
+    message: 'Au moins le prénom ou le nom doit être fourni.',
   });
 
 export type ModifierMonProfilInput = z.infer<typeof modifierMonProfilSchema>;

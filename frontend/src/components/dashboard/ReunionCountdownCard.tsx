@@ -93,9 +93,19 @@ export function ReunionCountdownCard({ reunion, estOrganisateur = false }: Props
         </div>
 
         {isEnCours ? (
-          <p className="rounded-xl bg-ogefrem-blue/10 px-4 py-3 text-center text-base font-semibold text-ogefrem-blue sm:text-lg">
-            La réunion a commencé — rejoignez-la maintenant.
-          </p>
+          <div className="space-y-3">
+            <p className="rounded-xl bg-ogefrem-blue/10 px-4 py-3 text-center text-base font-semibold text-ogefrem-blue sm:text-lg">
+              La réunion a commencé — rejoignez-la maintenant.
+            </p>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Link to={`/reunions/${reunion.id}/live`}>
+                <Button>Rejoindre le live</Button>
+              </Link>
+              <Link to={`/reunions/${reunion.id}/invitation`}>
+                <Button variant="secondary">Confirmer l’invitation</Button>
+              </Link>
+            </div>
+          </div>
         ) : isOverdue ? (
           <p className="rounded-xl bg-ogefrem-blue/10 px-4 py-3 text-center text-base font-semibold text-ogefrem-blue sm:text-lg">
             {estOrganisateur

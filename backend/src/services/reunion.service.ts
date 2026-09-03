@@ -568,46 +568,71 @@ export class ReunionService {
 
       if (error || !participants?.length) return;
 
-      const ids = participants
-        .map((p) => p.profil_id as string)
-        .filter((profilId) => profilId && profilId !== demarreParProfilId);
-
-      if (ids.length === 0) return;
-
-      const { data: profils } = await supabase
-        .from(TABLES.profils)
-        .select('id, email, prenom, nom, est_actif')
-        .in('id', ids)
-        .eq('est_actif', true);
-
       const metaCle = { reunion_id: reunion.id, kind: 'demarrage' };
-      const destinataires: { id: string; email?: string | null; prenom?: string; nom?: string }[] =
-        [];
-
-      for (const profil of profils ?? []) {
-        const { data: deja } = await supabase
-          .from(TABLES.notifications)
-          .select('id')
-          .eq('profil_id', profil.id)
-          .eq('type', 'reunion_demarree')
-          .contains('metadonnees', metaCle)
-          .maybeSingle();
-        if (!deja) destinataires.push(profil);
-      }
-
-      if (destinataires.length === 0) return;
-
       const lieuPart = reunion.lieu ? ` — ${reunion.lieu}` : '';
-      await notificationService.creerPourProfils(destinataires, {
-        type: 'reunion_demarree',
-        titre: 'La réunion a commencé',
+      const invites = participants.filter((p) => p.statut === 'invite');
+      const confirmes = participants.filter((p) => p.statut === 'confirme');
+
+      const notifierGroupe = async (
+        groupe: { profil_id: string; statut: string }[],
+        options: { lien: string; message: string; bouton: string },
+      ) => {
+        const ids = groupe
+          .map((p) => p.profil_id as string)
+          .filter((profilId) => profilId && profilId !== demarreParProfilId);
+        if (ids.length === 0) return;
+
+        const { data: profils } = await supabase
+          .from(TABLES.profils)
+          .select('id, email, prenom, nom, est_actif')
+          .in('id', ids)
+          .eq('est_actif', true);
+
+        const destinataires: {
+          id: string;
+          email?: string | null;
+          prenom?: string;
+          nom?: string;
+        }[] = [];
+
+        for (const profil of profils ?? []) {
+          const { data: deja } = await supabase
+            .from(TABLES.notifications)
+            .select('id')
+            .eq('profil_id', profil.id)
+            .eq('type', 'reunion_demarree')
+            .contains('metadonnees', metaCle)
+            .maybeSingle();
+          if (!deja) destinataires.push(profil);
+        }
+
+        if (destinataires.length === 0) return;
+
+        await notificationService.creerPourProfils(destinataires, {
+          type: 'reunion_demarree',
+          titre: 'La réunion a commencé',
+          message: options.message,
+          lien: options.lien,
+          emailSujet: `[Ogefmeeting] En cours — ${reunion.titre}`,
+          emailBoutonLibelle: options.bouton,
+          metadonnees: metaCle,
+        });
+      };
+
+      await notifierGroupe(confirmes as { profil_id: string; statut: string }[], {
+        lien: `/reunions/${reunion.id}/live`,
         message:
           `« ${reunion.titre} » est en cours${lieuPart}.\n\n` +
           `Rejoignez le mode live pour suivre l’ordre du jour en direct.`,
-        lien: `/reunions/${reunion.id}/live`,
-        emailSujet: `[Ogefmeeting] En cours — ${reunion.titre}`,
-        emailBoutonLibelle: 'Rejoindre le live',
-        metadonnees: metaCle,
+        bouton: 'Rejoindre le live',
+      });
+
+      await notifierGroupe(invites as { profil_id: string; statut: string }[], {
+        lien: `/reunions/${reunion.id}/invitation`,
+        message:
+          `« ${reunion.titre} » est en cours${lieuPart}.\n\n` +
+          `Confirmez d’abord votre invitation, puis rejoignez le live.`,
+        bouton: 'Confirmer mon invitation',
       });
 
       // Optionnel : notifier le démarrage à l’organisateur/ayant-droit si l’heure était dépassée.
@@ -1267,6 +1292,15 @@ export class ReunionService {
     }
 
     const actuel = participant as ParticipantReunion;
+    if (actuel.statut === 'invite' || actuel.statut === 'absent') {
+      throw new AppError(
+        403,
+        actuel.statut === 'absent'
+          ? 'Vous avez décliné cette invitation. Confirmez d’abord votre participation pour rejoindre le live.'
+          : 'Confirmez d’abord votre invitation avant de rejoindre le live.',
+      );
+    }
+
     if (actuel.statut === 'present') {
       if (actuel.present_le) return actuel;
       try {

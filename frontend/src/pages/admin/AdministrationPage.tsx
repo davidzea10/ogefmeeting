@@ -13,7 +13,11 @@ import {
   modifierDirection,
   modifierMembre,
   modifierModele,
+  obtenirResumeNettoyage,
+  purgerNotificationsAdmin,
+  purgerReunionsTestLiveAdmin,
   reactiverMembre,
+  supprimerReunionDefinitiveAdmin,
 } from '@/lib/admin-api';
 import {
   listerAudit,
@@ -42,7 +46,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
 import { formatDateHeure } from '@/lib/labels';
 
-type TabId = 'utilisateurs' | 'directions' | 'modeles' | 'parametres' | 'audit';
+type TabId = 'utilisateurs' | 'directions' | 'modeles' | 'parametres' | 'nettoyage' | 'audit';
 
 export function AdministrationPage() {
   const role = useAuthStore((s) => s.role ?? s.profil?.role ?? null);
@@ -77,6 +81,7 @@ export function AdministrationPage() {
           ['directions', 'Directions'],
           ['modeles', 'Modèles CR'],
           ['parametres', 'Paramètres'],
+          ['nettoyage', 'Nettoyage'],
           ['audit', 'Journal d’audit'],
         ] as const)
       : ([['audit', 'Journal d’audit']] as const)
@@ -115,6 +120,7 @@ export function AdministrationPage() {
       {isAdmin && tab === 'directions' && <DirectionsPanel />}
       {isAdmin && tab === 'modeles' && <ModelesPanel />}
       {isAdmin && tab === 'parametres' && <ParametresPanel />}
+      {isAdmin && tab === 'nettoyage' && <NettoyagePanel />}
       {peutAudit && tab === 'audit' && <AuditPanel />}
     </div>
   );
@@ -188,6 +194,7 @@ function UtilisateursPanel() {
   const modifierMut = useMutation({
     mutationFn: () =>
       modifierMembre(editId!, {
+        email: form.email.trim(),
         prenom: form.prenom.trim(),
         nom: form.nom.trim(),
         role: form.role || roleDepuisFonction(form.fonction || null),
@@ -330,13 +337,18 @@ function UtilisateursPanel() {
           <div className="grid gap-2 sm:grid-cols-2">
             <input
               required
-              disabled={Boolean(editId)}
-              className="h-10 rounded-lg border border-border px-3 text-sm disabled:opacity-60"
-              placeholder="Email (connexion) *"
+              className="h-10 rounded-lg border border-border px-3 text-sm sm:col-span-2"
+              placeholder="Email (connexion / professionnel) *"
               type="email"
               value={form.email}
               onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
             />
+            {editId && (
+              <p className="text-xs text-text-muted sm:col-span-2">
+                Modifier l’email met à jour l’adresse de connexion et celle utilisée pour les
+                invitations / CR.
+              </p>
+            )}
             <input
               className="h-10 rounded-lg border border-border px-3 text-sm"
               placeholder="Matricule (optionnel)"
@@ -871,6 +883,170 @@ function ParametresPanel() {
         </div>
       </div>
     </form>
+  );
+}
+
+function NettoyagePanel() {
+  const announce = useAnnouncerStore((s) => s.announce);
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
+    queryKey: ['admin', 'nettoyage'],
+    queryFn: obtenirResumeNettoyage,
+  });
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ['admin', 'nettoyage'] });
+
+  const purgeNotifsMut = useMutation({
+    mutationFn: purgerNotificationsAdmin,
+    onSuccess: async (data) => {
+      await invalidate();
+      announce(`${data.supprimees} notification(s) supprimée(s).`);
+    },
+    onError: (e: Error) => announce(e.message),
+  });
+
+  const purgeTestsMut = useMutation({
+    mutationFn: purgerReunionsTestLiveAdmin,
+    onSuccess: async (data) => {
+      await invalidate();
+      announce(`${data.supprimees} réunion(s) [TEST LIVE] supprimée(s).`);
+    },
+    onError: (e: Error) => announce(e.message),
+  });
+
+  const supprimerMut = useMutation({
+    mutationFn: (id: string) => supprimerReunionDefinitiveAdmin(id),
+    onSuccess: async (data) => {
+      await invalidate();
+      announce(`Réunion « ${data.titre} » supprimée définitivement.`);
+    },
+    onError: (e: Error) => announce(e.message),
+  });
+
+  const reunions = query.data?.reunions ?? [];
+  const tests = reunions.filter((r) => r.est_test_live);
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm text-text">
+        <p className="font-semibold text-warning">Avant le lancement</p>
+        <p className="mt-1 text-text-muted">
+          Ces actions sont définitives. Utilisez-les pour nettoyer les notifications de test et
+          les réunions d’essai avant demain.
+        </p>
+      </div>
+
+      <section className="space-y-3 rounded-xl border border-border bg-surface p-4">
+        <h3 className="font-semibold text-text">Notifications</h3>
+        <p className="text-sm text-text-muted">
+          {query.isLoading
+            ? 'Chargement…'
+            : `${query.data?.notifications ?? 0} notification(s) en base.`}
+        </p>
+        <Button
+          size="sm"
+          variant="outline"
+          className="text-danger"
+          loading={purgeNotifsMut.isPending}
+          onClick={() => {
+            if (
+              window.confirm(
+                'Supprimer TOUTES les notifications de tous les utilisateurs ? Cette action est irréversible.',
+              )
+            ) {
+              purgeNotifsMut.mutate();
+            }
+          }}
+        >
+          Purger toutes les notifications
+        </Button>
+      </section>
+
+      <section className="space-y-3 rounded-xl border border-border bg-surface p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="font-semibold text-text">Réunions [TEST LIVE]</h3>
+            <p className="text-sm text-text-muted">
+              {tests.length} réunion(s) de test détectée(s).
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-danger"
+            loading={purgeTestsMut.isPending}
+            disabled={tests.length === 0}
+            onClick={() => {
+              if (
+                window.confirm(
+                  `Supprimer définitivement ${tests.length} réunion(s) [TEST LIVE] ?`,
+                )
+              ) {
+                purgeTestsMut.mutate();
+              }
+            }}
+          >
+            Purger les tests live
+          </Button>
+        </div>
+      </section>
+
+      <section className="space-y-3 rounded-xl border border-border bg-surface p-4">
+        <h3 className="font-semibold text-text">Toutes les réunions (100 dernières)</h3>
+        <p className="text-xs text-text-muted">
+          Suppression définitive (médias + participants + CR). Impossible si la réunion est encore
+          en live.
+        </p>
+        {query.isLoading && <p className="text-sm text-text-muted">Chargement…</p>}
+        {query.isSuccess && reunions.length === 0 && (
+          <p className="text-sm text-text-muted">Aucune réunion.</p>
+        )}
+        {reunions.length > 0 && (
+          <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+            {reunions.map((r) => (
+              <li
+                key={r.id}
+                className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-text">
+                    {r.titre}
+                    {r.est_test_live && (
+                      <Badge variant="warning" className="ml-2">
+                        Test
+                      </Badge>
+                    )}
+                  </p>
+                  <p className="text-xs text-text-muted">
+                    {r.statut} · prévue {formatDateHeure(r.date_prevue)}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-danger"
+                  loading={supprimerMut.isPending && supprimerMut.variables === r.id}
+                  disabled={r.statut === 'en_cours' || r.statut === 'en_pause'}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `Supprimer définitivement « ${r.titre} » ? Cette action est irréversible.`,
+                      )
+                    ) {
+                      supprimerMut.mutate(r.id);
+                    }
+                  }}
+                >
+                  Supprimer
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
   );
 }
 

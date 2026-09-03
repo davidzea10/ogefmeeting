@@ -128,3 +128,14 @@ export function peutApprouverReunionPourReunion(
 export function estSuperAdmin(role: RoleUtilisateur | null | undefined): boolean {
   return role === 'administrateur';
 }
+
+/** Directeur / sous-directeur rattachés à une direction, ou administrateur. */
+export function peutGererMembresDirection(
+  role: RoleUtilisateur | null | undefined,
+  fonction?: string | null,
+  directionId?: string | null,
+): boolean {
+  if (role === 'administrateur') return true;
+  if (!directionId) return false;
+  return fonction === 'directeur' || fonction === 'sous_directeur';
+}

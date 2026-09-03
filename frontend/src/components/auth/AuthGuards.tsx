@@ -1,5 +1,5 @@
 import { useAuthStore } from '@/stores/auth.store';
-import { peutAccederAdministration } from '@/lib/roles';
+import { peutAccederAdministration, peutGererMembresDirection } from '@/lib/roles';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 
 /**
@@ -40,6 +40,16 @@ export function GuestOnly() {
 export function RequireAdmin() {
   const role = useAuthStore((s) => s.role ?? s.profil?.role ?? null);
   if (!peutAccederAdministration(role)) {
+    return <Navigate to="/" replace />;
+  }
+  return <Outlet />;
+}
+
+/** Gestion des membres de direction — admin, directeur ou sous-directeur */
+export function RequireGestionDirection() {
+  const profil = useAuthStore((s) => s.profil);
+  const role = useAuthStore((s) => s.role ?? profil?.role ?? null);
+  if (!peutGererMembresDirection(role, profil?.fonction, profil?.direction_id)) {
     return <Navigate to="/" replace />;
   }
   return <Outlet />;

@@ -9,9 +9,17 @@ import type {
 } from '../schemas/utilisateur.schemas.js';
 import type { ModifierProfilInput } from '../schemas/admin.schemas.js';
 import { authService } from '../services/auth.service.js';
+import { profilService } from '../services/admin.service.js';
 import { utilisateurService } from '../services/utilisateur.service.js';
 import { permissionsPourRole } from '../utils/permissions.js';
 import { AppError } from '../utils/errors.js';
+import {
+  assertMemeDirection,
+  assertPeutGererMembresDirection,
+  estAdministrateur,
+  filtrerModificationDirection,
+  validerInvitationDirection,
+} from '../utils/direction-membres.js';
 
 export class UtilisateurController {
   async obtenirMonProfil(req: Request, res: Response): Promise<void> {
@@ -54,35 +62,78 @@ export class UtilisateurController {
   }
 
   async inviter(req: Request, res: Response): Promise<void> {
+    if (!req.user) {
+      throw new AppError(401, 'Authentification requise.');
+    }
+
+    assertPeutGererMembresDirection(req.user);
+
+    const body = req.body as InviterUtilisateurInput;
+    const scope = validerInvitationDirection(req.user, body);
+
     const data = await utilisateurService.inviter(
-      req.body as InviterUtilisateurInput,
-      req.user?.id,
+      {
+        ...body,
+        direction_id: scope.direction_id,
+        role: scope.role,
+        fonction: scope.fonction,
+      },
+      req.user.id,
     );
     res.status(201).json({ success: true, data });
   }
 
   async modifierProfilAdmin(req: Request, res: Response): Promise<void> {
+    if (!req.user) {
+      throw new AppError(401, 'Authentification requise.');
+    }
+
+    assertPeutGererMembresDirection(req.user);
+
+    const cible = await profilService.obtenirParId(req.params.id as string);
+    const patch = filtrerModificationDirection(
+      req.user,
+      req.body as ModifierProfilInput,
+      cible,
+    );
+
     const data = await utilisateurService.modifierProfilAdmin(
       req.params.id as string,
-      req.body as ModifierProfilInput,
-      req.user?.id,
+      patch,
+      req.user.id,
     );
     res.status(200).json({ success: true, data });
   }
 
   async desactiverProfil(req: Request, res: Response): Promise<void> {
-    const data = await utilisateurService.desactiverProfil(
-      req.params.id as string,
-      req.user?.id,
-    );
+    if (!req.user) {
+      throw new AppError(401, 'Authentification requise.');
+    }
+
+    assertPeutGererMembresDirection(req.user);
+
+    const cible = await profilService.obtenirParId(req.params.id as string);
+    assertMemeDirection(req.user, cible);
+
+    if (!estAdministrateur(req.user) && cible.id === req.user.id) {
+      throw new AppError(400, 'Vous ne pouvez pas désactiver votre propre compte.');
+    }
+
+    const data = await utilisateurService.desactiverProfil(req.params.id as string, req.user.id);
     res.status(200).json({ success: true, data });
   }
 
   async reactiverProfil(req: Request, res: Response): Promise<void> {
-    const data = await utilisateurService.reactiverProfil(
-      req.params.id as string,
-      req.user?.id,
-    );
+    if (!req.user) {
+      throw new AppError(401, 'Authentification requise.');
+    }
+
+    assertPeutGererMembresDirection(req.user);
+
+    const cible = await profilService.obtenirParId(req.params.id as string);
+    assertMemeDirection(req.user, cible);
+
+    const data = await utilisateurService.reactiverProfil(req.params.id as string, req.user.id);
     res.status(200).json({ success: true, data });
   }
 
