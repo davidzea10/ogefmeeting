@@ -51,6 +51,8 @@ export function NotificationBell() {
     queryFn: compterNotificationsNonLues,
     enabled: Boolean(accessToken),
     refetchInterval: 60_000,
+    // Évite d’afficher un ancien badge après une purge admin
+    placeholderData: undefined,
   });
 
   const listQuery = useQuery({

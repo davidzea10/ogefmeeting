@@ -895,12 +895,19 @@ function NettoyagePanel() {
     queryFn: obtenirResumeNettoyage,
   });
 
-  const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ['admin', 'nettoyage'] });
+  const invalidate = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['admin', 'nettoyage'] });
+    await queryClient.invalidateQueries({ queryKey: ['notifications'] });
+  };
 
   const purgeNotifsMut = useMutation({
     mutationFn: purgerNotificationsAdmin,
     onSuccess: async (data) => {
+      queryClient.setQueryData(['notifications', 'non-lues'], { non_lues: 0 });
+      queryClient.setQueryData(['notifications', 'liste'], {
+        items: [],
+        pagination: { page: 1, limite: 15, total: 0, total_pages: 1 },
+      });
       await invalidate();
       announce(`${data.supprimees} notification(s) supprimée(s).`);
     },
