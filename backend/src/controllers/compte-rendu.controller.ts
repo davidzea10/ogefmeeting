@@ -59,6 +59,15 @@ export class CompteRenduController {
     res.status(200).json({ success: true, data });
   }
 
+  async annulerSoumission(req: Request, res: Response): Promise<void> {
+    await this.assurerPeutRedigerCr(req, req.params.id as string);
+    const data = await compteRenduService.annulerSoumission(
+      req.params.id as string,
+      (req.body ?? {}) as SoumettreCompteRenduInput,
+    );
+    res.status(200).json({ success: true, data });
+  }
+
   async valider(req: Request, res: Response): Promise<void> {
     const data = await compteRenduService.valider(
       req.params.id as string,

@@ -255,6 +255,60 @@ export class CompteRenduService {
     return cr;
   }
 
+  async annulerSoumission(
+    id: string,
+    input: SoumettreCompteRenduInput = {},
+  ): Promise<CompteRendu> {
+    const actuel = await this.assurerExiste(id);
+
+    if (actuel.statut !== 'soumis') {
+      throw new AppError(
+        400,
+        `Impossible d’annuler la soumission : statut « ${actuel.statut} ».`,
+      );
+    }
+
+    const supabase = requireSupabaseAdmin();
+    const { data, error } = await supabase
+      .from(TABLES.comptesRendus)
+      .update({
+        statut: 'brouillon',
+        soumis_le: null,
+      })
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (error) {
+      handleSupabaseError(error, 'Impossible d’annuler la soumission.');
+    }
+
+    const cr = data as CompteRendu;
+
+    if (input.commentaire?.trim()) {
+      await this.insererCommentaire(id, {
+        contenu: input.commentaire.trim(),
+        type: 'note',
+        auteur_id: input.auteur_id ?? null,
+      });
+    } else {
+      await this.insererCommentaire(id, {
+        contenu: 'Soumission annulée — retour en brouillon.',
+        type: 'note',
+        auteur_id: input.auteur_id ?? null,
+      });
+    }
+
+    await notifierChangementStatutCr({
+      cr,
+      ancienStatut: actuel.statut,
+      nouveauStatut: 'brouillon',
+      commentaire: input.commentaire,
+    });
+
+    return cr;
+  }
+
   async valider(id: string, input: ValiderCompteRenduInput): Promise<CompteRendu> {
     const actuel = await this.assurerExiste(id);
 
@@ -502,11 +556,14 @@ export class CompteRenduService {
 
     const { data: participantsRows } = await supabase
       .from(TABLES.participantsReunion)
-      .select('statut, profils(prenom, nom, email, matricule, fonction, directions(code, nom))')
+      .select(
+        'profil_id, statut, profils(prenom, nom, email, matricule, fonction, directions(code, nom))',
+      )
       .eq('reunion_id', compte_rendu.reunion_id)
       .order('cree_le', { ascending: true });
 
-    const participants = this.mapperParticipantsPdf(participantsRows ?? []);
+    const exclusCr = this.lireParticipantsExclusIds(compte_rendu.contenu);
+    const participants = this.mapperParticipantsPdf(participantsRows ?? [], exclusCr);
 
     const parametres = await parametresService.obtenir();
 
@@ -556,11 +613,14 @@ export class CompteRenduService {
 
     const { data: participantsRows } = await supabase
       .from(TABLES.participantsReunion)
-      .select('statut, profils(prenom, nom, email, matricule, fonction, directions(code, nom))')
+      .select(
+        'profil_id, statut, profils(prenom, nom, email, matricule, fonction, directions(code, nom))',
+      )
       .eq('reunion_id', compte_rendu.reunion_id)
       .order('cree_le', { ascending: true });
 
-    const participants = this.mapperParticipantsPdf(participantsRows ?? []);
+    const exclusListe = this.lireParticipantsExclusIds(compte_rendu.contenu);
+    const participants = this.mapperParticipantsPdf(participantsRows ?? [], exclusListe);
     const parametres = await parametresService.obtenir();
 
     const buffer = await genererPdfListeParticipants({
@@ -582,8 +642,17 @@ export class CompteRenduService {
     return { buffer, filename };
   }
 
+  private lireParticipantsExclusIds(
+    contenu: Record<string, unknown> | null | undefined,
+  ): string[] {
+    const raw = contenu?.participants_exclus_ids;
+    if (!Array.isArray(raw)) return [];
+    return raw.filter((id): id is string => typeof id === 'string' && id.length > 0);
+  }
+
   private mapperParticipantsPdf(
     participantsRows: Array<Record<string, unknown>>,
+    exclusIds: string[] = [],
   ): PdfParticipantLigne[] {
     type ProfilJoin = {
       prenom?: string;
@@ -594,29 +663,49 @@ export class CompteRenduService {
       directions?: { code?: string | null; nom?: string } | { code?: string | null; nom?: string }[] | null;
     };
 
-    return participantsRows.map((row) => {
-      const rawProfil = (row as { profils?: ProfilJoin | ProfilJoin[] | null }).profils;
-      const profil = Array.isArray(rawProfil) ? rawProfil[0] : rawProfil;
-      const rawDir = profil?.directions;
-      const direction = Array.isArray(rawDir) ? rawDir[0] : rawDir;
-      const prenom = profil?.prenom?.trim() ?? '';
-      const nom = profil?.nom?.trim() ?? '';
-      const codeDir = direction?.code?.trim();
-      const nomDir = direction?.nom?.trim();
-      const directionLabel = codeDir
-        ? codeDir.toUpperCase()
-        : nomDir
-          ? nomDir.toUpperCase()
-          : null;
+    const exclus = new Set(exclusIds);
+    const ordreFonction: Record<string, number> = {
+      directeur: 0,
+      sous_directeur: 1,
+      chef_service: 2,
+      agent: 3,
+    };
 
-      return {
-        nom: `${prenom} ${nom}`.trim() || '—',
-        matricule: profil?.matricule ?? null,
-        email: profil?.email ?? null,
-        direction: directionLabel,
-        fonction: profil?.fonction ?? null,
-        statut: String((row as { statut?: string }).statut ?? 'invite'),
-      };
+    const lignes = participantsRows
+      .filter((row) => {
+        const pid = String((row as { profil_id?: string }).profil_id ?? '');
+        return !pid || !exclus.has(pid);
+      })
+      .map((row) => {
+        const rawProfil = (row as { profils?: ProfilJoin | ProfilJoin[] | null }).profils;
+        const profil = Array.isArray(rawProfil) ? rawProfil[0] : rawProfil;
+        const rawDir = profil?.directions;
+        const direction = Array.isArray(rawDir) ? rawDir[0] : rawDir;
+        const prenom = profil?.prenom?.trim() ?? '';
+        const nom = profil?.nom?.trim() ?? '';
+        const codeDir = direction?.code?.trim();
+        const nomDir = direction?.nom?.trim();
+        const directionLabel = codeDir
+          ? codeDir.toUpperCase()
+          : nomDir
+            ? nomDir.toUpperCase()
+            : null;
+
+        return {
+          nom: `${prenom} ${nom}`.trim() || '—',
+          matricule: profil?.matricule ?? null,
+          email: profil?.email ?? null,
+          direction: directionLabel,
+          fonction: profil?.fonction ?? null,
+          statut: String((row as { statut?: string }).statut ?? 'invite'),
+        };
+      });
+
+    return lignes.sort((a, b) => {
+      const ra = a.fonction ? (ordreFonction[a.fonction] ?? 50) : 99;
+      const rb = b.fonction ? (ordreFonction[b.fonction] ?? 50) : 99;
+      if (ra !== rb) return ra - rb;
+      return a.nom.localeCompare(b.nom, 'fr');
     });
   }
 

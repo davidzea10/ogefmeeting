@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import {
   ajouterCommentaireCompteRendu,
   archiverCompteRendu,
+  annulerSoumissionCompteRendu,
   envoyerCompteRenduParticipants,
   genererCompteRenduIa,
   listerCommentairesCompteRendu,
@@ -21,8 +22,10 @@ import {
   validerCompteRendu,
 } from '@/lib/comptes-rendus-api';
 import {
+  CLE_PARTICIPANTS_EXCLUS,
   contenuEstVide,
   contenuVersHtml,
+  lireParticipantsExclusIds,
   nettoyerContenuCr,
   preremplirContenuCr,
   sectionsDepuisModele,
@@ -33,6 +36,7 @@ import {
   LIBELLES_NIVEAU_DETAIL_CR,
   DESCRIPTIONS_NIVEAU_DETAIL_CR,
   messageWorkflowCr,
+  peutAnnulerSoumissionCr,
   peutApprouverCr,
   peutArchiverCr,
   peutEnvoyerRapportParticipants,
@@ -58,6 +62,7 @@ import {
   Send,
   Sparkles,
   Users,
+  XCircle,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -93,6 +98,7 @@ export function CompteRenduEditorPage() {
   const [noteLibre, setNoteLibre] = useState('');
   const [niveauDetailCr, setNiveauDetailCr] = useState<NiveauDetailCr>('detaille');
   const [afficherParticipantsCorps, setAfficherParticipantsCorps] = useState(true);
+  const [participantsExclusIds, setParticipantsExclusIds] = useState<string[]>([]);
   const initDone = useRef(false);
 
   const crQuery = useQuery({
@@ -157,6 +163,7 @@ export function CompteRenduEditorPage() {
     const secs = sectionsDepuisModele(modele);
     setSections(secs);
     setAfficherParticipantsCorps(crQuery.data.afficher_participants_corps ?? true);
+    setParticipantsExclusIds(lireParticipantsExclusIds(crQuery.data.contenu));
 
     const profils = profilsQuery.data?.items ?? [];
     const directions = directionsQuery.data ?? [];
@@ -201,10 +208,15 @@ export function CompteRenduEditorPage() {
       inclureParticipants: afficherParticipantsCorps,
     });
 
+  const buildContenuPayload = () => ({
+    ...contenu,
+    [CLE_PARTICIPANTS_EXCLUS]: participantsExclusIds,
+  });
+
   const saveMut = useMutation({
     mutationFn: (opts: { historiser: boolean }) =>
       modifierCompteRendu(id!, {
-        contenu,
+        contenu: buildContenuPayload(),
         contenu_html: buildContenuHtml(),
         afficher_participants_corps: afficherParticipantsCorps,
         modifie_par: profilId ?? null,
@@ -215,7 +227,7 @@ export function CompteRenduEditorPage() {
       setLastSavedAt(new Date());
       await invalidateCr(data.reunion_id);
       if (optsHistoriserRef.current) {
-        announce(`Version ${data.version} enregistrée.`);
+        announce('Version enregistrée.');
       }
     },
     onError: (e: Error) => announce(e.message),
@@ -225,7 +237,7 @@ export function CompteRenduEditorPage() {
     mutationFn: async () => {
       if (dirty) {
         await modifierCompteRendu(id!, {
-          contenu,
+          contenu: buildContenuPayload(),
           contenu_html: buildContenuHtml(),
           afficher_participants_corps: afficherParticipantsCorps,
           modifie_par: profilId ?? null,
@@ -270,6 +282,20 @@ export function CompteRenduEditorPage() {
       setCommentaireAction('');
       await invalidateCr(data.reunion_id);
       announce('Compte rendu renvoyé en révision. Le rédacteur a été notifié.');
+    },
+    onError: (e: Error) => announce(e.message),
+  });
+
+  const annulerSoumissionMut = useMutation({
+    mutationFn: () =>
+      annulerSoumissionCompteRendu(id!, {
+        commentaire: commentaireAction.trim() || null,
+        auteur_id: profilId ?? null,
+      }),
+    onSuccess: async (data) => {
+      setCommentaireAction('');
+      await invalidateCr(data.reunion_id);
+      announce('Soumission annulée. Le compte rendu est de nouveau en brouillon.');
     },
     onError: (e: Error) => announce(e.message),
   });
@@ -369,7 +395,7 @@ export function CompteRenduEditorPage() {
       saveMut.mutate({ historiser: false });
     }, 30_000);
     return () => window.clearTimeout(t);
-  }, [contenu, dirty, editable, afficherParticipantsCorps]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [contenu, dirty, editable, afficherParticipantsCorps, participantsExclusIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const statusLabel = useMemo(() => {
     if (saveMut.isPending || soumettreMut.isPending) return 'Enregistrement…';
@@ -383,6 +409,7 @@ export function CompteRenduEditorPage() {
     soumettreMut.isPending ||
     validerMut.isPending ||
     rejeterMut.isPending ||
+    annulerSoumissionMut.isPending ||
     archiverMut.isPending ||
     pdfMut.isPending ||
     pdfParticipantsMut.isPending ||
@@ -422,6 +449,7 @@ export function CompteRenduEditorPage() {
     organisateurId: reunion.cree_par,
   };
   const showSoumettre = peutSoumettreCr(role, cr.statut, ctxOrganisateur);
+  const showAnnulerSoumission = peutAnnulerSoumissionCr(role, cr.statut, ctxOrganisateur);
   const showValidation = peutApprouverCr(role, cr.statut);
   const showArchiver = peutArchiverCr(role, cr.statut);
   const showNoteDirecteur = peutValiderCr(role) && cr.statut === 'soumis';
@@ -448,7 +476,6 @@ export function CompteRenduEditorPage() {
           <Badge variant={badgeVariantPourStatut(cr.statut)}>
             {LIBELLES_STATUT_CR[cr.statut] ?? cr.statut}
           </Badge>
-          <Badge variant="default">v{cr.version}</Badge>
           <span className="text-xs text-text-muted">{statusLabel}</span>
         </div>
         <h2 className="text-xl font-bold text-text sm:text-2xl">
@@ -468,12 +495,14 @@ export function CompteRenduEditorPage() {
           {cr.valide_le ? ` · Validé le ${formatDateHeure(cr.valide_le)}` : ''}
         </p>
 
-        {(showSoumettre || showValidation) && (
+        {(showSoumettre || showValidation || showAnnulerSoumission) && (
           <label className="block space-y-1 text-sm">
             <span className="font-medium text-text">
               {showValidation
                 ? 'Commentaire / motif (obligatoire pour renvoyer en révision)'
-                : 'Message optionnel à la soumission'}
+                : showAnnulerSoumission
+                  ? 'Message optionnel pour l’annulation'
+                  : 'Message optionnel à la soumission'}
             </span>
             <textarea
               className="min-h-[4.5rem] w-full rounded-lg border border-border bg-surface px-3 py-2 text-text"
@@ -578,6 +607,27 @@ export function CompteRenduEditorPage() {
             >
               <Send className="h-4 w-4" aria-hidden />
               Soumettre pour validation
+            </Button>
+          )}
+
+          {showAnnulerSoumission && (
+            <Button
+              size="sm"
+              variant="outline"
+              loading={annulerSoumissionMut.isPending}
+              disabled={workflowBusy}
+              onClick={() => {
+                if (
+                  window.confirm(
+                    'Annuler la soumission et ramener ce compte rendu en brouillon ?',
+                  )
+                ) {
+                  annulerSoumissionMut.mutate();
+                }
+              }}
+            >
+              <XCircle className="h-4 w-4" aria-hidden />
+              Annuler la soumission
             </Button>
           )}
 
@@ -839,9 +889,11 @@ export function CompteRenduEditorPage() {
                   profils={profilsQuery.data?.items ?? []}
                   directions={directionsQuery.data ?? []}
                   valueHtml={contenu.participants}
+                  exclusIds={participantsExclusIds}
                   editable={editable}
-                  onChange={(html) => {
+                  onChange={(html, exclusIds) => {
                     setContenu((prev) => ({ ...prev, participants: html }));
+                    setParticipantsExclusIds(exclusIds);
                     setDirty(true);
                   }}
                 />

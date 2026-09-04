@@ -61,6 +61,15 @@ comptesRendusRouter.post(
 );
 
 comptesRendusRouter.post(
+  '/:id/annuler-soumission',
+  requireAuth,
+  requirePermission(PERMISSIONS.CR_MODIFIER),
+  validateParams(idParamSchema),
+  validateBody(soumettreCompteRenduSchema),
+  asyncHandler((req, res) => compteRenduController.annulerSoumission(req, res)),
+);
+
+comptesRendusRouter.post(
   '/:id/valider',
   requireAuth,
   requirePermission(PERMISSIONS.CR_VALIDER),

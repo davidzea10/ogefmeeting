@@ -5,6 +5,7 @@ import type {
   ReunionDetail,
   SectionCompteRendu,
 } from '@ogefmeeting/shared';
+import { libelleFonction, rangHierarchieFonction } from '@ogefmeeting/shared';
 import { LIBELLES_PARTICIPANT } from '@/lib/labels';
 
 /**
@@ -20,6 +21,9 @@ export const SECTIONS_CR_DEFAUT: SectionCompteRendu[] = [
 
 export type ContenuCr = Record<string, string>;
 
+/** Clé technique dans contenu CR : profils exclus du tableau participants. */
+export const CLE_PARTICIPANTS_EXCLUS = 'participants_exclus_ids';
+
 const AVERTISSEMENT_IA_SUPPRIME =
   'Brouillon généré par IA — à valider par le secrétariat avant publication';
 
@@ -27,8 +31,9 @@ const AVERTISSEMENT_IA_SUPPRIME =
 export function nettoyerContenuCr(contenu: ContenuCr): ContenuCr {
   const out: ContenuCr = {};
   for (const [cle, html] of Object.entries(contenu)) {
+    if (cle === CLE_PARTICIPANTS_EXCLUS) continue;
     let h = html;
-    if (h.includes(AVERTISSEMENT_IA_SUPPRIME)) {
+    if (typeof h === 'string' && h.includes(AVERTISSEMENT_IA_SUPPRIME)) {
       h = h
         .replace(
           new RegExp(
@@ -39,13 +44,23 @@ export function nettoyerContenuCr(contenu: ContenuCr): ContenuCr {
         )
         .replace(AVERTISSEMENT_IA_SUPPRIME, '');
     }
-    out[cle] = h;
+    if (typeof h === 'string') out[cle] = h;
   }
   return out;
 }
 
+export function lireParticipantsExclusIds(
+  contenu: Record<string, unknown> | null | undefined,
+): string[] {
+  const raw = contenu?.[CLE_PARTICIPANTS_EXCLUS];
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((id): id is string => typeof id === 'string' && id.length > 0);
+}
+
 export type LigneParticipantCr = {
+  profil_id: string;
   nom: string;
+  fonction: string | null;
   matricule: string;
   email: string;
   direction: string;
@@ -82,7 +97,7 @@ function directionAbregee(
   return dir.nom.trim().toUpperCase();
 }
 
-/** Construit les lignes du tableau participants (Noms, matricule, mail, direction, statut). */
+/** Construit les lignes du tableau participants, triées par hiérarchie de fonction. */
 export function construireLignesParticipantsCr(
   reunion: ReunionDetail,
   profils: Profil[],
@@ -91,16 +106,34 @@ export function construireLignesParticipantsCr(
   const profilMap = new Map(profils.map((p) => [p.id, p]));
   const directionMap = new Map(directions.map((d) => [d.id, d]));
 
-  return reunion.participants.map((p) => {
-    const profil = profilMap.get(p.profil_id);
-    const nom = profil ? `${profil.prenom} ${profil.nom}`.trim() : p.profil_id.slice(0, 8);
+  const lignes = reunion.participants.map((p) => {
+    const fromList = profilMap.get(p.profil_id);
+    const embedded = p.profil;
+    const prenom = fromList?.prenom ?? embedded?.prenom ?? '';
+    const nomFamille = fromList?.nom ?? embedded?.nom ?? '';
+    const nom =
+      `${prenom} ${nomFamille}`.trim() || p.profil_id.slice(0, 8);
+    const fonction = fromList?.fonction ?? embedded?.fonction ?? null;
+    const matricule = fromList?.matricule?.trim() || '—';
+    const email =
+      fromList?.email?.trim() || embedded?.email?.trim() || '—';
+    const directionId = fromList?.direction_id ?? embedded?.direction_id ?? null;
     return {
+      profil_id: p.profil_id,
       nom: nom || '—',
-      matricule: profil?.matricule?.trim() || '—',
-      email: profil?.email?.trim() || '—',
-      direction: directionAbregee(profil?.direction_id, directionMap),
+      fonction,
+      matricule,
+      email,
+      direction: directionAbregee(directionId, directionMap),
       statut: LIBELLES_PARTICIPANT[p.statut] ?? p.statut,
     };
+  });
+
+  return lignes.sort((a, b) => {
+    const rang =
+      rangHierarchieFonction(a.fonction) - rangHierarchieFonction(b.fonction);
+    if (rang !== 0) return rang;
+    return a.nom.localeCompare(b.nom, 'fr');
   });
 }
 
@@ -112,15 +145,15 @@ export function participantsTableHtml(lignes: LigneParticipantCr[]): string {
 
   const header =
     '<thead><tr>' +
-    '<th>Nom</th><th>Matricule</th><th>Email</th><th>Direction</th><th>Statut</th>' +
+    '<th>Nom</th><th>Fonction</th><th>Matricule</th><th>Email</th><th>Direction</th><th>Statut</th>' +
     '</tr></thead>';
 
   const body = lignes
     .map(
       (l) =>
-        `<tr><td>${escapeHtml(l.nom)}</td><td>${escapeHtml(l.matricule)}</td>` +
-        `<td>${escapeHtml(l.email)}</td><td>${escapeHtml(l.direction)}</td>` +
-        `<td>${escapeHtml(l.statut)}</td></tr>`,
+        `<tr><td>${escapeHtml(l.nom)}</td><td>${escapeHtml(libelleFonction(l.fonction))}</td>` +
+        `<td>${escapeHtml(l.matricule)}</td><td>${escapeHtml(l.email)}</td>` +
+        `<td>${escapeHtml(l.direction)}</td><td>${escapeHtml(l.statut)}</td></tr>`,
     )
     .join('');
 
@@ -136,11 +169,18 @@ export function preremplirContenuCr(
   profils: Profil[],
   directions: Direction[] = [],
 ): ContenuCr {
-  const lignesParticipants = construireLignesParticipantsCr(reunion, profils, directions);
+  const lignesParticipants = construireLignesParticipantsCr(
+    reunion,
+    profils,
+    directions,
+  );
 
   const points = [...reunion.points_ordre_jour]
     .sort((a, b) => a.ordre - b.ordre)
-    .map((p) => `${p.est_traite ? '✓' : '○'} ${p.titre}${p.description ? ` — ${p.description}` : ''}`);
+    .map(
+      (p) =>
+        `${p.est_traite ? '✓' : '○'} ${p.titre}${p.description ? ` — ${p.description}` : ''}`,
+    );
 
   const prefillByCle: ContenuCr = {
     contexte: paragraphs([
@@ -176,7 +216,9 @@ export function sectionsDepuisModele(
   return raw.filter((s) => s.cle !== 'decisions' && s.cle !== 'actions');
 }
 
-export function contenuEstVide(contenu: Record<string, unknown> | null | undefined): boolean {
+export function contenuEstVide(
+  contenu: Record<string, unknown> | null | undefined,
+): boolean {
   if (!contenu || Object.keys(contenu).length === 0) return true;
   return Object.values(contenu).every((v) => {
     if (typeof v !== 'string') return false;

@@ -36,6 +36,36 @@ export const FONCTIONS_ORGANISATION = [
 ] as const;
 export type FonctionOrganisation = (typeof FONCTIONS_ORGANISATION)[number];
 
+/** Ordre hiérarchique croissant (0 = plus haut) pour listes / CR. */
+export const ORDRE_HIERARCHIE_FONCTION: Record<string, number> = {
+  directeur: 0,
+  sous_directeur: 1,
+  chef_service: 2,
+  agent: 3,
+};
+
+export const LIBELLES_FONCTION: Record<FonctionOrganisation, string> = {
+  agent: 'Agent',
+  chef_service: 'Chef de service',
+  sous_directeur: 'Sous-directeur',
+  directeur: 'Directeur',
+};
+
+export function rangHierarchieFonction(
+  fonction: string | null | undefined,
+): number {
+  if (!fonction) return 99;
+  return ORDRE_HIERARCHIE_FONCTION[fonction] ?? 50;
+}
+
+export function libelleFonction(fonction: string | null | undefined): string {
+  if (!fonction) return '—';
+  if ((fonction as FonctionOrganisation) in LIBELLES_FONCTION) {
+    return LIBELLES_FONCTION[fonction as FonctionOrganisation];
+  }
+  return fonction;
+}
+
 /** Fonctions autorisées à valider une réunion proposée */
 export const FONCTIONS_VALIDATION_REUNION = [
   'chef_service',

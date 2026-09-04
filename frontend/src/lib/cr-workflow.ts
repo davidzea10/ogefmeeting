@@ -74,6 +74,15 @@ export function peutSoumettreCr(
   );
 }
 
+/** Rédacteur / organisateur : retirer un CR soumis → brouillon. */
+export function peutAnnulerSoumissionCr(
+  role: RoleUtilisateur | null | undefined,
+  statut: StatutCompteRendu,
+  ctx?: ContexteOrganisateurCr,
+): boolean {
+  return peutRedigerCr(role, ctx) && statut === 'soumis';
+}
+
 export function peutApprouverCr(
   role: RoleUtilisateur | null | undefined,
   statut: StatutCompteRendu,
@@ -96,7 +105,7 @@ export function messageWorkflowCr(statut: StatutCompteRendu): string {
     case 'en_revision':
       return 'Renvoyé en révision — lisez les commentaires du directeur, corrigez, puis soumettez à nouveau.';
     case 'soumis':
-      return 'Soumis — en attente de validation. Le directeur peut ajuster le contenu, commenter, valider ou renvoyer.';
+      return 'Soumis — en attente de validation. Vous pouvez encore annuler la soumission pour revenir en brouillon. Le directeur peut ajuster, valider ou renvoyer.';
     case 'valide':
       return 'Validé — rapport officiel. Vous pouvez encore réajuster le contenu ; le PDF sera régénéré à l’export.';
     case 'archive':

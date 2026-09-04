@@ -31,6 +31,18 @@ const LIBELLES_PARTICIPANT: Record<string, string> = {
   absent: 'Absent',
 };
 
+const LIBELLES_FONCTION: Record<string, string> = {
+  agent: 'Agent',
+  chef_service: 'Chef de service',
+  sous_directeur: 'Sous-directeur',
+  directeur: 'Directeur',
+};
+
+function libelleFonctionPdf(fonction: string | null | undefined): string {
+  if (!fonction) return '—';
+  return LIBELLES_FONCTION[fonction] ?? fonction;
+}
+
 const COLORS = {
   navy: '#0A2F5C',
   blue: '#145A9E',
@@ -188,7 +200,7 @@ export type PdfListeParticipantsInput = {
 export async function genererPdfListeParticipants(
   input: PdfListeParticipantsInput,
 ): Promise<Buffer> {
-  const { compteRendu, reunion, participants } = input;
+  const { reunion, participants } = input;
   const enTete = input.enTetePdf?.trim() || 'OGEFREM';
   const sousTitre =
     input.sousTitrePdf?.trim() ||
@@ -250,7 +262,7 @@ export async function genererPdfListeParticipants(
       .fontSize(9)
       .font('Helvetica')
       .text(
-        `${formatDateFr(reunion.date_prevue)}${reunion.lieu ? ` · ${reunion.lieu}` : ''} · Version ${compteRendu.version}`,
+        `${formatDateFr(reunion.date_prevue)}${reunion.lieu ? ` · ${reunion.lieu}` : ''}`,
         { width: pageWidth },
       );
     doc.moveDown(1.2);
@@ -268,9 +280,9 @@ function bottomLimit(doc: PDFKit.PDFDocument): number {
 }
 
 function ensureSpace(doc: PDFKit.PDFDocument, needed: number) {
-  // Évite une page quasi vide : n’ajoute une page que s’il reste vraiment trop peu d’espace.
   const restant = bottomLimit(doc) - doc.y;
-  if (restant < Math.min(needed, 36)) {
+  // N’ouvre une page que si le bloc ne tient vraiment pas (évite pages quasi vides).
+  if (restant < needed) {
     doc.addPage();
   }
 }
@@ -282,7 +294,8 @@ function drawFooters(
   enTete: string,
 ) {
   const range = doc.bufferedPageRange();
-  for (let i = range.start; i < range.start + range.count; i++) {
+  const total = range.count;
+  for (let i = range.start; i < range.start + total; i++) {
     doc.switchToPage(i);
     const bottom = doc.page.height - 36;
     doc.save().rect(0, doc.page.height - 28, doc.page.width, 28).fill(COLORS.navy).restore();
@@ -298,7 +311,7 @@ function drawFooters(
       );
     doc
       .fillColor(COLORS.white)
-      .text(`Page ${i - range.start + 1} / ${range.count}`, left, bottom + 2, {
+      .text(`Page ${i - range.start + 1} / ${total}`, left, bottom + 2, {
         width: pageWidth,
         align: 'right',
         lineBreak: false,
@@ -310,9 +323,7 @@ function drawSignatureBlock(doc: PDFKit.PDFDocument, pageWidth: number) {
   const left = doc.page.margins.left;
   const blockH = 58;
   const restant = bottomLimit(doc) - doc.y;
-  // Si la place est juste insuffisante mais > 40pt, on compacte sur la page courante
-  // plutôt que d’ouvrir une page presque vide pour la seule signature.
-  if (restant < blockH && restant < 40) {
+  if (restant < blockH) {
     doc.addPage();
   }
 
@@ -350,7 +361,7 @@ function drawSignatureBlock(doc: PDFKit.PDFDocument, pageWidth: number) {
     .text('Nom et signature', left, lineY + 8, { lineBreak: false })
     .text('Nom et signature', left + pageWidth / 2, lineY + 8, { lineBreak: false });
 
-  doc.y = lineY + 24;
+  doc.y = Math.min(lineY + 24, bottomLimit(doc) - 2);
 }
 
 function drawSectionTitle(doc: PDFKit.PDFDocument, title: string, pageWidth: number) {
@@ -446,30 +457,33 @@ function drawParticipantsTable(
 ) {
   const left = doc.page.margins.left;
   const col = {
-    nom: Math.floor(pageWidth * 0.22),
-    matricule: Math.floor(pageWidth * 0.14),
-    email: Math.floor(pageWidth * 0.26),
-    direction: Math.floor(pageWidth * 0.14),
-    statut: Math.floor(pageWidth * 0.24),
+    nom: Math.floor(pageWidth * 0.2),
+    fonction: Math.floor(pageWidth * 0.18),
+    matricule: Math.floor(pageWidth * 0.12),
+    email: Math.floor(pageWidth * 0.22),
+    direction: Math.floor(pageWidth * 0.12),
+    statut: Math.floor(pageWidth * 0.16),
   };
-  const rowH = 24;
-  const headerH = 26;
+  const rowH = 22;
+  const headerH = 24;
 
   const drawHeader = () => {
     ensureSpace(doc, headerH + 4);
     const y = doc.y;
     doc.save().roundedRect(left, y, pageWidth, headerH, 3).fill(COLORS.navy).restore();
-    doc.fillColor(COLORS.white).fontSize(7.5).font('Helvetica-Bold');
-    let x = left + 8;
-    doc.text('NOM', x, y + 9, { width: col.nom - 10 });
+    doc.fillColor(COLORS.white).fontSize(7).font('Helvetica-Bold');
+    let x = left + 6;
+    doc.text('NOM', x, y + 8, { width: col.nom - 8 });
     x += col.nom;
-    doc.text('MATRICULE', x, y + 9, { width: col.matricule - 8 });
+    doc.text('FONCTION', x, y + 8, { width: col.fonction - 8 });
+    x += col.fonction;
+    doc.text('MATR.', x, y + 8, { width: col.matricule - 6 });
     x += col.matricule;
-    doc.text('EMAIL', x, y + 9, { width: col.email - 10 });
+    doc.text('EMAIL', x, y + 8, { width: col.email - 8 });
     x += col.email;
-    doc.text('DIR.', x, y + 9, { width: col.direction - 8 });
+    doc.text('DIR.', x, y + 8, { width: col.direction - 6 });
     x += col.direction;
-    doc.text('STATUT', x, y + 9, { width: col.statut - 10 });
+    doc.text('STATUT', x, y + 8, { width: col.statut - 8 });
     doc.y = y + headerH;
   };
 
@@ -492,34 +506,42 @@ function drawParticipantsTable(
       .lineTo(left + pageWidth, y + rowH)
       .stroke();
 
-    doc.fillColor(COLORS.ink).fontSize(8).font('Helvetica');
-    let x = left + 8;
-    doc.text(p.nom || '—', x, y + 8, { width: col.nom - 10, ellipsis: true });
+    doc.fillColor(COLORS.ink).fontSize(7.5).font('Helvetica');
+    let x = left + 6;
+    doc.text(p.nom || '—', x, y + 7, { width: col.nom - 8, ellipsis: true });
     x += col.nom;
-    doc.text(p.matricule?.trim() || '—', x, y + 8, {
-      width: col.matricule - 8,
+    doc.text(libelleFonctionPdf(p.fonction), x, y + 7, {
+      width: col.fonction - 8,
+      ellipsis: true,
+    });
+    x += col.fonction;
+    doc.text(p.matricule?.trim() || '—', x, y + 7, {
+      width: col.matricule - 6,
       ellipsis: true,
     });
     x += col.matricule;
-    doc.fillColor(COLORS.muted).text(p.email || '—', x, y + 8, {
-      width: col.email - 10,
+    doc.fillColor(COLORS.muted).text(p.email || '—', x, y + 7, {
+      width: col.email - 8,
       ellipsis: true,
     });
     x += col.email;
-    doc.fillColor(COLORS.ink).text(p.direction || '—', x, y + 8, {
-      width: col.direction - 8,
+    doc.fillColor(COLORS.ink).text(p.direction || '—', x, y + 7, {
+      width: col.direction - 6,
       ellipsis: true,
     });
     x += col.direction;
     const statutLabel = LIBELLES_PARTICIPANT[p.statut] ?? p.statut;
-    doc.fillColor(COLORS.navy).font('Helvetica-Bold').text(statutLabel, x, y + 8, {
-      width: col.statut - 10,
+    doc.fillColor(COLORS.navy).font('Helvetica-Bold').text(statutLabel, x, y + 7, {
+      width: col.statut - 8,
       ellipsis: true,
     });
     doc.y = y + rowH;
   });
 
-  doc.moveDown(1);
+  // Petit écart borné — évite un moveDown qui ouvre une page vide.
+  if (bottomLimit(doc) - doc.y > 14) {
+    doc.y += 10;
+  }
 }
 
 /**
@@ -575,13 +597,9 @@ export async function genererPdfCompteRendu(input: PdfCompteRenduInput): Promise
       .fontSize(8)
       .font('Helvetica')
       .heightOfString(sousTitre, { width: colRightW, align: 'right', lineGap: 1.5 });
-    const versionH = doc
-      .fontSize(8)
-      .font('Helvetica-Bold')
-      .heightOfString(`Version ${compteRendu.version}`, { width: colRightW, align: 'right' });
     const leftBlockH = labelH + 6 + enTeteH;
-    const rightBlockH = sousTitreH + 8 + versionH;
-    const headerBandH = Math.max(78, headerPadTop + Math.max(leftBlockH, rightBlockH) + headerPadBottom);
+    const rightBlockH = sousTitreH;
+    const headerBandH = Math.max(72, headerPadTop + Math.max(leftBlockH, rightBlockH) + headerPadBottom);
 
     doc.save().rect(0, 0, doc.page.width, headerBandH).fill(COLORS.navy).restore();
 
@@ -605,13 +623,6 @@ export async function genererPdfCompteRendu(input: PdfCompteRenduInput): Promise
       .fontSize(8)
       .font('Helvetica')
       .text(sousTitre, colRightX, yRight, { width: colRightW, align: 'right', lineGap: 1.5 });
-    yRight += sousTitreH + 8;
-
-    doc
-      .fillColor(COLORS.white)
-      .fontSize(8)
-      .font('Helvetica-Bold')
-      .text(`Version ${compteRendu.version}`, colRightX, yRight, { width: colRightW, align: 'right' });
 
     doc.save().rect(0, headerBandH, doc.page.width, 4).fill(COLORS.gold).restore();
 
@@ -723,12 +734,12 @@ export async function genererPdfCompteRendu(input: PdfCompteRenduInput): Promise
           .fontSize(10)
           .font('Helvetica-Oblique')
           .text('—', { width: pageWidth });
-        doc.moveDown(0.4);
+        if (bottomLimit(doc) - doc.y > 10) doc.y += 6;
         continue;
       }
 
       renderBlocs(doc, blocs, pageWidth);
-      doc.moveDown(0.35);
+      if (bottomLimit(doc) - doc.y > 12) doc.y += 8;
     }
 
     drawSignatureBlock(doc, pageWidth);

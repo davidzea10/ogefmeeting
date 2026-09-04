@@ -87,6 +87,16 @@ export function rejeterCompteRendu(
   });
 }
 
+export function annulerSoumissionCompteRendu(
+  id: string,
+  payload: { commentaire?: string | null; auteur_id?: string | null } = {},
+) {
+  return apiFetch<CompteRendu>(`/api/comptes-rendus/${id}/annuler-soumission`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function archiverCompteRendu(id: string) {
   return apiFetch<CompteRendu>(`/api/comptes-rendus/${id}/archiver`, {
     method: 'POST',
