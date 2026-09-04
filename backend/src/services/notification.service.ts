@@ -20,12 +20,19 @@ export type CreerNotificationPayload = {
   message: string;
   lien?: string | null;
   metadonnees?: Record<string, unknown>;
-  /** Si fourni : envoie aussi un email */
+  /** Si fourni : envoie aussi un email (uniquement pour les types autorisés) */
   emailSujet?: string;
   emailBoutonLibelle?: string;
   /** Invitations réunion : true — Resend obligatoire */
   emailExigerReel?: boolean;
 };
+
+/** Seuls ces événements partent en boîte mail externe ; le reste reste in-app. */
+const TYPES_EMAIL_EXTERNE = new Set([
+  'invitation_reunion',
+  'reunion_demarree',
+  'cr_envoye_participants',
+]);
 
 export class NotificationService {
   async lister(
@@ -141,6 +148,7 @@ export class NotificationService {
       }
 
       if (!payload.emailSujet) return;
+      if (!TYPES_EMAIL_EXTERNE.has(payload.type)) return;
 
       for (const dest of list) {
         if (!dest.email) continue;

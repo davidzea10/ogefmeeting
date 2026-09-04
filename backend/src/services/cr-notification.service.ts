@@ -80,7 +80,7 @@ async function notifierInApp(
 }
 
 /**
- * Notifie les acteurs concernés d’un changement de statut CR (in-app + email).
+ * Notifie les acteurs concernés d’un changement de statut CR (in-app uniquement).
  * Best-effort : n’interrompt jamais le workflow.
  */
 export async function notifierChangementStatutCr(opts: {
@@ -146,18 +146,7 @@ export async function notifierChangementStatutCr(opts: {
         nouveau_statut: opts.nouveauStatut,
       },
     });
-
-    for (const dest of destinataires) {
-      if (!dest.email) continue;
-      await envoyerEmailOgefmeeting({
-        to: dest.email,
-        subject: sujet,
-        titre: sujet.replace('[Ogefmeeting] ', ''),
-        message: motif ? `${message}\n\nCommentaire : ${motif}` : message,
-        lien,
-        boutonLibelle: 'Ouvrir le compte rendu',
-      });
-    }
+    // Pas d’email externe ici : seuls invitation, démarrage live et envoi du CR (PDF) partent en boîte.
   } catch (error) {
     logger.warn({ err: error }, 'Échec notification changement statut CR');
   }
@@ -226,8 +215,7 @@ export async function notifierParticipantsRapportReunion(opts: {
       titre: titreNotif,
       message,
       lien,
-      emailSujet: `[Ogefmeeting] Compte rendu disponible — ${titreReunion}`,
-      emailBoutonLibelle: 'Télécharger le compte rendu',
+      // In-app seulement — l’email CR part lors de l’envoi officiel du PDF aux participants
       metadonnees: {
         compte_rendu_id: opts.cr.id,
         reunion_id: opts.cr.reunion_id,

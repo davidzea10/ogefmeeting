@@ -29,8 +29,9 @@ export function AuthLayout() {
               Gestion intelligente des réunions de direction
             </p>
             <p className="max-w-md text-lg text-white/90">
-              Planifiez, conduisez et archivez les réunions de l&apos;OGEFREM avec une
-              expérience intuitive, innovante et intégrée.
+              Planifiez et validez vos réunions, suivez le live et l’ordre du jour,
+              générez le compte rendu assisté par l’IA, puis partagez le rapport PDF —
+              le tout dans une expérience intuitive et intégrée pour l’OGEFREM.
             </p>
           </div>
           <p className="text-sm text-white/75">Kinshasa · République Démocratique du Congo</p>

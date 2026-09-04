@@ -67,7 +67,7 @@ export function LoginPage() {
           autoComplete="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="nom@ogefrem.cd"
+          placeholder="david.debuze@ogefrem.cd"
           required
         />
         <Input
