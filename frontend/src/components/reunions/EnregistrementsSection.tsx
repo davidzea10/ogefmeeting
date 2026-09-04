@@ -13,7 +13,7 @@ import { useState } from 'react';
 
 type Props = {
   reunionId: string;
-  /** Lecture audio + texte réservée admin / organisateur */
+  /** Lecture audio + texte : orga/admin, ou participants après clôture */
   peutConsulter: boolean;
   peutSupprimer: boolean;
 };
@@ -76,8 +76,8 @@ export function EnregistrementsSection({
   if (!peutConsulter) {
     return (
       <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-text-muted">
-        Les fichiers audio et texte sont réservés à l’administrateur ou à l’organisateur de
-        la réunion.
+        Les fichiers audio et texte sont disponibles pour les participants après
+        clôture de la réunion (ainsi que pour l’organisateur et l’administration).
       </p>
     );
   }

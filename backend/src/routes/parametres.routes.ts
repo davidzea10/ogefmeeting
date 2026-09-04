@@ -67,3 +67,10 @@ notificationsRouter.post(
   validateParams(idParamSchema),
   asyncHandler((req, res) => notificationController.marquerLue(req, res)),
 );
+
+notificationsRouter.delete(
+  '/:id',
+  requireAuth,
+  validateParams(idParamSchema),
+  asyncHandler((req, res) => notificationController.supprimer(req, res)),
+);

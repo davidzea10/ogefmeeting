@@ -111,17 +111,26 @@ export function peutGererReunionRole(
 
 /**
  * Voir audio + transcription après clôture :
- * administrateur, organisateur (créateur), ou ayant-droit (secrétaire / direction).
+ * administrateur, organisateur, ayant-droit, ou participant invité
+ * (lorsque la réunion est clôturée / archivée).
  */
 export function peutVoirArchivesMediaRole(
   role: RoleUtilisateur | null | undefined,
   fonction: string | null | undefined,
   userId: string | null | undefined,
-  reunion: Pick<Reunion, 'cree_par'>,
+  reunion: Pick<Reunion, 'cree_par' | 'statut'> & {
+    participants?: { profil_id: string }[];
+  },
 ): boolean {
   if (role === 'administrateur') return true;
   if (userId && reunion.cree_par && userId === reunion.cree_par) return true;
-  return peutApprouverReunion(role, fonction);
+  if (peutApprouverReunion(role, fonction)) return true;
+  const cloturee =
+    reunion.statut === 'cloturee' || reunion.statut === 'archivee';
+  if (!cloturee || !userId) return false;
+  return Boolean(
+    reunion.participants?.some((p) => p.profil_id === userId),
+  );
 }
 
 /** Peut valider cette réunion précise (directions + statut). */

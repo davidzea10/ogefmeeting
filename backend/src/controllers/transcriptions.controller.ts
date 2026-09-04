@@ -15,12 +15,18 @@ import {
 
 function peutVoirArchives(
   user: Request['user'],
-  creePar: string | null,
+  reunion: { cree_par: string | null; statut: string; participants?: { profil_id: string }[] },
 ): boolean {
   if (!user) return false;
   if (user.role === 'administrateur') return true;
-  if (creePar && user.id === creePar) return true;
-  return utilisateurPeutApprouver(user);
+  if (reunion.cree_par && user.id === reunion.cree_par) return true;
+  if (utilisateurPeutApprouver(user)) return true;
+  const cloturee =
+    reunion.statut === 'cloturee' || reunion.statut === 'archivee';
+  if (!cloturee) return false;
+  return Boolean(
+    reunion.participants?.some((p) => p.profil_id === user.id),
+  );
 }
 
 /**
@@ -65,10 +71,10 @@ export class TranscriptionsController {
     const reunionId = req.params.reunionId as string;
     const reunion = await reunionService.obtenirParId(reunionId);
 
-    if (!peutVoirArchives(req.user, reunion.cree_par)) {
+    if (!peutVoirArchives(req.user, reunion)) {
       throw new AppError(
         403,
-        'Seuls l’administrateur ou l’organisateur peuvent consulter les transcriptions.',
+        'Vous ne pouvez consulter les transcriptions que si vous êtes participant (réunion clôturée), organisateur ou administrateur.',
       );
     }
 

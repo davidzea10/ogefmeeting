@@ -23,11 +23,14 @@ import {
 } from '@/lib/comptes-rendus-api';
 import {
   CLE_PARTICIPANTS_EXCLUS,
+  CLE_PARTICIPANTS_OVERRIDES,
   contenuEstVide,
   contenuVersHtml,
   lireParticipantsExclusIds,
+  lireParticipantsOverrides,
   nettoyerContenuCr,
   preremplirContenuCr,
+  type ParticipantCrOverride,
   sectionsDepuisModele,
   type ContenuCr,
 } from '@/lib/cr-prefill';
@@ -99,6 +102,9 @@ export function CompteRenduEditorPage() {
   const [niveauDetailCr, setNiveauDetailCr] = useState<NiveauDetailCr>('detaille');
   const [afficherParticipantsCorps, setAfficherParticipantsCorps] = useState(true);
   const [participantsExclusIds, setParticipantsExclusIds] = useState<string[]>([]);
+  const [participantsOverrides, setParticipantsOverrides] = useState<
+    Record<string, ParticipantCrOverride>
+  >({});
   const initDone = useRef(false);
 
   const crQuery = useQuery({
@@ -164,6 +170,7 @@ export function CompteRenduEditorPage() {
     setSections(secs);
     setAfficherParticipantsCorps(crQuery.data.afficher_participants_corps ?? true);
     setParticipantsExclusIds(lireParticipantsExclusIds(crQuery.data.contenu));
+    setParticipantsOverrides(lireParticipantsOverrides(crQuery.data.contenu));
 
     const profils = profilsQuery.data?.items ?? [];
     const directions = directionsQuery.data ?? [];
@@ -211,6 +218,7 @@ export function CompteRenduEditorPage() {
   const buildContenuPayload = () => ({
     ...contenu,
     [CLE_PARTICIPANTS_EXCLUS]: participantsExclusIds,
+    [CLE_PARTICIPANTS_OVERRIDES]: participantsOverrides,
   });
 
   const saveMut = useMutation({
@@ -395,7 +403,7 @@ export function CompteRenduEditorPage() {
       saveMut.mutate({ historiser: false });
     }, 30_000);
     return () => window.clearTimeout(t);
-  }, [contenu, dirty, editable, afficherParticipantsCorps, participantsExclusIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [contenu, dirty, editable, afficherParticipantsCorps, participantsExclusIds, participantsOverrides]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const statusLabel = useMemo(() => {
     if (saveMut.isPending || soumettreMut.isPending) return 'Enregistrement…';
@@ -890,10 +898,12 @@ export function CompteRenduEditorPage() {
                   directions={directionsQuery.data ?? []}
                   valueHtml={contenu.participants}
                   exclusIds={participantsExclusIds}
+                  overrides={participantsOverrides}
                   editable={editable}
-                  onChange={(html, exclusIds) => {
+                  onChange={(html, exclusIds, overrides) => {
                     setContenu((prev) => ({ ...prev, participants: html }));
                     setParticipantsExclusIds(exclusIds);
+                    setParticipantsOverrides(overrides);
                     setDirty(true);
                   }}
                 />

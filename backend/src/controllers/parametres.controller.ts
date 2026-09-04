@@ -94,6 +94,14 @@ export class NotificationController {
     const data = await notificationService.marquerToutesLues(req.user.id);
     res.status(200).json({ success: true, data });
   }
+
+  async supprimer(req: Request, res: Response): Promise<void> {
+    if (!req.user) throw new AppError(401, 'Authentification requise.');
+    await notificationService.supprimer(req.user.id, req.params.id as string);
+    res
+      .status(200)
+      .json({ success: true, data: { message: 'Notification supprimée.' } });
+  }
 }
 
 export const parametresController = new ParametresController();

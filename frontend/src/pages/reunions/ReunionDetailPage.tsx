@@ -48,6 +48,7 @@ import {
   Play,
   Radio,
   Square,
+  Trash2,
   UserPlus,
   X,
 } from 'lucide-react';
@@ -293,6 +294,20 @@ export function ReunionDetailPage() {
       const n = nouveauxIds.length;
       announce(n > 1 ? `${n} invitations envoyées.` : 'Invitation envoyée.');
       setModalInvitesOuvert(false);
+      await invalidate();
+    },
+    onError: (e: Error) => announce(e.message),
+  });
+
+  const retirerParticipantMut = useMutation({
+    mutationFn: (profilIdARetirer: string) => {
+      const restants = (reunionQuery.data?.participants ?? [])
+        .filter((p) => p.profil_id !== profilIdARetirer)
+        .map((p) => ({ profil_id: p.profil_id, statut: p.statut }));
+      return gererParticipants(id!, restants);
+    },
+    onSuccess: async () => {
+      announce('Participant retiré.');
       await invalidate();
     },
     onError: (e: Error) => announce(e.message),
@@ -608,7 +623,8 @@ export function ReunionDetailPage() {
             {peutModifier && (
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm text-text-muted">
-                  Ajoutez des invités oubliés : ils recevront une invitation immédiatement.
+                  Ajoutez, modifiez la présence ou retirez des invités. Les nouveaux
+                  reçoivent une invitation immédiatement.
                 </p>
                 <Button
                   size="sm"
@@ -637,6 +653,7 @@ export function ReunionDetailPage() {
                     const nom = profilP
                       ? `${profilP.prenom} ${profilP.nom}`
                       : `Profil ${p.profil_id.slice(0, 8)}…`;
+                    const estCreateur = reunion.cree_par === p.profil_id;
                     return (
                       <li
                         key={p.id}
@@ -647,7 +664,7 @@ export function ReunionDetailPage() {
                         <p className="mt-1 text-xs font-medium text-ogefrem-navy/80">
                           {libelleFonction(profilP?.fonction)}
                         </p>
-                        <div className="mt-2">
+                        <div className="mt-2 flex flex-col gap-2">
                           {peutChangerPresence ? (
                             <select
                               className="h-10 w-full rounded-lg border border-border bg-surface px-2 text-sm"
@@ -675,6 +692,26 @@ export function ReunionDetailPage() {
                               {LIBELLES_PARTICIPANT[p.statut]}
                             </span>
                           )}
+                          {peutModifier && !estCreateur && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="justify-start text-danger hover:bg-danger/10"
+                              loading={retirerParticipantMut.isPending}
+                              onClick={() => {
+                                if (
+                                  window.confirm(
+                                    `Retirer ${nom} de cette réunion ?`,
+                                  )
+                                ) {
+                                  retirerParticipantMut.mutate(p.profil_id);
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                              Retirer
+                            </Button>
+                          )}
                         </div>
                       </li>
                     );
@@ -698,6 +735,11 @@ export function ReunionDetailPage() {
                         <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-muted">
                           Présence
                         </th>
+                        {peutModifier && (
+                          <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-text-muted">
+                            Actions
+                          </th>
+                        )}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/70">
@@ -706,6 +748,7 @@ export function ReunionDetailPage() {
                         const nom = profilP
                           ? `${profilP.prenom} ${profilP.nom}`
                           : `Profil ${p.profil_id.slice(0, 8)}…`;
+                        const estCreateur = reunion.cree_par === p.profil_id;
                         return (
                           <tr key={p.id} className="hover:bg-ogefrem-blue/[0.03]">
                             <td className="px-5 py-3 font-semibold text-text">{nom}</td>
@@ -744,6 +787,30 @@ export function ReunionDetailPage() {
                                 </span>
                               )}
                             </td>
+                            {peutModifier && (
+                              <td className="px-4 py-3 text-right">
+                                {!estCreateur && (
+                                  <button
+                                    type="button"
+                                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-danger hover:bg-danger/10 disabled:opacity-50"
+                                    disabled={retirerParticipantMut.isPending}
+                                    aria-label={`Retirer ${nom}`}
+                                    onClick={() => {
+                                      if (
+                                        window.confirm(
+                                          `Retirer ${nom} de cette réunion ?`,
+                                        )
+                                      ) {
+                                        retirerParticipantMut.mutate(p.profil_id);
+                                      }
+                                    }}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                                    Retirer
+                                  </button>
+                                )}
+                              </td>
+                            )}
                           </tr>
                         );
                       })}

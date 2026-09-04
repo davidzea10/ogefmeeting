@@ -8,11 +8,12 @@ import {
   listerNotifications,
   marquerNotificationLue,
   marquerToutesNotificationsLues,
+  supprimerNotification,
 } from '@/lib/notifications-api';
 import { formatDateHeure } from '@/lib/labels';
 import { useAuthStore } from '@/stores/auth.store';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, ExternalLink } from 'lucide-react';
+import { Bell, ExternalLink, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
@@ -70,6 +71,13 @@ export function NotificationBell() {
 
   const toutLireMut = useMutation({
     mutationFn: () => marquerToutesNotificationsLues(),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
+
+  const supprimerMut = useMutation({
+    mutationFn: (id: string) => supprimerNotification(id),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
@@ -159,42 +167,60 @@ export function NotificationBell() {
             )}
             {listQuery.data?.items.map((n) => (
               <li key={n.id} className="border-b border-border last:border-0">
-                {notificationAvecActionsCr(n) ? (
-                  <div className={n.est_lu ? '' : 'bg-ogefrem-blue/5'}>
-                    <NotificationItemActions
-                      notification={n}
-                      libelleType={LIBELLE_TYPE[n.type] ?? n.type}
-                      dateLabel={formatDateHeure(n.cree_le)}
-                      compact
-                      onNavigate={() => setOpen(false)}
-                      onMarkRead={(id) => lireMut.mutate(id)}
-                    />
+                <div className="flex items-start gap-1">
+                  <div className="min-w-0 flex-1">
+                    {notificationAvecActionsCr(n) ? (
+                      <div className={n.est_lu ? '' : 'bg-ogefrem-blue/5'}>
+                        <NotificationItemActions
+                          notification={n}
+                          libelleType={LIBELLE_TYPE[n.type] ?? n.type}
+                          dateLabel={formatDateHeure(n.cree_le)}
+                          compact
+                          onNavigate={() => setOpen(false)}
+                          onMarkRead={(id) => lireMut.mutate(id)}
+                        />
+                      </div>
+                    ) : (
+                      <Link
+                        to={n.lien || '/'}
+                        onClick={() => {
+                          if (!n.est_lu) lireMut.mutate(n.id);
+                          setOpen(false);
+                        }}
+                        className={
+                          n.est_lu
+                            ? 'block px-3 py-2.5 hover:bg-surface-muted'
+                            : 'block bg-ogefrem-blue/5 px-3 py-2.5 hover:bg-ogefrem-blue/10'
+                        }
+                      >
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+                          {LIBELLE_TYPE[n.type] ?? n.type}
+                        </p>
+                        <p className="text-sm font-medium text-text">{n.titre}</p>
+                        <p className="mt-0.5 line-clamp-2 text-xs text-text-muted">
+                          {n.message}
+                        </p>
+                        <p className="mt-1 text-[11px] text-text-muted">
+                          {formatDateHeure(n.cree_le)}
+                        </p>
+                      </Link>
+                    )}
                   </div>
-                ) : (
-                  <Link
-                    to={n.lien || '/'}
-                    onClick={() => {
-                      if (!n.est_lu) lireMut.mutate(n.id);
-                      setOpen(false);
+                  <button
+                    type="button"
+                    className="mt-2 mr-2 shrink-0 rounded-md p-1.5 text-text-muted hover:bg-danger/10 hover:text-danger"
+                    aria-label="Supprimer la notification"
+                    title="Supprimer"
+                    disabled={supprimerMut.isPending}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      supprimerMut.mutate(n.id);
                     }}
-                    className={
-                      n.est_lu
-                        ? 'block px-3 py-2.5 hover:bg-surface-muted'
-                        : 'block bg-ogefrem-blue/5 px-3 py-2.5 hover:bg-ogefrem-blue/10'
-                    }
                   >
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
-                      {LIBELLE_TYPE[n.type] ?? n.type}
-                    </p>
-                    <p className="text-sm font-medium text-text">{n.titre}</p>
-                    <p className="mt-0.5 line-clamp-2 text-xs text-text-muted">
-                      {n.message}
-                    </p>
-                    <p className="mt-1 text-[11px] text-text-muted">
-                      {formatDateHeure(n.cree_le)}
-                    </p>
-                  </Link>
-                )}
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                </div>
               </li>
             ))}
           </ul>

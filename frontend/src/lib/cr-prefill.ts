@@ -24,6 +24,15 @@ export type ContenuCr = Record<string, string>;
 /** Clé technique dans contenu CR : profils exclus du tableau participants. */
 export const CLE_PARTICIPANTS_EXCLUS = 'participants_exclus_ids';
 
+/** Clé technique : overrides d’affichage (nom / statut / fonction) dans le CR. */
+export const CLE_PARTICIPANTS_OVERRIDES = 'participants_overrides';
+
+export type ParticipantCrOverride = {
+  nom?: string;
+  statut?: string;
+  fonction?: string | null;
+};
+
 const AVERTISSEMENT_IA_SUPPRIME =
   'Brouillon généré par IA — à valider par le secrétariat avant publication';
 
@@ -31,7 +40,7 @@ const AVERTISSEMENT_IA_SUPPRIME =
 export function nettoyerContenuCr(contenu: ContenuCr): ContenuCr {
   const out: ContenuCr = {};
   for (const [cle, html] of Object.entries(contenu)) {
-    if (cle === CLE_PARTICIPANTS_EXCLUS) continue;
+    if (cle === CLE_PARTICIPANTS_EXCLUS || cle === CLE_PARTICIPANTS_OVERRIDES) continue;
     let h = html;
     if (typeof h === 'string' && h.includes(AVERTISSEMENT_IA_SUPPRIME)) {
       h = h
@@ -55,6 +64,29 @@ export function lireParticipantsExclusIds(
   const raw = contenu?.[CLE_PARTICIPANTS_EXCLUS];
   if (!Array.isArray(raw)) return [];
   return raw.filter((id): id is string => typeof id === 'string' && id.length > 0);
+}
+
+export function lireParticipantsOverrides(
+  contenu: Record<string, unknown> | null | undefined,
+): Record<string, ParticipantCrOverride> {
+  const raw = contenu?.[CLE_PARTICIPANTS_OVERRIDES];
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out: Record<string, ParticipantCrOverride> = {};
+  for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+    const v = value as Record<string, unknown>;
+    out[id] = {
+      nom: typeof v.nom === 'string' ? v.nom : undefined,
+      statut: typeof v.statut === 'string' ? v.statut : undefined,
+      fonction:
+        v.fonction === null
+          ? null
+          : typeof v.fonction === 'string'
+            ? v.fonction
+            : undefined,
+    };
+  }
+  return out;
 }
 
 export type LigneParticipantCr = {

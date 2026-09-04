@@ -80,3 +80,9 @@ export function marquerToutesNotificationsLues() {
     body: JSON.stringify({}),
   });
 }
+
+export function supprimerNotification(id: string) {
+  return apiFetch<{ message: string }>(`/api/notifications/${id}`, {
+    method: 'DELETE',
+  });
+}

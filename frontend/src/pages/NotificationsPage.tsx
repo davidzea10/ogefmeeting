@@ -11,9 +11,10 @@ import {
   listerNotifications,
   marquerNotificationLue,
   marquerToutesNotificationsLues,
+  supprimerNotification,
 } from '@/lib/notifications-api';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell } from 'lucide-react';
+import { Bell, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -68,6 +69,15 @@ export function NotificationsPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['notifications'] });
       announce('Toutes les notifications sont marquées comme lues.');
+    },
+    onError: (e: Error) => announce(e.message),
+  });
+
+  const supprimerMut = useMutation({
+    mutationFn: (id: string) => supprimerNotification(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      announce('Notification supprimée.');
     },
     onError: (e: Error) => announce(e.message),
   });
@@ -156,43 +166,55 @@ export function NotificationsPage() {
               key={n.id}
               className={
                 n.est_lu
-                  ? ''
-                  : 'bg-ogefrem-blue/5'
+                  ? 'flex items-start gap-1'
+                  : 'flex items-start gap-1 bg-ogefrem-blue/5'
               }
             >
-              {notificationAvecActionsCr(n) ? (
-                <NotificationItemActions
-                  notification={n}
-                  libelleType={LIBELLE_TYPE[n.type] ?? n.type}
-                  dateLabel={formatDateHeure(n.cree_le)}
-                  onMarkRead={(id) => lireMut.mutate(id)}
-                  showUnreadBadge={!n.est_lu}
-                />
-              ) : (
-                <Link
-                  to={n.lien || '/'}
-                  onClick={() => {
-                    if (!n.est_lu) lireMut.mutate(n.id);
-                  }}
-                  className="block px-4 py-3 hover:bg-surface-muted"
-                >
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
-                      {LIBELLE_TYPE[n.type] ?? n.type}
-                    </p>
-                    <p className="text-[11px] text-text-muted">
-                      {formatDateHeure(n.cree_le)}
-                    </p>
-                  </div>
-                  <p className="mt-0.5 font-semibold text-text">{n.titre}</p>
-                  <p className="mt-0.5 text-sm text-text-muted">{n.message}</p>
-                  {!n.est_lu && (
-                    <Badge variant="default" className="mt-2">
-                      Non lu
-                    </Badge>
-                  )}
-                </Link>
-              )}
+              <div className="min-w-0 flex-1">
+                {notificationAvecActionsCr(n) ? (
+                  <NotificationItemActions
+                    notification={n}
+                    libelleType={LIBELLE_TYPE[n.type] ?? n.type}
+                    dateLabel={formatDateHeure(n.cree_le)}
+                    onMarkRead={(id) => lireMut.mutate(id)}
+                    showUnreadBadge={!n.est_lu}
+                  />
+                ) : (
+                  <Link
+                    to={n.lien || '/'}
+                    onClick={() => {
+                      if (!n.est_lu) lireMut.mutate(n.id);
+                    }}
+                    className="block px-4 py-3 hover:bg-surface-muted"
+                  >
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+                        {LIBELLE_TYPE[n.type] ?? n.type}
+                      </p>
+                      <p className="text-[11px] text-text-muted">
+                        {formatDateHeure(n.cree_le)}
+                      </p>
+                    </div>
+                    <p className="mt-0.5 font-semibold text-text">{n.titre}</p>
+                    <p className="mt-0.5 text-sm text-text-muted">{n.message}</p>
+                    {!n.est_lu && (
+                      <Badge variant="default" className="mt-2">
+                        Non lu
+                      </Badge>
+                    )}
+                  </Link>
+                )}
+              </div>
+              <button
+                type="button"
+                className="mt-3 mr-3 shrink-0 rounded-md p-2 text-text-muted hover:bg-danger/10 hover:text-danger"
+                aria-label="Supprimer la notification"
+                title="Supprimer"
+                disabled={supprimerMut.isPending}
+                onClick={() => supprimerMut.mutate(n.id)}
+              >
+                <Trash2 className="h-4 w-4" aria-hidden />
+              </button>
             </li>
           ))}
         </ul>

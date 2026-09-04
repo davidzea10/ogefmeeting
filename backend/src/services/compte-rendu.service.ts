@@ -33,7 +33,6 @@ import {
 import {
   envoyerRapportAuxParticipants,
   notifierChangementStatutCr,
-  notifierParticipantsRapportReunion,
 } from './cr-notification.service.js';
 import { parametresService } from './parametres.service.js';
 import { reunionService } from './reunion.service.js';
@@ -61,8 +60,8 @@ export class CompteRenduService {
     }
 
     const compteRendu = data as CompteRendu;
-    await notifierParticipantsRapportReunion({ cr: compteRendu });
-
+    // Pas de notif aux participants à la création : ils reçoivent le CR
+    // uniquement après validation (envoi PDF officiel).
     return compteRendu;
   }
 
@@ -285,6 +284,8 @@ export class CompteRenduService {
 
     const cr = data as CompteRendu;
 
+    await this.supprimerNotificationsCrAValider(id);
+
     if (input.commentaire?.trim()) {
       await this.insererCommentaire(id, {
         contenu: input.commentaire.trim(),
@@ -299,14 +300,22 @@ export class CompteRenduService {
       });
     }
 
-    await notifierChangementStatutCr({
-      cr,
-      ancienStatut: actuel.statut,
-      nouveauStatut: 'brouillon',
-      commentaire: input.commentaire,
-    });
-
+    // Pas de nouvelle notif aux validateurs : on retire seulement « CR à valider ».
     return cr;
+  }
+
+  /** Retire les notifs « CR à valider » liées à ce compte rendu. */
+  private async supprimerNotificationsCrAValider(compteRenduId: string): Promise<void> {
+    try {
+      const { notificationService } = await import('./notification.service.js');
+      await notificationService.supprimerParTypeEtMetadonnee(
+        'cr_a_valider',
+        'compte_rendu_id',
+        compteRenduId,
+      );
+    } catch {
+      // best-effort
+    }
   }
 
   async valider(id: string, input: ValiderCompteRenduInput): Promise<CompteRendu> {
@@ -563,7 +572,12 @@ export class CompteRenduService {
       .order('cree_le', { ascending: true });
 
     const exclusCr = this.lireParticipantsExclusIds(compte_rendu.contenu);
-    const participants = this.mapperParticipantsPdf(participantsRows ?? [], exclusCr);
+    const overridesCr = this.lireParticipantsOverrides(compte_rendu.contenu);
+    const participants = this.mapperParticipantsPdf(
+      participantsRows ?? [],
+      exclusCr,
+      overridesCr,
+    );
 
     const parametres = await parametresService.obtenir();
 
@@ -620,7 +634,12 @@ export class CompteRenduService {
       .order('cree_le', { ascending: true });
 
     const exclusListe = this.lireParticipantsExclusIds(compte_rendu.contenu);
-    const participants = this.mapperParticipantsPdf(participantsRows ?? [], exclusListe);
+    const overridesListe = this.lireParticipantsOverrides(compte_rendu.contenu);
+    const participants = this.mapperParticipantsPdf(
+      participantsRows ?? [],
+      exclusListe,
+      overridesListe,
+    );
     const parametres = await parametresService.obtenir();
 
     const buffer = await genererPdfListeParticipants({
@@ -650,9 +669,42 @@ export class CompteRenduService {
     return raw.filter((id): id is string => typeof id === 'string' && id.length > 0);
   }
 
+  private lireParticipantsOverrides(
+    contenu: Record<string, unknown> | null | undefined,
+  ): Record<
+    string,
+    { nom?: string; statut?: string; fonction?: string | null }
+  > {
+    const raw = contenu?.participants_overrides;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+    const out: Record<
+      string,
+      { nom?: string; statut?: string; fonction?: string | null }
+    > = {};
+    for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+      const v = value as Record<string, unknown>;
+      out[id] = {
+        nom: typeof v.nom === 'string' ? v.nom : undefined,
+        statut: typeof v.statut === 'string' ? v.statut : undefined,
+        fonction:
+          v.fonction === null
+            ? null
+            : typeof v.fonction === 'string'
+              ? v.fonction
+              : undefined,
+      };
+    }
+    return out;
+  }
+
   private mapperParticipantsPdf(
     participantsRows: Array<Record<string, unknown>>,
     exclusIds: string[] = [],
+    overrides: Record<
+      string,
+      { nom?: string; statut?: string; fonction?: string | null }
+    > = {},
   ): PdfParticipantLigne[] {
     type ProfilJoin = {
       prenom?: string;
@@ -677,6 +729,8 @@ export class CompteRenduService {
         return !pid || !exclus.has(pid);
       })
       .map((row) => {
+        const pid = String((row as { profil_id?: string }).profil_id ?? '');
+        const o = overrides[pid];
         const rawProfil = (row as { profils?: ProfilJoin | ProfilJoin[] | null }).profils;
         const profil = Array.isArray(rawProfil) ? rawProfil[0] : rawProfil;
         const rawDir = profil?.directions;
@@ -692,12 +746,15 @@ export class CompteRenduService {
             : null;
 
         return {
-          nom: `${prenom} ${nom}`.trim() || '—',
+          nom: o?.nom?.trim() || `${prenom} ${nom}`.trim() || '—',
           matricule: profil?.matricule ?? null,
           email: profil?.email ?? null,
           direction: directionLabel,
-          fonction: profil?.fonction ?? null,
-          statut: String((row as { statut?: string }).statut ?? 'invite'),
+          fonction:
+            o?.fonction !== undefined ? o.fonction : (profil?.fonction ?? null),
+          statut:
+            o?.statut?.trim() ||
+            String((row as { statut?: string }).statut ?? 'invite'),
         };
       });
 

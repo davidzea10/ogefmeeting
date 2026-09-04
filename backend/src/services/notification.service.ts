@@ -30,7 +30,6 @@ export type CreerNotificationPayload = {
 /** Seuls ces événements partent en boîte mail externe ; le reste reste in-app. */
 const TYPES_EMAIL_EXTERNE = new Set([
   'invitation_reunion',
-  'reunion_demarree',
   'cr_envoye_participants',
 ]);
 
@@ -117,6 +116,59 @@ export class NotificationService {
     }
 
     return { mises_a_jour: data?.length ?? 0 };
+  }
+
+  async supprimer(profilId: string, id: string): Promise<void> {
+    const supabase = requireSupabaseAdmin();
+    const { error } = await supabase
+      .from(TABLES.notifications)
+      .delete()
+      .eq('id', id)
+      .eq('profil_id', profilId);
+
+    if (error) {
+      handleSupabaseError(error, 'Impossible de supprimer la notification.');
+    }
+  }
+
+  /**
+   * Supprime les notifications d’un type donné dont la métadonnée clé = valeur
+   * (ex. retirer « CR à valider » après annulation de soumission).
+   */
+  async supprimerParTypeEtMetadonnee(
+    type: string,
+    metaCle: string,
+    metaValeur: string,
+  ): Promise<number> {
+    const supabase = requireSupabaseAdmin();
+    const { data, error } = await supabase
+      .from(TABLES.notifications)
+      .select('id, metadonnees')
+      .eq('type', type);
+
+    if (error) {
+      handleSupabaseError(error, 'Impossible de charger les notifications à purger.');
+    }
+
+    const ids = (data ?? [])
+      .filter((row) => {
+        const meta = row.metadonnees as Record<string, unknown> | null;
+        return meta && String(meta[metaCle] ?? '') === metaValeur;
+      })
+      .map((row) => row.id as string);
+
+    if (ids.length === 0) return 0;
+
+    const { error: delError } = await supabase
+      .from(TABLES.notifications)
+      .delete()
+      .in('id', ids);
+
+    if (delError) {
+      handleSupabaseError(delError, 'Impossible de supprimer les notifications.');
+    }
+
+    return ids.length;
   }
 
   /**
