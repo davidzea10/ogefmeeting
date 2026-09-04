@@ -88,7 +88,7 @@ const LIBELLES_TYPE_COMMENTAIRE: Record<string, string> = {
 export function CompteRenduEditorPage() {
   const { id } = useParams<{ id: string }>();
   const announce = useAnnouncerStore((s) => s.announce);
-  const profilId = useAuthStore((s) => s.profil?.id);
+  const profilId = useAuthStore((s) => s.profil?.id ?? s.user?.id);
   const role = useAuthStore((s) => s.role ?? s.profil?.role ?? null);
   const queryClient = useQueryClient();
 
@@ -111,6 +111,8 @@ export function CompteRenduEditorPage() {
     queryKey: ['compte-rendu', id],
     queryFn: () => obtenirCompteRendu(id!),
     enabled: Boolean(id),
+    // Le statut workflow (brouillon/soumis/…) doit être frais après annuler/soumettre
+    staleTime: 0,
   });
 
   const reunionQuery = useQuery({
@@ -210,6 +212,11 @@ export function CompteRenduEditorPage() {
     }
   };
 
+  /** Met à jour le CR en cache tout de suite (évite un statut stale qui masque « Soumettre »). */
+  const appliquerCrLocal = (data: Awaited<ReturnType<typeof obtenirCompteRendu>>) => {
+    queryClient.setQueryData(['compte-rendu', id], data);
+  };
+
   const buildContenuHtml = () =>
     contenuVersHtml(sections, contenu, {
       inclureParticipants: afficherParticipantsCorps,
@@ -233,6 +240,7 @@ export function CompteRenduEditorPage() {
     onSuccess: async (data) => {
       setDirty(false);
       setLastSavedAt(new Date());
+      appliquerCrLocal(data);
       await invalidateCr(data.reunion_id);
       if (optsHistoriserRef.current) {
         announce('Version enregistrée.');
@@ -260,6 +268,7 @@ export function CompteRenduEditorPage() {
     },
     onSuccess: async (data) => {
       setCommentaireAction('');
+      appliquerCrLocal(data);
       await invalidateCr(data.reunion_id);
       announce('Compte rendu soumis. Les directeurs ont été notifiés.');
     },
@@ -274,6 +283,7 @@ export function CompteRenduEditorPage() {
       }),
     onSuccess: async (data) => {
       setCommentaireAction('');
+      appliquerCrLocal(data);
       await invalidateCr(data.reunion_id);
       announce('Compte rendu validé. Le rédacteur a été notifié.');
     },
@@ -288,6 +298,7 @@ export function CompteRenduEditorPage() {
       }),
     onSuccess: async (data) => {
       setCommentaireAction('');
+      appliquerCrLocal(data);
       await invalidateCr(data.reunion_id);
       announce('Compte rendu renvoyé en révision. Le rédacteur a été notifié.');
     },
@@ -302,8 +313,13 @@ export function CompteRenduEditorPage() {
       }),
     onSuccess: async (data) => {
       setCommentaireAction('');
+      // Important : statut → brouillon tout de suite, sinon « Soumettre » reste masqué
+      // tant que le refetch (staleTime 60s / réseau) n’a pas fini.
+      appliquerCrLocal(data);
       await invalidateCr(data.reunion_id);
-      announce('Soumission annulée. Le compte rendu est de nouveau en brouillon.');
+      announce(
+        'Soumission annulée. Le compte rendu est de nouveau en brouillon — vous pouvez le soumettre à nouveau.',
+      );
     },
     onError: (e: Error) => announce(e.message),
   });
@@ -311,6 +327,7 @@ export function CompteRenduEditorPage() {
   const archiverMut = useMutation({
     mutationFn: () => archiverCompteRendu(id!),
     onSuccess: async (data) => {
+      appliquerCrLocal(data);
       await invalidateCr(data.reunion_id);
       announce('Compte rendu archivé.');
     },
@@ -380,6 +397,7 @@ export function CompteRenduEditorPage() {
       setContenu(nettoyerContenuCr(existing));
       setDirty(false);
       setLastSavedAt(new Date());
+      appliquerCrLocal(data);
       await invalidateCr(data.reunion_id);
       announce('Compte rendu généré par l’IA. Relisez et ajustez avant soumission.');
     },
@@ -600,7 +618,7 @@ export function CompteRenduEditorPage() {
           {showSoumettre && (
             <Button
               size="sm"
-              variant="outline"
+              variant="primary"
               loading={soumettreMut.isPending}
               disabled={workflowBusy}
               onClick={() => {

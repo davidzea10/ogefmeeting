@@ -101,7 +101,7 @@ export const LIBELLES_STATUT_CR: Record<StatutCompteRendu, string> = {
 export function messageWorkflowCr(statut: StatutCompteRendu): string {
   switch (statut) {
     case 'brouillon':
-      return 'Brouillon — rédigez le contenu puis soumettez-le pour validation.';
+      return 'Brouillon — rédigez le contenu puis soumettez-le pour validation (y compris après une annulation de soumission).';
     case 'en_revision':
       return 'Renvoyé en révision — lisez les commentaires du directeur, corrigez, puis soumettez à nouveau.';
     case 'soumis':
