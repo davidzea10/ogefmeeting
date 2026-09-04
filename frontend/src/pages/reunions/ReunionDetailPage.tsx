@@ -1,5 +1,6 @@
 import { useAnnouncerStore } from '@/components/a11y/LiveAnnouncer';
 import { Breadcrumbs } from '@/components/layout/Breadcrumbs';
+import { AjouterInvitesModal } from '@/components/reunions/AjouterInvitesModal';
 import { ConfirmationsPresencePanel } from '@/components/reunions/ConfirmationsPresencePanel';
 import { EnregistrementsSection } from '@/components/reunions/EnregistrementsSection';
 import { ReunionStatusBadge } from '@/components/reunions/ReunionStatusBadge';
@@ -21,6 +22,7 @@ import {
   cloturerReunion,
   creerCompteRendu,
   demarrerReunion,
+  gererParticipants,
   listerComptesRendusReunion,
   listerDirections,
   listerProfils,
@@ -29,7 +31,7 @@ import {
   obtenirReunion,
   refuserReunion,
 } from '@/lib/reunions-api';
-import { peutApprouverReunionRole, peutApprouverReunionPourReunion, peutGererReunionRole, peutModifierReunionRole, peutVoirArchivesMediaRole } from '@/lib/roles';
+import { peutApprouverReunionRole, peutApprouverReunionPourReunion, peutGererReunionRole, libelleFonction, peutModifierReunionRole, peutVoirArchivesMediaRole, rangHierarchieFonction } from '@/lib/roles';
 import { peutRejoindreLive } from '@/lib/invitation-live';
 import { useAuthStore } from '@/stores/auth.store';
 import {
@@ -46,6 +48,7 @@ import {
   Play,
   Radio,
   Square,
+  UserPlus,
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -62,6 +65,7 @@ export function ReunionDetailPage() {
   const userId = useAuthStore((s) => s.user?.id ?? s.profil?.id);
   const peutApprouver = peutApprouverReunionRole(role, profil?.fonction);
   const [tab, setTab] = useState<TabId>('informations');
+  const [modalInvitesOuvert, setModalInvitesOuvert] = useState(false);
 
   useEffect(() => {
     const t = searchParams.get('tab');
@@ -91,7 +95,7 @@ export function ReunionDetailPage() {
   );
   const profilsQuery = useQuery({
     queryKey: ['profils', 'detail'],
-    queryFn: () => listerProfils({ limite: 100 }),
+    queryFn: () => listerProfils({ limite: 500 }),
   });
 
   const directionsQuery = useQuery({
@@ -144,6 +148,29 @@ export function ReunionDetailPage() {
           new Date(b.cree_le).getTime() - new Date(a.cree_le).getTime(),
       );
   }, [alertesConfirmationsQuery.data, id]);
+
+  const dejaInvitesIds = useMemo(
+    () =>
+      new Set(
+        (reunionQuery.data?.participants ?? []).map((p) => p.profil_id),
+      ),
+    [reunionQuery.data?.participants],
+  );
+
+  const participantsTries = useMemo(() => {
+    const items = reunionQuery.data?.participants ?? [];
+    return [...items].sort((a, b) => {
+      const pa = profilMap.get(a.profil_id);
+      const pb = profilMap.get(b.profil_id);
+      const rang =
+        rangHierarchieFonction(pa?.fonction) -
+        rangHierarchieFonction(pb?.fonction);
+      if (rang !== 0) return rang;
+      const nomA = `${pa?.prenom ?? ''} ${pa?.nom ?? ''}`.trim().toLowerCase();
+      const nomB = `${pb?.prenom ?? ''} ${pb?.nom ?? ''}`.trim().toLowerCase();
+      return nomA.localeCompare(nomB, 'fr');
+    });
+  }, [reunionQuery.data?.participants, profilMap]);
 
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey: ['reunion', id] });
@@ -224,6 +251,30 @@ export function ReunionDetailPage() {
     }) => modifierParticipantStatut(id!, participantId, statut),
     onSuccess: async () => {
       announce('Présence mise à jour.');
+      await invalidate();
+    },
+    onError: (e: Error) => announce(e.message),
+  });
+
+  const ajouterInvitesMut = useMutation({
+    mutationFn: (nouveauxIds: string[]) => {
+      const existants = reunionQuery.data?.participants ?? [];
+      const payload = [
+        ...existants.map((p) => ({
+          profil_id: p.profil_id,
+          statut: p.statut,
+        })),
+        ...nouveauxIds.map((profil_id) => ({
+          profil_id,
+          statut: 'invite' as const,
+        })),
+      ];
+      return gererParticipants(id!, payload);
+    },
+    onSuccess: async (_data, nouveauxIds) => {
+      const n = nouveauxIds.length;
+      announce(n > 1 ? `${n} invitations envoyées.` : 'Invitation envoyée.');
+      setModalInvitesOuvert(false);
       await invalidate();
     },
     onError: (e: Error) => announce(e.message),
@@ -536,16 +587,37 @@ export function ReunionDetailPage() {
 
         {tab === 'participants' && (
           <div className="space-y-3">
+            {peutModifier && (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm text-text-muted">
+                  Ajoutez des invités oubliés : ils recevront une invitation immédiatement.
+                </p>
+                <Button
+                  size="sm"
+                  type="button"
+                  onClick={() => setModalInvitesOuvert(true)}
+                >
+                  <UserPlus className="h-4 w-4" aria-hidden />
+                  Ajouter des invités
+                </Button>
+              </div>
+            )}
             {reunion.participants.length === 0 ? (
-              <Empty hint="Aucun participant. Modifiez la réunion pour en ajouter." />
+              <Empty
+                hint={
+                  peutModifier
+                    ? 'Aucun participant. Ajoutez des invités ci-dessus.'
+                    : 'Aucun participant.'
+                }
+              />
             ) : (
               <>
                 {/* Mobile */}
                 <ul className="space-y-2 md:hidden">
-                  {reunion.participants.map((p) => {
-                    const profil = profilMap.get(p.profil_id);
-                    const nom = profil
-                      ? `${profil.prenom} ${profil.nom}`
+                  {participantsTries.map((p) => {
+                    const profilP = profilMap.get(p.profil_id);
+                    const nom = profilP
+                      ? `${profilP.prenom} ${profilP.nom}`
                       : `Profil ${p.profil_id.slice(0, 8)}…`;
                     return (
                       <li
@@ -553,7 +625,10 @@ export function ReunionDetailPage() {
                         className="rounded-xl border border-border/80 bg-surface p-3 shadow-sm"
                       >
                         <p className="font-semibold text-text">{nom}</p>
-                        <p className="text-xs text-text-muted">{profil?.email}</p>
+                        <p className="text-xs text-text-muted">{profilP?.email}</p>
+                        <p className="mt-1 text-xs font-medium text-ogefrem-navy/80">
+                          {libelleFonction(profilP?.fonction)}
+                        </p>
                         <div className="mt-2">
                           {peutChangerPresence ? (
                             <select
@@ -597,6 +672,9 @@ export function ReunionDetailPage() {
                           Nom
                         </th>
                         <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-muted">
+                          Fonction
+                        </th>
+                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-muted">
                           Email
                         </th>
                         <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-muted">
@@ -605,16 +683,19 @@ export function ReunionDetailPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/70">
-                      {reunion.participants.map((p) => {
-                        const profil = profilMap.get(p.profil_id);
-                        const nom = profil
-                          ? `${profil.prenom} ${profil.nom}`
+                      {participantsTries.map((p) => {
+                        const profilP = profilMap.get(p.profil_id);
+                        const nom = profilP
+                          ? `${profilP.prenom} ${profilP.nom}`
                           : `Profil ${p.profil_id.slice(0, 8)}…`;
                         return (
                           <tr key={p.id} className="hover:bg-ogefrem-blue/[0.03]">
                             <td className="px-5 py-3 font-semibold text-text">{nom}</td>
                             <td className="px-4 py-3 text-text-muted">
-                              {profil?.email ?? '—'}
+                              {libelleFonction(profilP?.fonction)}
+                            </td>
+                            <td className="px-4 py-3 text-text-muted">
+                              {profilP?.email ?? '—'}
                             </td>
                             <td className="px-4 py-3">
                               {peutChangerPresence ? (
@@ -833,6 +914,15 @@ export function ReunionDetailPage() {
           </div>
         )}
       </ReunionTabs>
+
+      <AjouterInvitesModal
+        open={modalInvitesOuvert}
+        onClose={() => setModalInvitesOuvert(false)}
+        profils={profilsQuery.data?.items ?? []}
+        dejaInvitesIds={dejaInvitesIds}
+        loading={ajouterInvitesMut.isPending}
+        onSubmit={(ids) => ajouterInvitesMut.mutate(ids)}
+      />
     </div>
   );
 }

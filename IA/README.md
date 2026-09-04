@@ -11,7 +11,9 @@ Tests **Jupyter** avant intégration dans l'application (étape 10).
 
 ## Module partagé
 
-`ogefrem_context.py` — contexte OGEFREM, directions, prompts CR (réutilisable en backend).
+`ogefrem_context.py` — contexte OGEFREM, directions du siège + **12 provinciales/régionales**, organisation des réunions, prompts CR (réutilisable en backend).
+
+Aide saisie 1ʳᵉ réunion réelle : `samples/reunion_test_saisie.md` (NOTE DANTIC → DPKIN).
 
 ## Installation
 

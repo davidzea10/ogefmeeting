@@ -1,5 +1,6 @@
 import { Badge } from '@/components/ui/Badge';
 import { formatDateHeure, LIBELLES_PARTICIPANT } from '@/lib/labels';
+import { libelleFonction, rangHierarchieFonction } from '@/lib/roles';
 import type { NotificationApp, ParticipantReunion, Profil, StatutParticipant } from '@ogefmeeting/shared';
 import { Bell, CheckCircle2, UserX, Users } from 'lucide-react';
 
@@ -37,13 +38,22 @@ export function ConfirmationsPresencePanel({
   const repondu = stats.confirmes + stats.presents + stats.absents;
 
   const lignes = [...participants].sort((a, b) => {
-    const ordre: Record<StatutParticipant, number> = {
+    const pa = profilMap.get(a.profil_id);
+    const pb = profilMap.get(b.profil_id);
+    const rang =
+      rangHierarchieFonction(pa?.fonction) - rangHierarchieFonction(pb?.fonction);
+    if (rang !== 0) return rang;
+    const ordreStatut: Record<StatutParticipant, number> = {
       present: 0,
       confirme: 1,
       invite: 2,
       absent: 3,
     };
-    return (ordre[a.statut] ?? 9) - (ordre[b.statut] ?? 9);
+    const byStatut = (ordreStatut[a.statut] ?? 9) - (ordreStatut[b.statut] ?? 9);
+    if (byStatut !== 0) return byStatut;
+    const nomA = `${pa?.prenom ?? ''} ${pa?.nom ?? ''}`.trim().toLowerCase();
+    const nomB = `${pb?.prenom ?? ''} ${pb?.nom ?? ''}`.trim().toLowerCase();
+    return nomA.localeCompare(nomB, 'fr');
   });
 
   return (
@@ -88,6 +98,9 @@ export function ConfirmationsPresencePanel({
                 Participant
               </th>
               <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
+                Fonction
+              </th>
+              <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
                 Statut
               </th>
             </tr>
@@ -101,6 +114,9 @@ export function ConfirmationsPresencePanel({
               return (
                 <tr key={p.id}>
                   <td className="px-3 py-2.5 font-medium text-text">{nom}</td>
+                  <td className="px-3 py-2.5 text-text-muted">
+                    {libelleFonction(profil?.fonction)}
+                  </td>
                   <td className="px-3 py-2.5">
                     <span className="inline-flex items-center gap-1.5 text-text-muted">
                       {p.statut === 'confirme' || p.statut === 'present' ? (
@@ -116,7 +132,7 @@ export function ConfirmationsPresencePanel({
             })}
             {lignes.length === 0 && (
               <tr>
-                <td colSpan={2} className="px-3 py-4 text-center text-text-muted">
+                <td colSpan={3} className="px-3 py-4 text-center text-text-muted">
                   Aucun participant.
                 </td>
               </tr>

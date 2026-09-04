@@ -23,7 +23,7 @@ import {
   peutCreerReunionRole,
   peutValiderCrRole,
 } from '@/lib/roles';
-import { listerReunions, obtenirReunion } from '@/lib/reunions-api';
+import { listerDirections, listerReunions, obtenirReunion } from '@/lib/reunions-api';
 import { useAuthStore } from '@/stores/auth.store';
 import type { DashboardResume, FonctionOrganisation, Reunion, ReunionDetail } from '@ogefmeeting/shared';
 import { useQueries, useQuery } from '@tanstack/react-query';
@@ -47,6 +47,12 @@ export function HomePage() {
   const estValidateur = peutApprouverReunionRole(role, profil?.fonction);
   const estAdmin = peutAccederAdministration(role);
   const profilId = profil?.id;
+
+  const directionsQuery = useQuery({
+    queryKey: ['directions'],
+    queryFn: listerDirections,
+    enabled: Boolean(profil?.direction_id),
+  });
 
   const dashboardQuery = useQuery({
     queryKey: ['dashboard', 'resume', profilId, estAdmin ? 'admin-resume' : estValidateur ? 'staff' : 'agent'],
@@ -298,6 +304,20 @@ export function HomePage() {
       ? LIBELLES_FONCTION[profil.fonction as FonctionOrganisation]
       : null;
 
+  /** Rôle applicatif « directeur » = direction : afficher le code (ex. DANTIC), pas « Directeur ». */
+  const badgeIdentite = useMemo(() => {
+    if (estAdmin && role) return LIBELLES_ROLE[role];
+    if (role === 'directeur' && profil?.direction_id) {
+      const dir = (directionsQuery.data ?? []).find(
+        (d) => d.id === profil.direction_id,
+      );
+      if (dir?.code?.trim()) return dir.code.trim();
+      if (dir?.nom?.trim()) return dir.nom.trim();
+    }
+    if (role) return LIBELLES_ROLE[role];
+    return null;
+  }, [estAdmin, role, profil?.direction_id, directionsQuery.data]);
+
   const mesActionsOuvertes =
     mesActionsQuery.data?.items.filter(
       (a) => a.statut === 'en_attente' || a.statut === 'en_cours' || a.statut === 'en_retard',
@@ -327,9 +347,9 @@ export function HomePage() {
         <div className="relative z-10 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-2">
             <div className="flex flex-wrap gap-2">
-              {role && (
+              {badgeIdentite && (
                 <Badge variant="yellow" className="border-0">
-                  {LIBELLES_ROLE[role]}
+                  {badgeIdentite}
                 </Badge>
               )}
               {fonctionLabel && (

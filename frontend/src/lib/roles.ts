@@ -23,6 +23,29 @@ export const LIBELLES_FONCTION: Record<FonctionOrganisation, string> = {
   directeur: 'Directeur',
 };
 
+/** Ordre hiérarchique croissant (0 = plus haut). */
+export const ORDRE_HIERARCHIE_FONCTION: Record<string, number> = {
+  directeur: 0,
+  sous_directeur: 1,
+  chef_service: 2,
+  agent: 3,
+};
+
+export function rangHierarchieFonction(
+  fonction: string | null | undefined,
+): number {
+  if (!fonction) return 99;
+  return ORDRE_HIERARCHIE_FONCTION[fonction] ?? 50;
+}
+
+export function libelleFonction(fonction: string | null | undefined): string {
+  if (!fonction) return '—';
+  if ((fonction as FonctionOrganisation) in LIBELLES_FONCTION) {
+    return LIBELLES_FONCTION[fonction as FonctionOrganisation];
+  }
+  return fonction;
+}
+
 export function peutValiderCrRole(role: RoleUtilisateur | null | undefined): boolean {
   return role === 'administrateur' || role === 'directeur';
 }

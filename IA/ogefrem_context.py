@@ -46,6 +46,41 @@ DIRECTIONS_OGEFREM: list[dict[str, str]] = [
     {"code": "DRCP", "nom": "Direction des Relations avec les Chargeurs et Partenaires", "mission": "Relations avec chargeurs, mandataires et partenaires."},
 ]
 
+# 12 directions provinciales / régionales (entités décentralisées)
+DIRECTIONS_PROVINCIALES_OGEFREM: list[dict[str, str]] = [
+    {"code": "DPKIN", "nom": "Direction Provinciale de Kinshasa", "mission": "Opérations OGEFREM à Kinshasa."},
+    {"code": "DPO", "nom": "Direction Provinciale Ouest", "mission": "Opérations OGEFREM — Ouest (Kongo Central et environs)."},
+    {"code": "DRGB", "nom": "Direction Régionale Grand Bandundu", "mission": "Opérations OGEFREM — Grand Bandundu."},
+    {"code": "DRGE", "nom": "Direction Régionale Grand Equateur", "mission": "Opérations OGEFREM — Grand Equateur."},
+    {"code": "DRGK", "nom": "Direction Régionale Grand Kasaï", "mission": "Opérations OGEFREM — Grand Kasaï."},
+    {"code": "DRIHU", "nom": "Direction Régionale de l'Ituri et Haut-Uélé", "mission": "Opérations OGEFREM — Ituri et Haut-Uélé."},
+    {"code": "DPMA", "nom": "Direction Provinciale du Maniema", "mission": "Opérations OGEFREM — Maniema."},
+    {"code": "DPNK", "nom": "Direction Provinciale du Nord-Kivu", "mission": "Opérations OGEFREM — Nord-Kivu."},
+    {"code": "DPSK", "nom": "Direction Provinciale du Sud-Kivu", "mission": "Opérations OGEFREM — Sud-Kivu."},
+    {"code": "DRNK", "nom": "Direction Régionale Nord-Katanga", "mission": "Opérations OGEFREM — Nord-Katanga."},
+    {"code": "DRSK", "nom": "Direction Régionale Sud-Katanga", "mission": "Opérations OGEFREM — Sud-Katanga / Haut-Katanga."},
+    {"code": "DRTBU", "nom": "Direction Régionale de la Tshopo et Bas-Uélé", "mission": "Opérations OGEFREM — Tshopo et Bas-Uélé."},
+]
+
+ORGANISATION_REUNIONS_OGEFREM = """
+COMMENT SONT ORGANISÉES LES RÉUNIONS À L'OGEFREM (contexte permanent) :
+- Une réunion est souvent préparée par une NOTE interne (référence Direction/Service/N°)
+  adressée à une ou plusieurs directions (ex. DANTIC → DPKIN), avec C.I. (copie info)
+  à la Direction Générale (DG), au Directeur Général Adjoint (DGA) et à d'autres directions
+  concernées (ex. DGIT).
+- Le « Concerne » de la note devient le titre / objet de la réunion.
+- Les métadonnées utiles : date et heure, lieu (salle, niveau, bâtiment du siège),
+  directions liées (siège + éventuellement provinciale), contexte (report, suite d'une
+  séance annulée, etc.) et objectifs (examiner, identifier les causes, convenir de mesures).
+- Les réunions peuvent être multi-directions (siège ↔ direction provinciale / régionale).
+- Hiérarchie des participants à respecter dans les listes et le CR :
+  Directeur → Sous-directeur → Chef de service → Agent.
+- Types fréquents : technique, opérationnel, conseil de direction, partenaires.
+- L'ordre du jour structure le compte rendu : un point ODJ = un bloc du rapport.
+- Ne pas inventer de faits absents de la transcription ; s'appuyer sur l'intitulé,
+  les directions liées et l'ODJ pour cadrer le sens de la séance.
+""".strip()
+
 TYPES_REUNION_LIBELLES = {
     "conseil_direction": "Conseil de direction",
     "technique": "Réunion technique",
@@ -56,8 +91,11 @@ TYPES_REUNION_LIBELLES = {
 
 
 def formater_directions_pour_prompt() -> str:
-    lignes = []
+    lignes = ["### Directions du siège"]
     for d in DIRECTIONS_OGEFREM:
+        lignes.append(f"- {d['code']} — {d['nom']} : {d['mission']}")
+    lignes.append("### Directions provinciales et régionales (12 entités décentralisées)")
+    for d in DIRECTIONS_PROVINCIALES_OGEFREM:
         lignes.append(f"- {d['code']} — {d['nom']} : {d['mission']}")
     return "\n".join(lignes)
 
@@ -116,6 +154,8 @@ def construire_prompt_systeme() -> str:
 
 Directions de l'OGEFREM (code — nom — mission) :
 {formater_directions_pour_prompt()}
+
+{ORGANISATION_REUNIONS_OGEFREM}
 
 STRUCTURE OBLIGATOIRE DU RAPPORT :
 1. INTRODUCTION — cadre, intitulé, objectifs, participants.
