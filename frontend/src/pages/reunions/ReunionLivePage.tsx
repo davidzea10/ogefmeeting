@@ -114,7 +114,7 @@ export function ReunionLivePage() {
 
   const profilsQuery = useQuery({
     queryKey: ['profils', 'live'],
-    queryFn: () => listerProfils({ limite: 100 }),
+    queryFn: () => listerProfils({ limite: 500 }),
   });
 
   const profilMap = useMemo(() => {
@@ -122,8 +122,26 @@ export function ReunionLivePage() {
     for (const p of profilsQuery.data?.items ?? []) {
       map.set(p.id, p);
     }
+    for (const part of reunionQuery.data?.participants ?? []) {
+      if (!part.profil) continue;
+      const existing = map.get(part.profil_id);
+      map.set(part.profil_id, {
+        id: part.profil.id,
+        prenom: part.profil.prenom,
+        nom: part.profil.nom,
+        email: part.profil.email,
+        fonction: part.profil.fonction,
+        direction_id: part.profil.direction_id,
+        url_avatar: part.profil.url_avatar,
+        matricule: existing?.matricule ?? null,
+        role: existing?.role ?? 'participant',
+        est_actif: existing?.est_actif ?? true,
+        cree_le: existing?.cree_le ?? '',
+        modifie_le: existing?.modifie_le ?? '',
+      });
+    }
     return map;
-  }, [profilsQuery.data]);
+  }, [profilsQuery.data, reunionQuery.data?.participants]);
 
   const reunion = reunionQuery.data;
   const enPause = reunion?.statut === 'en_pause';

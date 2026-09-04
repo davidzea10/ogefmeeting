@@ -9,7 +9,7 @@ export const uuidSchema = z.string().uuid('Identifiant UUID invalide.');
 
 export const paginationQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  limite: z.coerce.number().int().min(1).max(100).default(20),
+  limite: z.coerce.number().int().min(1).max(500).default(20),
   tri: z.string().optional(),
   ordre: z.enum(['asc', 'desc']).default('desc'),
 });

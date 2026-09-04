@@ -370,6 +370,11 @@ export type ParticipantReunion = {
   cree_le: string;
   /** Horodatage d'entrée en mode live (présence effective). */
   present_le: string | null;
+  /** Profil joint (détail réunion) — pour affichage nom / fonction. */
+  profil?: Pick<
+    Profil,
+    'id' | 'prenom' | 'nom' | 'email' | 'fonction' | 'direction_id' | 'url_avatar'
+  > | null;
 };
 
 export type PointOrdreJour = {

@@ -358,6 +358,9 @@ export class ReunionService {
       handleSupabaseError(pointsResult.error, "Impossible de charger l'ordre du jour.");
     }
 
+    const participantsBruts = (participantsResult.data ?? []) as ParticipantReunion[];
+    const participants = await this.enrichirParticipantsAvecProfils(participantsBruts);
+
     const directionMap = await this.chargerDirectionIds([id]);
     const base = reunion as Reunion;
     const enrichie = this.enrichirAvecDirections(base, directionMap);
@@ -365,7 +368,7 @@ export class ReunionService {
 
     return {
       ...avecValidateur,
-      participants: (participantsResult.data ?? []) as ParticipantReunion[],
+      participants,
       points_ordre_jour: (pointsResult.data ?? []) as PointOrdreJour[],
     };
   }
@@ -1786,6 +1789,36 @@ export class ReunionService {
       .maybeSingle();
     if (!data) return null;
     return `${data.prenom} ${data.nom}`.trim();
+  }
+
+  private async enrichirParticipantsAvecProfils(
+    participants: ParticipantReunion[],
+  ): Promise<ParticipantReunion[]> {
+    if (participants.length === 0) return participants;
+    const ids = [...new Set(participants.map((p) => p.profil_id).filter(Boolean))];
+    if (ids.length === 0) return participants;
+
+    const supabase = requireSupabaseAdmin();
+    const { data, error } = await supabase
+      .from(TABLES.profils)
+      .select('id, prenom, nom, email, fonction, direction_id, url_avatar')
+      .in('id', ids);
+
+    if (error) {
+      handleSupabaseError(error, 'Impossible de charger les profils des participants.');
+    }
+
+    const byId = new Map(
+      ((data ?? []) as NonNullable<ParticipantReunion['profil']>[]).map((p) => [
+        p.id,
+        p,
+      ]),
+    );
+
+    return participants.map((p) => ({
+      ...p,
+      profil: byId.get(p.profil_id) ?? null,
+    }));
   }
 
   private async enrichirValidateur(reunion: Reunion): Promise<Reunion> {
