@@ -71,6 +71,11 @@ const envSchema = z.object({
   DEEPGRAM_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   DEEPGRAM_LANGUAGE: z.preprocess(emptyToUndefined, z.string().min(2).optional()).default('fr'),
   DEEPGRAM_MODEL: z.preprocess(emptyToUndefined, z.string().min(1).optional()).default('nova-3'),
+  /**
+   * Termes STT additionnels (sigles / noms propres), séparés par des virgules.
+   * Ex. : SCE.DEV,SDINF,Kinshasa Gombe
+   */
+  DEEPGRAM_KEYTERMS: z.preprocess(emptyToUndefined, z.string().optional()),
   /** OpenAI — génération compte rendu (clé côté serveur uniquement) */
   OPENAI_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   OPENAI_MODEL: z.preprocess(emptyToUndefined, z.string().min(1).optional()).default('gpt-4o-mini'),

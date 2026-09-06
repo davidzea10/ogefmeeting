@@ -393,25 +393,9 @@ export function ReunionLivePage() {
 
   return (
     <div className="relative flex min-h-screen flex-col bg-ogefrem-navy text-white">
-      {enPause && (
-        <div
-          className="pointer-events-none fixed inset-0 z-30 flex items-center justify-center bg-ogefrem-navy/75 backdrop-blur-sm"
-          role="status"
-          aria-live="polite"
-        >
-          <div className="rounded-2xl border border-warning/40 bg-warning/15 px-8 py-6 text-center shadow-xl">
-            <Pause className="mx-auto h-12 w-12 text-warning" aria-hidden />
-            <p className="mt-3 text-xl font-bold text-white">Réunion en pause</p>
-            <p className="mt-1 text-sm text-white/75">
-              {peutConduireLive
-                ? 'Reprenez quand vous êtes prêt(e).'
-                : 'En attente de reprise par l’organisateur…'}
-            </p>
-          </div>
-        </div>
-      )}
-      {/* Barre focus */}
-      <header className="sticky top-0 z-20 border-b border-white/10 bg-ogefrem-navy/95 backdrop-blur">
+      {/* Barre focus + bandeau pause (sticky, sans flou ni blocage du live) */}
+      <div className="sticky top-0 z-20">
+      <header className="border-b border-white/10 bg-ogefrem-navy/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <Link
@@ -526,6 +510,41 @@ export function ReunionLivePage() {
           />
         </div>
       </header>
+
+      {enPause && (
+        <div
+          className="border-b border-warning/35 bg-warning/20 px-4 py-2.5"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <Pause className="h-5 w-5 shrink-0 text-warning" aria-hidden />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-white">Réunion en pause</p>
+                <p className="text-xs text-white/70">
+                  {peutConduireLive
+                    ? 'Le live reste utilisable — reprenez quand vous êtes prêt(e).'
+                    : 'En attente de reprise par l’organisateur…'}
+                </p>
+              </div>
+            </div>
+            {peutConduireLive && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="!bg-ogefrem-yellow !text-ogefrem-navy hover:!bg-ogefrem-yellow/90"
+                loading={reprendreMut.isPending}
+                onClick={() => reprendreMut.mutate()}
+              >
+                <Play className="h-4 w-4" aria-hidden />
+                Reprendre
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+      </div>
 
       {estInviteLectureSeule && (
         <div

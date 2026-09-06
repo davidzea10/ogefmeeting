@@ -312,12 +312,12 @@ export const TranscriptionLivePanel = forwardRef<TranscriptionLivePanelHandle, P
           ) : null}
 
           {erreur ? (
-            <p className="rounded-lg border border-danger/40 bg-danger/15 px-3 py-2 text-sm text-red-200" role="alert">
+            <p className="text-sm text-white/55" role="status">
               {erreur}
             </p>
           ) : null}
           {saveErreur ? (
-            <p className="rounded-lg border border-danger/40 bg-danger/15 px-3 py-2 text-sm text-red-200" role="alert">
+            <p className="text-sm text-white/55" role="status">
               {saveErreur}
             </p>
           ) : null}

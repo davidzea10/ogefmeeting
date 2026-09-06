@@ -165,6 +165,8 @@ export function useTranscriptionLive(
   const pingRef = useRef<number | null>(null);
   const langueRef = useRef<LangueTranscription>(langue);
   const onTexteChangeRef = useRef(options?.onTexteChange);
+  /** true = arrêt volontaire (bouton Arrêter) → pas de message d’erreur. */
+  const fermetureIntentionnelleRef = useRef(false);
 
   useEffect(() => {
     langueRef.current = langue;
@@ -182,6 +184,9 @@ export function useTranscriptionLive(
   }, [actif, texteComplet, interim]);
 
   const arreter = useCallback(() => {
+    fermetureIntentionnelleRef.current = true;
+    setErreur(null);
+
     if (pingRef.current != null) {
       window.clearInterval(pingRef.current);
       pingRef.current = null;
@@ -225,7 +230,9 @@ export function useTranscriptionLive(
     setErreur(null);
     setSauvegardeOk(false);
     setConnecting(true);
+    fermetureIntentionnelleRef.current = true;
     arreter();
+    fermetureIntentionnelleRef.current = false;
 
     try {
       const stt = await obtenirStatutStt();
@@ -318,7 +325,8 @@ export function useTranscriptionLive(
         }
         setActif(false);
         setConnecting(false);
-        setErreur((prev) => prev ?? 'Connexion transcription interrompue.');
+        fermetureIntentionnelleRef.current = false;
+        // Pas de message à la fermeture (arrêt volontaire ou coupure réseau).
       };
 
       pingRef.current = window.setInterval(() => {
