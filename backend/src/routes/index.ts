@@ -22,6 +22,7 @@ import {
   parametresRouter,
 } from './parametres.routes.js';
 import { enregistrementsRouter } from './enregistrements.routes.js';
+import { documentsRouter } from './documents.routes.js';
 import { transcriptionsRouter } from './transcriptions.routes.js';
 import { nettoyageRouter } from './nettoyage.routes.js';
 import { attachAuth } from '../middleware/auth.js';
@@ -53,5 +54,6 @@ apiRouter.use('/recherche', rechercheRouter);
 apiRouter.use('/parametres', parametresRouter);
 apiRouter.use('/notifications', notificationsRouter);
 apiRouter.use('/enregistrements', enregistrementsRouter);
+apiRouter.use('/documents', documentsRouter);
 apiRouter.use('/transcriptions', transcriptionsRouter);
 apiRouter.use('/admin/nettoyage', nettoyageRouter);

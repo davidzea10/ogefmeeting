@@ -6,6 +6,7 @@ import { corsOrigins, env } from './config/env.js';
 import { logger } from './lib/logger.js';
 import { attachTranscriptionWebSocket } from './ws/transcription.ws.js';
 import { attachTranscriptionViewWebSocket } from './ws/transcription-view.ws.js';
+import { attachDocumentViewWebSocket } from './ws/document-view.ws.js';
 
 const app = createApp();
 const server = createServer(app);
@@ -13,6 +14,7 @@ configureHttpServerForProduction(server);
 
 attachTranscriptionWebSocket(server);
 attachTranscriptionViewWebSocket(server);
+attachDocumentViewWebSocket(server);
 
 server.listen(env.PORT, () => {
   logger.info(
@@ -26,6 +28,7 @@ server.listen(env.PORT, () => {
       deepgram: Boolean(env.DEEPGRAM_API_KEY),
       ws_transcription: '/ws/transcription',
       ws_transcription_view: '/ws/transcription-view',
+      ws_document_view: '/ws/document-view',
     },
     'Ogefmeeting API démarrée',
   );

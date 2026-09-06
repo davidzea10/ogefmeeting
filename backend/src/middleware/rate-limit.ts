@@ -5,6 +5,8 @@ import type { Request } from 'express';
 export function isLiveApiPath(req: Request): boolean {
   const path = req.path;
   if (path.startsWith('/api/transcriptions/live')) return true;
+  if (path.startsWith('/api/documents/live')) return true;
+  if (path === '/api/documents/live-sync' && req.method === 'POST') return true;
   if (/^\/api\/reunions\/[^/]+$/.test(path) && req.method === 'GET') return true;
   if (/^\/api\/reunions\/[^/]+\/(rejoindre-live|pause|reprendre|cloturer|annuler-live|ordre-du-jour)/.test(path)) {
     return true;

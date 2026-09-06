@@ -17,6 +17,7 @@ import { peutRejoindreLive, monStatutParticipant } from '@/lib/invitation-live';
 import { isRealtimeConfigured } from '@/lib/supabase-browser';
 import { easeOutExpo, useMotionSafe } from '@/lib/motion';
 import { EnregistrementLivePanel, type EnregistrementLivePanelHandle } from '@/components/reunions/EnregistrementLivePanel';
+import { DocumentLivePanel } from '@/components/reunions/DocumentLivePanel';
 import { LiveOrdreJourPanel } from '@/components/reunions/LiveOrdreJourPanel';
 import { TranscriptionLivePanel, type TranscriptionLivePanelHandle } from '@/components/reunions/TranscriptionLivePanel';
 import {
@@ -728,6 +729,12 @@ export function ReunionLivePage() {
                 </ul>
               )}
             </section>
+
+            <DocumentLivePanel
+              reunionId={id}
+              peutControle={peutConduireLive}
+              enLive={enLive}
+            />
 
             <EnregistrementLivePanel
               ref={audioPanelRef}

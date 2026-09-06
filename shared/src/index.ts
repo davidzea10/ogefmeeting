@@ -248,7 +248,7 @@ export type StatutTranscription = (typeof STATUTS_TRANSCRIPTION)[number];
 export const TRANSCRIPTION_STATUSES = STATUTS_TRANSCRIPTION;
 export type TranscriptionStatus = StatutTranscription;
 
-export const STORAGE_BUCKETS = ['recordings', 'exports', 'avatars'] as const;
+export const STORAGE_BUCKETS = ['recordings', 'exports', 'avatars', 'documents'] as const;
 export type StorageBucket = (typeof STORAGE_BUCKETS)[number];
 
 /** Noms des tables PostgreSQL */
@@ -261,6 +261,7 @@ export const TABLES = {
   participantsReunion: 'participants_reunion',
   pointsOrdreJour: 'points_ordre_jour',
   enregistrements: 'enregistrements',
+  documentsReunion: 'documents_reunion',
   comptesRendus: 'comptes_rendus',
   versionsCompteRendu: 'versions_compte_rendu',
   decisions: 'decisions',
@@ -387,6 +388,10 @@ export type Reunion = {
   /** Texte STT en cours (partagé live, tous participants). */
   transcription_live_texte?: string | null;
   transcription_live_interim?: string | null;
+  /** Document présenté en live (sync page / scroll). */
+  document_live_id?: string | null;
+  document_live_page?: number | null;
+  document_live_scroll?: number | null;
 };
 
 /** @deprecated Utiliser Reunion */
@@ -433,6 +438,34 @@ export type Enregistrement = {
 /** Enregistrement avec URL signée pour lecture / téléchargement */
 export type EnregistrementAvecUrl = Enregistrement & {
   url_lecture: string;
+};
+
+/** Document partagé pendant une réunion */
+export type DocumentReunion = {
+  id: string;
+  reunion_id: string;
+  nom_fichier: string;
+  type_mime: string;
+  taille_octets: number | null;
+  televerse_par: string | null;
+  cree_le: string;
+};
+
+export type DocumentReunionAvecUrl = DocumentReunion & {
+  url_lecture: string;
+  /** true si le fichier peut être présenté en sync (PDF). */
+  presentable: boolean;
+};
+
+/** État de présentation live d’un document */
+export type DocumentLiveEtat = {
+  document_id: string | null;
+  page: number;
+  scroll_ratio: number;
+  nom_fichier?: string | null;
+  type_mime?: string | null;
+  url_lecture?: string | null;
+  presentable?: boolean;
 };
 
 export type Transcription = {

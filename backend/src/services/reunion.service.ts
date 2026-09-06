@@ -820,6 +820,7 @@ export class ReunionService {
 
     const reunionCloturee = data as Reunion;
     await this.effacerTranscriptionLive(id);
+    await this.effacerDocumentLive(id);
     // Si un CR est déjà validé, envoi automatique du PDF aux participants
     void tenterEnvoiRapportSiPret(id);
     void this.notifierInvitesReunionCloturee(reunionCloturee);
@@ -916,6 +917,7 @@ export class ReunionService {
     }
 
     await this.effacerTranscriptionLive(id);
+    await this.effacerDocumentLive(id);
     return data as Reunion;
   }
 
@@ -1378,6 +1380,18 @@ export class ReunionService {
         return;
       }
       handleSupabaseError(error, 'Impossible d’effacer la transcription live.');
+    }
+  }
+
+  /** Efface la présentation document live (clôture / annulation). */
+  async effacerDocumentLive(reunionId: string): Promise<void> {
+    try {
+      const { documentsReunionService } = await import(
+        './documents-reunion.service.js'
+      );
+      await documentsReunionService.effacerLive(reunionId);
+    } catch {
+      // best-effort (migration absente, etc.)
     }
   }
 
