@@ -30,7 +30,7 @@ Le fichier `frontend/vercel.json` installe les workspaces depuis la racine du mo
 
 | Variable | Exemple |
 |----------|---------|
-| `VITE_API_URL` | `https://ogefmeeting-api.onrender.com` |
+| `VITE_API_URL` | `https://ogefmeeting.onrender.com` |
 | `VITE_SUPABASE_URL` | `https://xxxx.supabase.co` |
 | `VITE_SUPABASE_ANON_KEY` | clé anon Supabase |
 | `VITE_AUTH_REQUIRED` | `true` |
@@ -81,7 +81,7 @@ Variables à renseigner dans **Render → Environment** (sync manuel si déjà c
 
 Après upgrade Starter ou changement de variables : **Manual Deploy** sur Render.
 
-Vérifier le déploiement : `GET https://votre-api.onrender.com/api/health` → champ `build` = `2026-08-30-render-starter`.
+Vérifier le déploiement : `GET https://ogefmeeting.onrender.com/api/health` → champ `build` = `2026-09-07-documents-live`.
 
 ---
 
