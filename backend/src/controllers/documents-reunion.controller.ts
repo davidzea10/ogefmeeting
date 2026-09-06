@@ -148,6 +148,19 @@ export class DocumentsReunionController {
     res.status(200).json({ success: true, data });
   }
 
+  async telechargerFichier(req: Request, res: Response): Promise<void> {
+    const data = await documentsReunionService.telechargerContenu(
+      req.params.id as string,
+    );
+    res.setHeader('Content-Type', data.typeMime);
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="${encodeURIComponent(data.nomFichier)}"`,
+    );
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.status(200).send(data.buffer);
+  }
+
   async supprimer(req: Request, res: Response): Promise<void> {
     const doc = await documentsReunionService.obtenirUrl(req.params.id as string);
     await assurerConduite(req, doc.reunion_id);

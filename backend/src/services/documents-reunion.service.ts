@@ -7,7 +7,7 @@ import { TABLES } from '@ogefmeeting/shared';
 import { AppError } from '../utils/errors.js';
 import { handleSupabaseError } from '../utils/supabase-error.js';
 import { requireSupabaseAdmin } from '../lib/supabase.js';
-import { publierDocumentLive } from '../ws/document-broadcast.js';
+import { obtenirEtatDocumentLive, publierDocumentLive } from '../ws/document-broadcast.js';
 
 export type FichierDocumentUpload = {
   filename: string;
@@ -221,6 +221,42 @@ export class DocumentsReunionService {
     return versPublic(row, url);
   }
 
+  /** Contenu binaire (proxy) — évite CORS Supabase côté pdf.js. */
+  async telechargerContenu(id: string): Promise<{
+    buffer: Buffer;
+    typeMime: string;
+    nomFichier: string;
+  }> {
+    const supabase = requireSupabaseAdmin();
+    const { data, error } = await supabase
+      .from(TABLES.documentsReunion)
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) handleSupabaseError(error, 'Impossible de charger le document.');
+    if (!data) throw new AppError(404, 'Document introuvable.');
+
+    const row = data as RowDb;
+    const { data: blob, error: dlError } = await supabase.storage
+      .from('documents')
+      .download(row.chemin_stockage);
+
+    if (dlError || !blob) {
+      throw new AppError(
+        500,
+        `Impossible de télécharger le fichier : ${dlError?.message ?? 'fichier absent'}`,
+      );
+    }
+
+    const buffer = Buffer.from(await blob.arrayBuffer());
+    return {
+      buffer,
+      typeMime: row.type_mime || 'application/octet-stream',
+      nomFichier: row.nom_fichier,
+    };
+  }
+
   async supprimer(id: string): Promise<void> {
     const supabase = requireSupabaseAdmin();
     const { data, error } = await supabase
@@ -384,19 +420,26 @@ export class DocumentsReunionService {
       }
     }
 
-    const url = await urlSignee(row.chemin_stockage);
+    // Pas de nouvelle URL signée à chaque scroll — réutilise celle en mémoire
+    const memoire = obtenirEtatDocumentLive(opts.reunionId);
+    const urlExistante =
+      memoire.document_id === documentId ? memoire.url_lecture : null;
+
     const etat: DocumentLiveEtat = {
       document_id: documentId,
       page,
       scroll_ratio: scrollRatio,
       nom_fichier: row.nom_fichier,
       type_mime: row.type_mime,
-      url_lecture: url,
+      url_lecture: urlExistante ?? undefined,
       presentable: estDocumentPresentable(row.type_mime),
     };
 
     publierDocumentLive(opts.reunionId, etat);
-    return etat;
+    return {
+      ...etat,
+      url_lecture: urlExistante ?? null,
+    };
   }
 
   async obtenirLive(reunionId: string): Promise<DocumentLiveEtat> {
@@ -407,12 +450,35 @@ export class DocumentsReunionService {
       return { document_id: null, page: 1, scroll_ratio: 0 };
     }
 
+    const memoire = obtenirEtatDocumentLive(reunionId);
+    const page = Math.max(1, reunion.document_live_page ?? 1);
+    const scrollRatio = Math.min(
+      1,
+      Math.max(0, Number(reunion.document_live_scroll ?? 0)),
+    );
+
+    // Réutilise l’URL en mémoire si même document (évite nouvelles URLs signées → reload PDF)
+    if (
+      memoire.document_id === reunion.document_live_id &&
+      memoire.url_lecture
+    ) {
+      return {
+        document_id: reunion.document_live_id,
+        page,
+        scroll_ratio: scrollRatio,
+        nom_fichier: memoire.nom_fichier ?? null,
+        type_mime: memoire.type_mime ?? null,
+        url_lecture: memoire.url_lecture,
+        presentable: memoire.presentable ?? true,
+      };
+    }
+
     try {
       const doc = await this.obtenirUrl(reunion.document_live_id);
       return {
         document_id: doc.id,
-        page: Math.max(1, reunion.document_live_page ?? 1),
-        scroll_ratio: Math.min(1, Math.max(0, Number(reunion.document_live_scroll ?? 0))),
+        page,
+        scroll_ratio: scrollRatio,
         nom_fichier: doc.nom_fichier,
         type_mime: doc.type_mime,
         url_lecture: doc.url_lecture,

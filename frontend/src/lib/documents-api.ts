@@ -15,6 +15,11 @@ export function obtenirUrlDocument(id: string) {
   return apiFetch<DocumentReunionAvecUrl>(`/api/documents/${id}/url`);
 }
 
+/** URL même origine pour le rendu pdf.js (auth Bearer). */
+export function urlFichierDocument(id: string): string {
+  return `${API_URL}/api/documents/${id}/fichier`;
+}
+
 export function supprimerDocument(id: string) {
   return apiFetch<{ message: string }>(`/api/documents/${id}`, {
     method: 'DELETE',

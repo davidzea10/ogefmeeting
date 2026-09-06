@@ -76,6 +76,14 @@ documentsRouter.get(
   asyncHandler((req, res) => documentsReunionController.obtenirUrl(req, res)),
 );
 
+documentsRouter.get(
+  '/:id/fichier',
+  requireAuth,
+  requirePermission(PERMISSIONS.REUNIONS_LIRE),
+  validateParams(idParamSchema),
+  asyncHandler((req, res) => documentsReunionController.telechargerFichier(req, res)),
+);
+
 documentsRouter.delete(
   '/:id',
   requireAuth,

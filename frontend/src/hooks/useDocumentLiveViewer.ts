@@ -18,8 +18,14 @@ const ETAT_VIDE: DocumentLiveEtat = {
   scroll_ratio: 0,
 };
 
+function presqueEgal(a: number, b: number): boolean {
+  return Math.abs(a - b) < 0.002;
+}
+
 /**
- * Suit la présentation document (participants + organisateur en secours).
+ * Suit la présentation document.
+ * Conserve `url_lecture` tant que le document_id ne change pas
+ * (évite de recharger le PDF à chaque sync / poll).
  */
 export function useDocumentLiveViewer(reunionId: string, enabled: boolean) {
   const [etat, setEtat] = useState<DocumentLiveEtat>(ETAT_VIDE);
@@ -28,14 +34,35 @@ export function useDocumentLiveViewer(reunionId: string, enabled: boolean) {
   const pingRef = useRef<number | null>(null);
 
   const appliquer = useCallback((next: DocumentLiveEtat) => {
-    setEtat({
-      document_id: next.document_id,
-      page: next.page ?? 1,
-      scroll_ratio: next.scroll_ratio ?? 0,
-      nom_fichier: next.nom_fichier ?? null,
-      type_mime: next.type_mime ?? null,
-      url_lecture: next.url_lecture ?? null,
-      presentable: next.presentable,
+    setEtat((prev) => {
+      const page = next.page ?? 1;
+      const scroll = next.scroll_ratio ?? 0;
+      const sameDoc = prev.document_id === next.document_id;
+
+      if (
+        sameDoc &&
+        prev.page === page &&
+        presqueEgal(prev.scroll_ratio ?? 0, scroll) &&
+        (next.url_lecture == null || next.url_lecture === prev.url_lecture)
+      ) {
+        return prev;
+      }
+
+      return {
+        document_id: next.document_id,
+        page,
+        scroll_ratio: scroll,
+        nom_fichier: next.nom_fichier ?? (sameDoc ? prev.nom_fichier : null) ?? null,
+        type_mime: next.type_mime ?? (sameDoc ? prev.type_mime : null) ?? null,
+        // URL stable : ne pas remplacer tant que c’est le même document
+        url_lecture: sameDoc
+          ? (prev.url_lecture ?? next.url_lecture ?? null)
+          : (next.url_lecture ?? null),
+        presentable:
+          next.presentable ??
+          (sameDoc ? prev.presentable : undefined) ??
+          Boolean(next.document_id),
+      };
     });
   }, []);
 
@@ -89,13 +116,15 @@ export function useDocumentLiveViewer(reunionId: string, enabled: boolean) {
 
     void demarrer();
 
+    // Secours HTTP uniquement si WS coupé — et fusion sans casser l’URL
     const poll = window.setInterval(() => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) return;
       void obtenirDocumentLive(reunionId)
         .then((data) => {
           if (!cancelled) appliquer(data);
         })
         .catch(() => undefined);
-    }, 4000);
+    }, 5000);
 
     return () => {
       cancelled = true;

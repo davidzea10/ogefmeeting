@@ -52,14 +52,21 @@ export function publierDocumentLive(
   etat: DocumentLiveEtat,
 ): void {
   const session = getOrCreate(reunionId);
+  const sameDoc = session.etat.document_id === etat.document_id;
   session.etat = {
     document_id: etat.document_id,
     page: etat.page ?? 1,
     scroll_ratio: etat.scroll_ratio ?? 0,
-    nom_fichier: etat.nom_fichier ?? null,
-    type_mime: etat.type_mime ?? null,
-    url_lecture: etat.url_lecture ?? null,
-    presentable: etat.presentable ?? Boolean(etat.document_id),
+    nom_fichier: etat.nom_fichier ?? (sameDoc ? session.etat.nom_fichier : null) ?? null,
+    type_mime: etat.type_mime ?? (sameDoc ? session.etat.type_mime : null) ?? null,
+    // Conserves l’URL déjà connue pour le même document (évite rechargement PDF)
+    url_lecture: sameDoc
+      ? (session.etat.url_lecture ?? etat.url_lecture ?? null)
+      : (etat.url_lecture ?? null),
+    presentable:
+      etat.presentable ??
+      (sameDoc ? session.etat.presentable : undefined) ??
+      Boolean(etat.document_id),
   };
   diffuser(reunionId, session);
 }
