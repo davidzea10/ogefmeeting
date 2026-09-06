@@ -78,7 +78,7 @@ async function rendrePdfDansConteneur(
   const loading = getDocument({ data: bytes });
   const pdf = await loading.promise;
   if (signal.aborted) {
-    await pdf.destroy().catch(() => undefined);
+    void loading.destroy();
     return 0;
   }
 
