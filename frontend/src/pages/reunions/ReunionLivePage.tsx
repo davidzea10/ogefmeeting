@@ -1,5 +1,6 @@
 import { useAnnouncerStore } from '@/components/a11y/LiveAnnouncer';
 import { Logo } from '@/components/brand/Logo';
+import { AjouterInvitesModal } from '@/components/reunions/AjouterInvitesModal';
 import { ReunionStatusBadge } from '@/components/reunions/ReunionStatusBadge';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -24,6 +25,7 @@ import {
   annulerLiveReunion,
   cloturerReunion,
   creerCompteRendu,
+  gererParticipants,
   listerComptesRendusReunion,
   listerProfils,
   mettreReunionEnPause,
@@ -48,6 +50,7 @@ import {
   Play,
   Radio,
   Square,
+  UserPlus,
   Users,
   XCircle,
 } from 'lucide-react';
@@ -66,6 +69,7 @@ export function ReunionLivePage() {
   const motionSafe = useMotionSafe();
   const [showCloture, setShowCloture] = useState(false);
   const [showAnnuler, setShowAnnuler] = useState(false);
+  const [modalInvitesOuvert, setModalInvitesOuvert] = useState(false);
   const [triPresence, setTriPresence] = useState<TriPresenceLive>('arrivee');
   const [filtrePresentsSeulement, setFiltrePresentsSeulement] = useState(false);
   const statutPrecedentRef = useRef<string | undefined>(undefined);
@@ -204,6 +208,43 @@ export function ReunionLivePage() {
     }) => modifierParticipantStatut(id!, participantId, statut),
     onSuccess: async () => {
       announce('Présence mise à jour.');
+      await invalidate();
+    },
+    onError: (e: Error) => announce(e.message),
+  });
+
+  const dejaInvitesIds = useMemo(
+    () =>
+      new Set(
+        (reunionQuery.data?.participants ?? []).map((p) => p.profil_id),
+      ),
+    [reunionQuery.data?.participants],
+  );
+
+  const ajouterInvitesMut = useMutation({
+    mutationFn: (nouveauxIds: string[]) => {
+      const existants = reunionQuery.data?.participants ?? [];
+      const payload = [
+        ...existants.map((p) => ({
+          profil_id: p.profil_id,
+          statut: p.statut,
+        })),
+        // En live : confirmés d’office pour pouvoir rejoindre immédiatement
+        ...nouveauxIds.map((profil_id) => ({
+          profil_id,
+          statut: 'confirme' as const,
+        })),
+      ];
+      return gererParticipants(id!, payload);
+    },
+    onSuccess: async (_data, nouveauxIds) => {
+      const n = nouveauxIds.length;
+      announce(
+        n > 1
+          ? `${n} invités ajoutés — notification et e-mail envoyés.`
+          : 'Invité ajouté — notification et e-mail envoyés.',
+      );
+      setModalInvitesOuvert(false);
       await invalidate();
     },
     onError: (e: Error) => announce(e.message),
@@ -604,6 +645,17 @@ export function ReunionLivePage() {
                   Présences
                 </h2>
                 <div className="flex flex-wrap items-center gap-2">
+                  {peutConduireLive && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="!bg-ogefrem-yellow !text-ogefrem-navy hover:!bg-ogefrem-yellow/90"
+                      onClick={() => setModalInvitesOuvert(true)}
+                    >
+                      <UserPlus className="h-4 w-4" aria-hidden />
+                      Ajouter des invités
+                    </Button>
+                  )}
                   <label className="flex items-center gap-1.5 text-xs text-white/70">
                     <span className="sr-only">Tri des présences</span>
                     <select
@@ -783,6 +835,19 @@ export function ReunionLivePage() {
           />
         )}
       </AnimatePresence>
+
+      {peutConduireLive && (
+        <AjouterInvitesModal
+          open={modalInvitesOuvert}
+          onClose={() => setModalInvitesOuvert(false)}
+          profils={profilsQuery.data?.items ?? []}
+          dejaInvitesIds={dejaInvitesIds}
+          loading={ajouterInvitesMut.isPending}
+          description="Les personnes sélectionnées seront ajoutées tout de suite (statut confirmé) et recevront une notification + e-mail pour rejoindre le live."
+          submitLabel="Ajouter au live"
+          onSubmit={(ids) => ajouterInvitesMut.mutate(ids)}
+        />
+      )}
     </div>
   );
 }

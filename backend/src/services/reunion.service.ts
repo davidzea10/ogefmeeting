@@ -1099,12 +1099,14 @@ export class ReunionService {
     const rows = input.participants.map((p) => {
       const ancien = anciensParProfil.get(p.profil_id);
       const estCreateur = reunion.cree_par === p.profil_id;
+      const enLive =
+        reunion.statut === 'en_cours' || reunion.statut === 'en_pause';
       return {
         reunion_id: id,
         profil_id: p.profil_id,
         statut: estCreateur
           ? 'confirme'
-          : (ancien?.statut ?? p.statut ?? 'invite'),
+          : (ancien?.statut ?? p.statut ?? (enLive ? 'confirme' : 'invite')),
       };
     });
 
@@ -1134,20 +1136,33 @@ export class ReunionService {
 
       const dateTxt = formaterDateFr(reunion.date_prevue);
       const lieuTxt = reunion.lieu ? `\nLieu : ${reunion.lieu}` : '';
-      const lienConfirmation = `/reunions/${id}/invitation`;
+      const enLive =
+        reunion.statut === 'en_cours' || reunion.statut === 'en_pause';
+      const lienConfirmation = enLive
+        ? `/reunions/${id}/live`
+        : `/reunions/${id}/invitation`;
 
       await notificationService.creerPourProfils(
         (profils ?? []) as { id: string; email: string; prenom: string; nom: string }[],
         {
           type: 'invitation_reunion',
-          titre: 'Invitation à une réunion',
-          message:
-            `Vous êtes invité(e) à la réunion « ${reunion.titre} ».\n` +
-            `Date : ${dateTxt}${lieuTxt}\n\n` +
-            `Merci de confirmer votre présence dans Ogefmeeting (bouton ci-dessous ou onglet Notifications).`,
+          titre: enLive
+            ? 'Invitation — réunion en cours'
+            : 'Invitation à une réunion',
+          message: enLive
+            ? `Vous êtes invité(e) à la réunion « ${reunion.titre} », déjà en cours.\n` +
+              `Date : ${dateTxt}${lieuTxt}\n\n` +
+              `Ouvrez Ogefmeeting pour rejoindre le live.`
+            : `Vous êtes invité(e) à la réunion « ${reunion.titre} ».\n` +
+              `Date : ${dateTxt}${lieuTxt}\n\n` +
+              `Merci de confirmer votre présence dans Ogefmeeting (bouton ci-dessous ou onglet Notifications).`,
           lien: lienConfirmation,
-          emailSujet: `[Ogefmeeting] Invitation — ${reunion.titre}`,
-          emailBoutonLibelle: 'Confirmer mon invitation',
+          emailSujet: enLive
+            ? `[Ogefmeeting] Live en cours — ${reunion.titre}`
+            : `[Ogefmeeting] Invitation — ${reunion.titre}`,
+          emailBoutonLibelle: enLive
+            ? 'Rejoindre le live'
+            : 'Confirmer mon invitation',
           metadonnees: { reunion_id: id },
         },
       );

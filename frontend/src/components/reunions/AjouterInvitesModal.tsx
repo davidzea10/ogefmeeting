@@ -10,6 +10,10 @@ type Props = {
   /** Profils déjà participants (ne pas proposer). */
   dejaInvitesIds: Set<string>;
   loading?: boolean;
+  /** Texte d’aide sous le titre (contexte live, etc.). */
+  description?: string;
+  /** Libellé du bouton de validation. */
+  submitLabel?: string;
   onSubmit: (profilIds: string[]) => void;
 };
 
@@ -30,6 +34,8 @@ export function AjouterInvitesModal({
   profils,
   dejaInvitesIds,
   loading,
+  description = 'Les personnes sélectionnées recevront une invitation (app + e-mail).',
+  submitLabel,
   onSubmit,
 }: Props) {
   const [q, setQ] = useState('');
@@ -102,7 +108,7 @@ export function AjouterInvitesModal({
               Ajouter des invités
             </h2>
             <p className="mt-1 text-sm text-text-muted">
-              Les personnes sélectionnées recevront une invitation (app + e-mail).
+              {description}
             </p>
           </div>
           <button
@@ -203,9 +209,11 @@ export function AjouterInvitesModal({
             onClick={handleSubmit}
           >
             <UserPlus className="h-4 w-4" aria-hidden />
-            {selection.length > 1
-              ? `Envoyer ${selection.length} invitations`
-              : 'Envoyer l’invitation'}
+            {submitLabel
+              ? submitLabel
+              : selection.length > 1
+                ? `Envoyer ${selection.length} invitations`
+                : 'Envoyer l’invitation'}
           </Button>
         </div>
       </div>
