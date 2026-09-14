@@ -8,14 +8,6 @@ const SECTIONS_DEFAUT: SectionCompteRendu[] = [
   { cle: 'conclusion', libelle: 'Conclusion' },
 ];
 
-const LIBELLES_STATUT: Record<string, string> = {
-  brouillon: 'Brouillon',
-  soumis: 'Soumis',
-  en_revision: 'En révision',
-  valide: 'Validé',
-  archive: 'Archivé',
-};
-
 const LIBELLES_TYPE: Record<string, string> = {
   conseil_direction: 'Conseil de direction',
   technique: 'Technique',
@@ -66,7 +58,16 @@ export type PdfParticipantLigne = {
 
 export type PdfCompteRenduInput = {
   compteRendu: CompteRendu;
-  reunion: Pick<Reunion, 'titre' | 'date_prevue' | 'lieu' | 'type_reunion' | 'description'>;
+  reunion: Pick<
+    Reunion,
+    | 'titre'
+    | 'date_prevue'
+    | 'date_debut'
+    | 'date_fin'
+    | 'lieu'
+    | 'type_reunion'
+    | 'description'
+  >;
   sections?: SectionCompteRendu[] | null;
   participants?: PdfParticipantLigne[] | null;
   valideParNom?: string | null;
@@ -155,6 +156,22 @@ function formatDateFr(iso: string | null | undefined): string {
   }
 }
 
+/** Durée entre deux dates ISO (début / fin système de la réunion). */
+function formatDureeReunion(
+  debut: string | null | undefined,
+  fin: string | null | undefined,
+): string {
+  if (!debut || !fin) return '—';
+  const ms = new Date(fin).getTime() - new Date(debut).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return '—';
+  const totalMin = Math.round(ms / 60_000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h <= 0) return `${m} min`;
+  if (m === 0) return `${h} h`;
+  return `${h} h ${m.toString().padStart(2, '0')} min`;
+}
+
 function formatDateCourteFr(iso: string | null | undefined): string {
   if (!iso) return '—';
   try {
@@ -190,7 +207,7 @@ export function nomFichierPdfParticipants(reunionTitre: string, version: number)
 
 export type PdfListeParticipantsInput = {
   compteRendu: CompteRendu;
-  reunion: Pick<Reunion, 'titre' | 'date_prevue' | 'lieu'>;
+  reunion: Pick<Reunion, 'titre' | 'date_prevue' | 'date_debut' | 'lieu'>;
   participants: PdfParticipantLigne[];
   enTetePdf?: string | null;
   sousTitrePdf?: string | null;
@@ -243,26 +260,33 @@ export async function genererPdfListeParticipants(
         lineGap: 1.5,
       });
     doc.save().rect(0, headerBandH, doc.page.width, 4).fill(COLORS.gold).restore();
+    doc.x = left;
     doc.y = headerBandH + 20;
 
     doc
       .fillColor(COLORS.muted)
       .fontSize(9)
       .font('Helvetica-Bold')
-      .text('LISTE DES PARTICIPANTS', { characterSpacing: 1.2 });
+      .text('LISTE DES PARTICIPANTS', left, doc.y, {
+        width: pageWidth,
+        characterSpacing: 1.2,
+        align: 'left',
+      });
     doc.moveDown(0.35);
     doc
       .fillColor(COLORS.navy)
       .fontSize(15)
       .font('Helvetica-Bold')
-      .text(reunion.titre, { width: pageWidth, lineGap: 2 });
+      .text(reunion.titre, left, doc.y, { width: pageWidth, lineGap: 2, align: 'left' });
     doc.moveDown(0.5);
     doc
       .fillColor(COLORS.muted)
       .fontSize(9)
       .font('Helvetica')
       .text(
-        `${formatDateFr(reunion.date_prevue)}${reunion.lieu ? ` · ${reunion.lieu}` : ''}`,
+        `${formatDateFr(reunion.date_debut || reunion.date_prevue)}${reunion.lieu ? ` · ${reunion.lieu}` : ''}`,
+        left,
+        doc.y,
         { width: pageWidth },
       );
     doc.moveDown(1.2);
@@ -317,51 +341,6 @@ function drawFooters(
         lineBreak: false,
       });
   }
-}
-
-function drawSignatureBlock(doc: PDFKit.PDFDocument, pageWidth: number) {
-  const left = doc.page.margins.left;
-  const blockH = 58;
-  const restant = bottomLimit(doc) - doc.y;
-  if (restant < blockH) {
-    doc.addPage();
-  }
-
-  const sigY = doc.y;
-  doc
-    .strokeColor(COLORS.line)
-    .lineWidth(0.8)
-    .moveTo(left, sigY)
-    .lineTo(left + pageWidth, sigY)
-    .stroke();
-
-  const labelY = sigY + 12;
-  doc.fillColor(COLORS.muted).fontSize(8).font('Helvetica');
-  doc.text('Validation', left, labelY, { width: pageWidth / 2, lineBreak: false });
-  doc.text('Secrétariat / Direction', left + pageWidth / 2, labelY, {
-    width: pageWidth / 2,
-    lineBreak: false,
-  });
-
-  const lineY = labelY + 26;
-  doc
-    .strokeColor(COLORS.muted)
-    .lineWidth(0.6)
-    .moveTo(left, lineY)
-    .lineTo(left + pageWidth * 0.35, lineY)
-    .stroke();
-  doc
-    .moveTo(left + pageWidth / 2, lineY)
-    .lineTo(left + pageWidth / 2 + pageWidth * 0.35, lineY)
-    .stroke();
-
-  doc
-    .fillColor(COLORS.muted)
-    .fontSize(7.5)
-    .text('Nom et signature', left, lineY + 8, { lineBreak: false })
-    .text('Nom et signature', left + pageWidth / 2, lineY + 8, { lineBreak: false });
-
-  doc.y = Math.min(lineY + 24, bottomLimit(doc) - 2);
 }
 
 function drawSectionTitle(doc: PDFKit.PDFDocument, title: string, pageWidth: number) {
@@ -548,7 +527,7 @@ function drawParticipantsTable(
  * Génère un PDF A4 professionnel OGEFREM.
  */
 export async function genererPdfCompteRendu(input: PdfCompteRenduInput): Promise<Buffer> {
-  const { compteRendu, reunion, valideParNom, participants } = input;
+  const { compteRendu, reunion, participants } = input;
   const sections =
     input.sections && input.sections.length > 0
       ? input.sections.filter((s) => s.cle !== 'decisions' && s.cle !== 'actions')
@@ -626,42 +605,46 @@ export async function genererPdfCompteRendu(input: PdfCompteRenduInput): Promise
 
     doc.save().rect(0, headerBandH, doc.page.width, 4).fill(COLORS.gold).restore();
 
+    // Remet le curseur à gauche (sinon le titre continue à droite de l’en-tête)
+    doc.x = left;
     doc.y = headerBandH + 18;
 
     doc
       .fillColor(COLORS.muted)
       .fontSize(9)
       .font('Helvetica-Bold')
-      .text('COMPTE RENDU DE RÉUNION', { characterSpacing: 1.4 });
+      .text('COMPTE RENDU DE RÉUNION', left, doc.y, {
+        width: pageWidth,
+        characterSpacing: 1.4,
+        align: 'left',
+      });
 
     doc.moveDown(0.35);
     doc
       .fillColor(COLORS.navy)
       .fontSize(17)
       .font('Helvetica-Bold')
-      .text(reunion.titre, { width: pageWidth, lineGap: 2 });
+      .text(reunion.titre, left, doc.y, {
+        width: pageWidth,
+        lineGap: 2,
+        align: 'left',
+      });
 
     doc.moveDown(0.75);
 
-    // Encadré métadonnées
+    // Encadré métadonnées (début / fin / durée système — sans statut ni validation)
     const metaTop = doc.y;
+    const debutIso = reunion.date_debut || reunion.date_prevue;
+    const finIso = reunion.date_fin;
     const metaRows: Array<[string, string]> = [
-      ['Date', formatDateFr(reunion.date_prevue)],
+      ['Début', formatDateFr(debutIso)],
+      ['Fin', formatDateFr(finIso)],
+      ['Durée', formatDureeReunion(debutIso, finIso)],
       ['Lieu', reunion.lieu || '—'],
       ['Type', LIBELLES_TYPE[reunion.type_reunion] ?? reunion.type_reunion],
-      ['Statut', LIBELLES_STATUT[compteRendu.statut] ?? compteRendu.statut],
     ];
     if (reunion.description?.trim()) {
-      metaRows.splice(3, 0, ['Objet', reunion.description.trim()]);
-    }
-    if (compteRendu.soumis_le) {
-      metaRows.push(['Soumis le', formatDateFr(compteRendu.soumis_le)]);
-    }
-    if (compteRendu.valide_le) {
-      metaRows.push([
-        'Validé le',
-        `${formatDateFr(compteRendu.valide_le)}${valideParNom ? ` — ${valideParNom}` : ''}`,
-      ]);
+      metaRows.push(['Objet', reunion.description.trim()]);
     }
 
     const metaH = 18 + metaRows.length * 17 + 12;
@@ -686,6 +669,7 @@ export async function genererPdfCompteRendu(input: PdfCompteRenduInput): Promise
         .text(value, left + 108, metaY, { width: pageWidth - 130 });
       metaY += 17;
     }
+    doc.x = left;
     doc.y = metaTop + metaH + 22;
 
     const inclureParticipantsCorps = compteRendu.afficher_participants_corps !== false;
@@ -741,8 +725,6 @@ export async function genererPdfCompteRendu(input: PdfCompteRenduInput): Promise
       renderBlocs(doc, blocs, pageWidth);
       if (bottomLimit(doc) - doc.y > 12) doc.y += 8;
     }
-
-    drawSignatureBlock(doc, pageWidth);
 
     drawFooters(doc, pageWidth, left, enTete);
 

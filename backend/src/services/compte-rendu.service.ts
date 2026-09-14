@@ -530,7 +530,9 @@ export class CompteRenduService {
 
     const { data: reunion, error: reunionError } = await supabase
       .from(TABLES.reunions)
-      .select('titre, date_prevue, lieu, type_reunion, description, modele_id')
+      .select(
+        'titre, date_prevue, date_debut, date_fin, lieu, type_reunion, description, modele_id',
+      )
       .eq('id', compte_rendu.reunion_id)
       .single();
 
@@ -585,7 +587,13 @@ export class CompteRenduService {
       compteRendu: compte_rendu,
       reunion: reunion as Pick<
         import('@ogefmeeting/shared').Reunion,
-        'titre' | 'date_prevue' | 'lieu' | 'type_reunion' | 'description'
+        | 'titre'
+        | 'date_prevue'
+        | 'date_debut'
+        | 'date_fin'
+        | 'lieu'
+        | 'type_reunion'
+        | 'description'
       >,
       sections,
       participants,
@@ -617,7 +625,7 @@ export class CompteRenduService {
 
     const { data: reunion, error: reunionError } = await supabase
       .from(TABLES.reunions)
-      .select('titre, date_prevue, lieu')
+      .select('titre, date_prevue, date_debut, lieu')
       .eq('id', compte_rendu.reunion_id)
       .single();
 
@@ -646,7 +654,7 @@ export class CompteRenduService {
       compteRendu: compte_rendu,
       reunion: reunion as Pick<
         import('@ogefmeeting/shared').Reunion,
-        'titre' | 'date_prevue' | 'lieu'
+        'titre' | 'date_prevue' | 'date_debut' | 'lieu'
       >,
       participants,
       enTetePdf: parametres.en_tete_pdf,
