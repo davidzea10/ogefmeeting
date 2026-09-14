@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/Button';
 import type { Profil } from '@ogefmeeting/shared';
+import { filtrerProfilsParDirections } from '@/lib/annuaire-directions';
 import { Search, UserPlus, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -9,6 +10,8 @@ type Props = {
   profils: Profil[];
   /** Profils déjà participants (ne pas proposer). */
   dejaInvitesIds: Set<string>;
+  /** Si renseigné : n’afficher que les profils de ces directions. */
+  directionIds?: string[];
   loading?: boolean;
   /** Texte d’aide sous le titre (contexte live, etc.). */
   description?: string;
@@ -33,6 +36,7 @@ export function AjouterInvitesModal({
   onClose,
   profils,
   dejaInvitesIds,
+  directionIds = [],
   loading,
   description = 'Les personnes sélectionnées recevront une invitation (app + e-mail).',
   submitLabel,
@@ -48,9 +52,14 @@ export function AjouterInvitesModal({
     }
   }, [open]);
 
+  const profilsScope = useMemo(
+    () => filtrerProfilsParDirections(profils, directionIds),
+    [profils, directionIds],
+  );
+
   const disponibles = useMemo(
-    () => profils.filter((p) => !dejaInvitesIds.has(p.id)),
-    [profils, dejaInvitesIds],
+    () => profilsScope.filter((p) => !dejaInvitesIds.has(p.id)),
+    [profilsScope, dejaInvitesIds],
   );
 
   const filtered = useMemo(() => {
@@ -109,6 +118,12 @@ export function AjouterInvitesModal({
             </h2>
             <p className="mt-1 text-sm text-text-muted">
               {description}
+              {directionIds.length > 0 ? (
+                <>
+                  {' '}
+                  Annuaire limité aux directions concernées par cette réunion.
+                </>
+              ) : null}
             </p>
           </div>
           <button
@@ -153,7 +168,9 @@ export function AjouterInvitesModal({
           {filtered.length === 0 ? (
             <li className="px-5 py-8 text-center text-sm text-text-muted">
               {disponibles.length === 0
-                ? 'Tous les profils de l’annuaire sont déjà invités.'
+                ? directionIds.length > 0
+                  ? 'Aucun profil disponible dans les directions concernées (ou déjà invités).'
+                  : 'Tous les profils de l’annuaire sont déjà invités.'
                 : 'Aucun résultat pour cette recherche.'}
             </li>
           ) : (

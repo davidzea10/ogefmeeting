@@ -24,9 +24,11 @@ export const LIBELLES_NIVEAU_DETAIL_CR: Record<NiveauDetailCr, string> = {
 };
 
 export const DESCRIPTIONS_NIVEAU_DETAIL_CR: Record<NiveauDetailCr, string> = {
-  simple: 'Synthèse courte — points essentiels et sous-éléments en bref.',
-  detaille: 'Standard — un sous-point par projet ou sujet cité, avec développement.',
-  tres_detaille: 'Exhaustif — reprend tout le contenu de la transcription.',
+  simple:
+    'Essentiel structuré — tous les sous-points ODJ avec faits, décisions et actions (niveau proche de l’ancien « très détaillé »).',
+  detaille:
+    'Standard recommandé — développement complet par sous-point, chiffres et responsables.',
+  tres_detaille: 'Exhaustif — reprend quasi intégralement la transcription, sans omission.',
 };
 
 /** Secrétariat / direction / admin. */

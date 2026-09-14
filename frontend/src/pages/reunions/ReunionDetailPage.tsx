@@ -9,6 +9,7 @@ import { ReunionTimeline } from '@/components/reunions/ReunionTimeline';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { listerActions, listerDecisions } from '@/lib/actions-decisions-api';
+import { idsDirectionsReunion } from '@/lib/annuaire-directions';
 import {
   formatDateHeure,
   formatDirectionsListe,
@@ -174,6 +175,11 @@ export function ReunionDetailPage() {
         (reunionQuery.data?.participants ?? []).map((p) => p.profil_id),
       ),
     [reunionQuery.data?.participants],
+  );
+
+  const directionIdsInvites = useMemo(
+    () => idsDirectionsReunion(reunionQuery.data ?? {}),
+    [reunionQuery.data],
   );
 
   const participantsTries = useMemo(() => {
@@ -1005,6 +1011,7 @@ export function ReunionDetailPage() {
         onClose={() => setModalInvitesOuvert(false)}
         profils={profilsQuery.data?.items ?? []}
         dejaInvitesIds={dejaInvitesIds}
+        directionIds={directionIdsInvites}
         loading={ajouterInvitesMut.isPending}
         onSubmit={(ids) => ajouterInvitesMut.mutate(ids)}
       />

@@ -136,40 +136,43 @@ function formaterDirections(): string {
 }
 
 function consignesNiveau(niveau: NiveauDetailCr, nbMots: number): string {
-  const pages = Math.max(1, Math.min(5, Math.round(nbMots / 300)));
+  const pages = Math.max(1, Math.min(8, Math.round(nbMots / 280)));
   switch (niveau) {
     case 'simple':
       return `
-NIVEAU DEMANDÉ : SIMPLE (compte rendu synthétique)
-- Introduction courte (3-5 phrases).
-- Pour CHAQUE point d'ordre du jour : 1 paragraphe d'introduction + sous-points obligatoires
-  (1 à 2 phrases par sous-point : projet, dossier ou sujet cité).
-- Conclusion brève (3-5 phrases).
-- Viser environ ${Math.max(1, Math.round(pages * 0.5))} page(s) A4.
-- Ne pas omettre les noms de projets / dossiers mentionnés : un sous-point par élément.`;
+NIVEAU DEMANDÉ : SIMPLE (synthèse structurée mais complète sur l’essentiel)
+- Introduction (5 à 8 phrases) : contexte, objectifs, déroulement, directions impliquées.
+- Pour CHAQUE point d’ordre du jour : paragraphe d’introduction + TOUS les sous-points
+  identifiables (chaque projet, dossier, thème, décision ou chiffre cité sous ce point).
+- Chaque sous-point : 3 à 5 phrases avec faits, échanges, décisions, actions et échéances
+  si mentionnées. Ne pas fusionner plusieurs sujets dans un seul sous-point vague.
+- Conclusion (5 à 8 phrases) : bilan, suites à donner, perspectives.
+- Viser ${Math.max(2, pages)} à ${Math.max(3, pages + 1)} page(s) A4.
+- Règle : couvrir tous les éléments essentiels de la transcription ; ne rien omettre
+  de ce qui est rattaché à un point d’ordre du jour.`;
     case 'tres_detaille':
       return `
 NIVEAU DEMANDÉ : TRÈS DÉTAILLÉ (compte rendu exhaustif)
-- Introduction complète (contexte, objectifs, participants, enjeux).
-- Pour CHAQUE point d'ordre du jour : paragraphe d'introduction + TOUS les sous-points
-  identifiables dans la transcription (chaque projet, dossier, thème, décision, chiffre,
-  nom de personne ou organisation cité sous ce point).
-- Chaque sous-point : développement en plusieurs phrases (faits, échanges, décisions,
-  actions, remarques, échéances si mentionnées).
-- Conclusion développée avec bilan et perspectives.
-- Viser ${Math.max(2, pages + 1)} à ${Math.max(3, pages + 2)} page(s) A4.
-- Règle d'or : ne RIEN omettre de la transcription rattachée à un point d'ordre du jour.
-  Si 5 projets sont cités sous « Projets en cours », il faut 5 sous-points distincts.`;
+- Introduction développée (contexte, objectifs, participants clés, enjeux, historique si cité).
+- Pour CHAQUE point d’ordre du jour : paragraphe d’introduction + TOUS les sous-points
+  de la transcription (projets, dossiers, thèmes, noms, organisations, chiffres, dates).
+- Chaque sous-point : développement long (plusieurs paragraphes si nécessaire) :
+  faits, arguments, positions, décisions, actions, responsables, délais, risques.
+- Conclusion très développée (bilan, décisions transverses, prochaines étapes).
+- Viser ${Math.max(4, pages + 2)} à ${Math.max(6, pages + 4)} page(s) A4.
+- Règle d’or : ne RIEN omettre de la transcription rattachée à un point ODJ.`;
     default:
       return `
-NIVEAU DEMANDÉ : DÉTAILLÉ (compte rendu standard)
-- Introduction soignée (1 paragraphe).
-- Pour CHAQUE point d'ordre du jour : paragraphe d'introduction + sous-points pour chaque
-  projet, dossier ou sujet distinct mentionné (1 paragraphe par sous-point).
-- Intégrer décisions, actions et remarques dans le texte des sous-points.
-- Conclusion claire.
-- Viser environ ${Math.max(1, pages)} à ${Math.max(2, pages + 1)} page(s) A4.
-- Ne pas fusionner plusieurs projets dans un seul sous-point vague.`;
+NIVEAU DEMANDÉ : DÉTAILLÉ (compte rendu standard OGEFREM — niveau par défaut)
+- Introduction soignée (6 à 10 phrases) : contexte institutionnel, objet, participants,
+  enjeux et déroulement global.
+- Pour CHAQUE point d’ordre du jour : paragraphe d’introduction + sous-points pour chaque
+  projet, dossier, thème ou sujet distinct (un sous-point = un élément concret cité).
+- Chaque sous-point : 4 à 7 phrases minimum (faits, échanges, décisions, actions,
+  remarques, chiffres, noms propres, échéances). Intégrer l’essentiel sans raccourcir à l’excès.
+- Conclusion claire et développée (6 à 10 phrases).
+- Viser ${Math.max(3, pages + 1)} à ${Math.max(5, pages + 2)} page(s) A4.
+- Exiger : décisions, actions, responsables et délais dès qu’ils apparaissent dans la transcription.`;
   }
 }
 
@@ -197,7 +200,8 @@ STRUCTURE OBLIGATOIRE DU RAPPORT :
 RÈGLES CRITIQUES :
 - L'ordre du jour est le plan du rapport : un point ODJ = un point du rapport.
 - Relier chaque extrait de la transcription au bon point ODJ.
-- Extraire TOUS les éléments clés (projets, noms propres, chiffres, décisions).
+- Extraire TOUS les éléments clés (projets, noms propres, chiffres, décisions, actions,
+  responsables, échéances). Un compte rendu trop court est une erreur : développer l’essentiel.
 - Ne jamais inventer un fait absent de la transcription.
 - Français administratif soigné.
 - Répondre UNIQUEMENT en JSON valide.`;
@@ -412,11 +416,11 @@ export function brouillonVersContenuSections(
 function maxTokensPourNiveau(niveau: NiveauDetailCr): number {
   switch (niveau) {
     case 'simple':
-      return 4096;
+      return 10000;
     case 'tres_detaille':
-      return 12000;
+      return 16384;
     default:
-      return 8000;
+      return 14000;
   }
 }
 
@@ -458,7 +462,7 @@ export class CrIaService {
       },
       body: JSON.stringify({
         model,
-        temperature: niveau === 'tres_detaille' ? 0.25 : 0.35,
+        temperature: niveau === 'tres_detaille' ? 0.22 : 0.28,
         max_tokens: maxTokensPourNiveau(niveau),
         response_format: { type: 'json_object' },
         messages: [

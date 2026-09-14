@@ -15,6 +15,7 @@ import {
   type TriPresenceLive,
 } from '@/lib/live-presence';
 import { peutRejoindreLive, monStatutParticipant } from '@/lib/invitation-live';
+import { idsDirectionsReunion } from '@/lib/annuaire-directions';
 import { isRealtimeConfigured } from '@/lib/supabase-browser';
 import { easeOutExpo, useMotionSafe } from '@/lib/motion';
 import { EnregistrementLivePanel, type EnregistrementLivePanelHandle } from '@/components/reunions/EnregistrementLivePanel';
@@ -219,6 +220,11 @@ export function ReunionLivePage() {
         (reunionQuery.data?.participants ?? []).map((p) => p.profil_id),
       ),
     [reunionQuery.data?.participants],
+  );
+
+  const directionIdsInvites = useMemo(
+    () => idsDirectionsReunion(reunionQuery.data ?? {}),
+    [reunionQuery.data],
   );
 
   const ajouterInvitesMut = useMutation({
@@ -842,6 +848,7 @@ export function ReunionLivePage() {
           onClose={() => setModalInvitesOuvert(false)}
           profils={profilsQuery.data?.items ?? []}
           dejaInvitesIds={dejaInvitesIds}
+          directionIds={directionIdsInvites}
           loading={ajouterInvitesMut.isPending}
           description="Les personnes sélectionnées seront ajoutées tout de suite (statut confirmé) et recevront une notification + e-mail pour rejoindre le live."
           submitLabel="Ajouter au live"
