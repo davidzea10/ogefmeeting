@@ -136,43 +136,47 @@ function formaterDirections(): string {
 }
 
 function consignesNiveau(niveau: NiveauDetailCr, nbMots: number): string {
-  const pages = Math.max(1, Math.min(8, Math.round(nbMots / 280)));
+  // Volume cible ≈ 2× les anciennes consignes (rapport administratif dense type OGEFREM)
+  const pages = Math.max(2, Math.min(14, Math.round((nbMots * 2) / 280)));
   switch (niveau) {
     case 'simple':
       return `
-NIVEAU DEMANDÉ : SIMPLE (synthèse structurée mais complète sur l’essentiel)
-- Introduction (5 à 8 phrases) : contexte, objectifs, déroulement, directions impliquées.
+NIVEAU DEMANDÉ : SIMPLE (synthèse structurée mais complète — volume ×2 vs ancien simple)
+- Introduction développée (8 à 12 phrases) : contexte, objectifs, déroulement, directions.
 - Pour CHAQUE point d’ordre du jour : paragraphe d’introduction + TOUS les sous-points
-  identifiables (chaque projet, dossier, thème, décision ou chiffre cité sous ce point).
-- Chaque sous-point : 3 à 5 phrases avec faits, échanges, décisions, actions et échéances
-  si mentionnées. Ne pas fusionner plusieurs sujets dans un seul sous-point vague.
-- Conclusion (5 à 8 phrases) : bilan, suites à donner, perspectives.
-- Viser ${Math.max(2, pages)} à ${Math.max(3, pages + 1)} page(s) A4.
-- Règle : couvrir tous les éléments essentiels de la transcription ; ne rien omettre
-  de ce qui est rattaché à un point d’ordre du jour.`;
+  (chaque projet, dossier, thème, décision, chiffre).
+- Chaque sous-point : 5 à 8 phrases (faits, échanges, décisions, actions, échéances).
+- Conclusion (8 à 12 phrases).
+- Viser ${Math.max(3, pages)} à ${Math.max(5, pages + 1)} page(s) A4.
+- Couvrir tous les éléments essentiels ; un CR trop court est une erreur.`;
     case 'tres_detaille':
       return `
-NIVEAU DEMANDÉ : TRÈS DÉTAILLÉ (compte rendu exhaustif)
-- Introduction développée (contexte, objectifs, participants clés, enjeux, historique si cité).
-- Pour CHAQUE point d’ordre du jour : paragraphe d’introduction + TOUS les sous-points
-  de la transcription (projets, dossiers, thèmes, noms, organisations, chiffres, dates).
-- Chaque sous-point : développement long (plusieurs paragraphes si nécessaire) :
-  faits, arguments, positions, décisions, actions, responsables, délais, risques.
-- Conclusion très développée (bilan, décisions transverses, prochaines étapes).
-- Viser ${Math.max(4, pages + 2)} à ${Math.max(6, pages + 4)} page(s) A4.
-- Règle d’or : ne RIEN omettre de la transcription rattachée à un point ODJ.`;
+NIVEAU DEMANDÉ : TRÈS DÉTAILLÉ — rapport administratif EXHAUSTIF (modèle OGEFREM type « Rapport relatif à… »)
+VOLUME OBLIGATOIRE (non négociable) :
+- Chaque SOUS-POINT : MINIMUM 150 mots (viser 180 à 250 mots). Compter les mots.
+- Intro de chaque grand point : MINIMUM 120 mots.
+- Conclusion : MINIMUM 200 mots.
+- Introduction générale : MINIMUM 150 mots.
+Un texte trop court = échec. Développer les échanges, reformuler ce qui a été dit, citer les éléments techniques.
+
+STRUCTURE OBLIGATOIRE EN CHIFFRES ROMAINS :
+I. Objectifs de la réunion (1er élément de points_ordre_jour, titre EXACT)
+II. III. IV. … thèmes abordés dans la transcription
+Conclusion dans le champ « conclusion »
+
+Style : français administratif, paragraphes longs (pas de listes sèches, pas de résumé télégraphique).
+Relater clairement ce qui a été présenté, demandé, répondu et décidé.
+Ne RIEN omettre de la transcription. Ne pas inventer.
+
+Viser ${Math.max(8, pages + 3)} à ${Math.max(14, pages + 6)} page(s) A4.`;
     default:
       return `
-NIVEAU DEMANDÉ : DÉTAILLÉ (compte rendu standard OGEFREM — niveau par défaut)
-- Introduction soignée (6 à 10 phrases) : contexte institutionnel, objet, participants,
-  enjeux et déroulement global.
-- Pour CHAQUE point d’ordre du jour : paragraphe d’introduction + sous-points pour chaque
-  projet, dossier, thème ou sujet distinct (un sous-point = un élément concret cité).
-- Chaque sous-point : 4 à 7 phrases minimum (faits, échanges, décisions, actions,
-  remarques, chiffres, noms propres, échéances). Intégrer l’essentiel sans raccourcir à l’excès.
-- Conclusion claire et développée (6 à 10 phrases).
-- Viser ${Math.max(3, pages + 1)} à ${Math.max(5, pages + 2)} page(s) A4.
-- Exiger : décisions, actions, responsables et délais dès qu’ils apparaissent dans la transcription.`;
+NIVEAU DEMANDÉ : DÉTAILLÉ (standard OGEFREM — volume ×2)
+- Introduction soignée (10 à 16 phrases).
+- Pour CHAQUE point ODJ : intro + sous-points (un élément concret = un sous-point).
+- Chaque sous-point : 6 à 12 phrases (faits, échanges, décisions, actions, chiffres, échéances).
+- Conclusion développée (10 à 16 phrases).
+- Viser ${Math.max(5, pages + 1)} à ${Math.max(8, pages + 3)} page(s) A4.`;
   }
 }
 
@@ -187,23 +191,18 @@ ${formaterDirections()}
 ${ORGANISATION_REUNIONS_OGEFREM}
 
 STRUCTURE OBLIGATOIRE DU RAPPORT :
-1. INTRODUCTION — contexte, objectifs et déroulement de la séance.
-   Ne PAS répéter le titre, la date, le lieu ni le type de réunion (déjà en en-tête du document).
-2. POINTS DE L'ORDRE DU JOUR — un bloc par point de l'ODJ fourni, avec :
-   - un paragraphe d'introduction du point (contenu du point) ;
-   - des SOUS-POINTS (sous_points) : un élément par projet, dossier, thème ou sujet
-     concret mentionné dans la transcription sous ce point d'ordre du jour.
-     Exemple : si l'ODJ contient « Projets en cours » et que la transcription cite
-     Ogefmeeting, FERI et Site web, tu dois créer 3 sous-points distincts.
-3. CONCLUSION — bilan et perspectives.
+1. INTRODUCTION — contexte et déroulement (sans recopier titre/date/lieu/type déjà en en-tête).
+2. POINTS DE L'ORDRE DU JOUR — un bloc par point, avec sous-points concrets.
+   En mode TRÈS DÉTAILLÉ : le 1er point s’intitule obligatoirement « Objectifs de la réunion »
+   (chiffre romain I.), puis les thèmes abordés (II., III., …), style rapport administratif OGEFREM.
+3. CONCLUSION — bilan, dispositions retenues, perspectives.
 
 RÈGLES CRITIQUES :
-- L'ordre du jour est le plan du rapport : un point ODJ = un point du rapport.
-- Relier chaque extrait de la transcription au bon point ODJ.
-- Extraire TOUS les éléments clés (projets, noms propres, chiffres, décisions, actions,
-  responsables, échéances). Un compte rendu trop court est une erreur : développer l’essentiel.
+- L'ordre du jour (ou les thèmes extraits de la transcription) structure le rapport.
+- Relater brièvement mais clairement ce qui a été dit / présenté / discuté.
+- Extraire TOUS les éléments clés. Un compte rendu trop court est une erreur grave.
 - Ne jamais inventer un fait absent de la transcription.
-- Français administratif soigné.
+- Français administratif soigné (paragraphes développés, pas de style télégraphique).
 - Répondre UNIQUEMENT en JSON valide.`;
 }
 
@@ -246,6 +245,11 @@ ${transcription.trim()}
 Transcription ≈ ${nbMots} mots.
 
 RAPPEL : l'introduction ne doit pas recopier le titre, la date, le lieu ou le type — déjà visibles en en-tête.
+${
+  niveau === 'tres_detaille'
+    ? 'RAPPEL TRÈS DÉTAILLÉ : le premier objet de points_ordre_jour doit avoir titre « Objectifs de la réunion » ; les titres suivants sont les thèmes abordés ; volume dense, paragraphes longs.'
+    : ''
+}
 
 === FORMAT JSON ATTENDU ===
 {
@@ -349,19 +353,44 @@ function paragraphsHtml(text: string): string {
   return parts.map((p) => `<p>${escapeHtml(p)}</p>`).join('');
 }
 
-export function pointsOrdreJourVersHtml(points: PointOrdreJourIa[]): string {
+export function pointsOrdreJourVersHtml(
+  points: PointOrdreJourIa[],
+  options?: { chiffresRomains?: boolean },
+): string {
   if (!points.length) return '<p><em>Aucun point d’ordre du jour traité.</em></p>';
+  const romains = [
+    'I',
+    'II',
+    'III',
+    'IV',
+    'V',
+    'VI',
+    'VII',
+    'VIII',
+    'IX',
+    'X',
+    'XI',
+    'XII',
+    'XIII',
+    'XIV',
+    'XV',
+  ];
   return points
     .map((point, index) => {
-      const num = index + 1;
-      let html = `<h3>${num}. ${escapeHtml(point.titre)}</h3>`;
+      const num = options?.chiffresRomains
+        ? `${romains[index] ?? String(index + 1)}.`
+        : `${index + 1}.`;
+      let html = `<h3>${num} ${escapeHtml(point.titre)}</h3>`;
       if (point.contenu) {
         html += paragraphsHtml(point.contenu);
       }
       if (point.sous_points.length > 0) {
         for (let j = 0; j < point.sous_points.length; j++) {
           const sp = point.sous_points[j];
-          html += `<h4>${num}.${j + 1} ${escapeHtml(sp.titre)}</h4>`;
+          const subNum = options?.chiffresRomains
+            ? `${romains[index] ?? index + 1}.${j + 1}`
+            : `${index + 1}.${j + 1}`;
+          html += `<h4>${subNum} ${escapeHtml(sp.titre)}</h4>`;
           html += paragraphsHtml(sp.contenu) || '<p></p>';
         }
       } else if (!point.contenu) {
@@ -378,10 +407,13 @@ export function brouillonVersContenuSections(
   participantsHtml?: string,
 ): Record<string, string> {
   const niveauLibelle = LIBELLES_NIVEAU_DETAIL[brouillon.niveau_detail];
+  const romains = brouillon.niveau_detail === 'tres_detaille';
   const introHtml =
     paragraphsHtml(brouillon.introduction) +
     `<p><em>${escapeHtml(niveauLibelle)}</em></p>`;
-  const pointsHtml = pointsOrdreJourVersHtml(brouillon.points_ordre_jour);
+  const pointsHtml = pointsOrdreJourVersHtml(brouillon.points_ordre_jour, {
+    chiffresRomains: romains,
+  });
   const conclusionHtml = paragraphsHtml(brouillon.conclusion);
 
   const mapping: Record<string, string> = {
@@ -413,14 +445,22 @@ export function brouillonVersContenuSections(
   return contenu;
 }
 
+function compterMots(texte: string): number {
+  return texte
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+}
+
 function maxTokensPourNiveau(niveau: NiveauDetailCr): number {
   switch (niveau) {
     case 'simple':
-      return 10000;
-    case 'tres_detaille':
-      return 16384;
-    default:
       return 14000;
+    case 'tres_detaille':
+      // Sortie max réaliste selon modèles ; génération multi-passes ailleurs si besoin
+      return 16000;
+    default:
+      return 16000;
   }
 }
 
@@ -439,20 +479,12 @@ export class CrIaService {
     }
   }
 
-  async genererBrouillon(
-    reunion: ContexteReunionIa,
-    transcription: string,
-    niveau: NiveauDetailCr = 'detaille',
-  ): Promise<BrouillonCrIa> {
+  private async appelerJson(
+    system: string,
+    user: string,
+    opts?: { temperature?: number; maxTokens?: number },
+  ): Promise<string> {
     this.assurerConfigure();
-    const texte = transcription.trim();
-    if (texte.length < 40) {
-      throw new AppError(
-        400,
-        'Transcription trop courte pour générer un compte rendu. Sauvegardez d’abord le texte STT.',
-      );
-    }
-
     const model = env.OPENAI_MODEL || 'gpt-4o-mini';
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -462,12 +494,12 @@ export class CrIaService {
       },
       body: JSON.stringify({
         model,
-        temperature: niveau === 'tres_detaille' ? 0.22 : 0.28,
-        max_tokens: maxTokensPourNiveau(niveau),
+        temperature: opts?.temperature ?? 0.3,
+        max_tokens: opts?.maxTokens ?? 8000,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: construirePromptSysteme() },
-          { role: 'user', content: construirePromptUtilisateur(reunion, texte, niveau) },
+          { role: 'system', content: system },
+          { role: 'user', content: user },
         ],
       }),
     });
@@ -483,6 +515,30 @@ export class CrIaService {
     if (!contenu) {
       throw new AppError(502, 'Réponse OpenAI vide.');
     }
+    return contenu;
+  }
+
+  async genererBrouillon(
+    reunion: ContexteReunionIa,
+    transcription: string,
+    niveau: NiveauDetailCr = 'detaille',
+  ): Promise<BrouillonCrIa> {
+    const texte = transcription.trim();
+    if (texte.length < 40) {
+      throw new AppError(
+        400,
+        'Transcription trop courte pour générer un compte rendu. Sauvegardez d’abord le texte STT.',
+      );
+    }
+
+    const contenu = await this.appelerJson(
+      construirePromptSysteme(),
+      construirePromptUtilisateur(reunion, texte, niveau),
+      {
+        temperature: niveau === 'tres_detaille' ? 0.28 : 0.32,
+        maxTokens: maxTokensPourNiveau(niveau),
+      },
+    );
 
     try {
       return parserBrouillonCrIa(contenu, niveau);
@@ -491,6 +547,182 @@ export class CrIaService {
       throw new AppError(502, 'Le modèle a renvoyé un JSON invalide.');
     }
   }
+
+  /**
+   * Génère UN grand point exhaustif (≥150 mots / sous-point) à partir de la transcription.
+   */
+  async genererGrandPointExhaustif(opts: {
+    reunionTitre: string;
+    titrePoint: string;
+    indexRomain: string;
+    transcription: string;
+    contexteGlobal: string;
+  }): Promise<PointOrdreJourIa> {
+    const system = `Tu es rédacteur officiel de comptes rendus administratifs OGEFREM (RDC).
+Tu rédiges UNIQUEMENT le grand point « ${opts.titrePoint} » (chiffre romain ${opts.indexRomain}).
+Français administratif dense. Réponds UNIQUEMENT en JSON valide.
+Ne invente aucun fait hors transcription ; développe largement ce qui y figure.`;
+
+    const user = `Réunion : ${opts.reunionTitre}
+Contexte : ${opts.contexteGlobal}
+
+Grand point à rédiger : ${opts.indexRomain}. ${opts.titrePoint}
+
+EXIGENCES DE VOLUME (obligatoires) :
+- "contenu" (introduction du point) : MINIMUM 120 mots, idéalement 150–220.
+- Chaque "sous_points[].contenu" : MINIMUM 150 mots, idéalement 180–250.
+- Au moins 3 sous-points (4 à 6 si la transcription le permet).
+- Paragraphes développés : ce qui a été présenté, dit, demandé, répondu, décidé.
+
+=== TRANSCRIPTION ===
+${opts.transcription.trim()}
+
+=== JSON ===
+{
+  "titre": "${opts.titrePoint}",
+  "contenu": "...",
+  "sous_points": [
+    { "titre": "...", "contenu": "..." }
+  ]
+}`;
+
+    const brut = await this.appelerJson(system, user, {
+      temperature: 0.35,
+      maxTokens: 10000,
+    });
+
+    let parsed: unknown;
+    try {
+      let t = brut.trim();
+      if (t.startsWith('```')) {
+        const parts = t.split('```');
+        t = parts[1] ?? t;
+        if (t.startsWith('json')) t = t.slice(4);
+      }
+      parsed = JSON.parse(t.trim());
+    } catch {
+      throw new AppError(502, `JSON invalide pour le point « ${opts.titrePoint} ».`);
+    }
+
+    const point = normaliserPoint(parsed);
+    if (!point) {
+      throw new AppError(502, `Point « ${opts.titrePoint} » vide.`);
+    }
+    point.titre = opts.titrePoint;
+
+    // 2e passe : enrichir les sous-points trop courts
+    const enrichis: SousPointIa[] = [];
+    for (const sp of point.sous_points) {
+      if (compterMots(sp.contenu) >= 150) {
+        enrichis.push(sp);
+        continue;
+      }
+      try {
+        const etendu = await this.enrichirSousPoint({
+          titrePoint: opts.titrePoint,
+          titreSousPoint: sp.titre,
+          contenuActuel: sp.contenu,
+          transcription: opts.transcription,
+        });
+        enrichis.push(etendu);
+      } catch {
+        enrichis.push(sp);
+      }
+    }
+    point.sous_points = enrichis.length > 0 ? enrichis : point.sous_points;
+
+    if (compterMots(point.contenu) < 100) {
+      try {
+        const etenduIntro = await this.enrichirSousPoint({
+          titrePoint: opts.titrePoint,
+          titreSousPoint: `Introduction — ${opts.titrePoint}`,
+          contenuActuel: point.contenu,
+          transcription: opts.transcription,
+        });
+        point.contenu = etenduIntro.contenu;
+      } catch {
+        /* keep */
+      }
+    }
+
+    return point;
+  }
+
+  async enrichirSousPoint(opts: {
+    titrePoint: string;
+    titreSousPoint: string;
+    contenuActuel: string;
+    transcription: string;
+  }): Promise<SousPointIa> {
+    const system = `Tu enrichis un sous-point de compte rendu OGEFREM. JSON uniquement.
+Le champ "contenu" DOIT contenir AU MOINS 150 mots (viser 200).`;
+    const user = `Point parent : ${opts.titrePoint}
+Sous-point : ${opts.titreSousPoint}
+Texte actuel (à développer, pas à résumer) :
+${opts.contenuActuel || '(vide)'}
+
+=== TRANSCRIPTION (source) ===
+${opts.transcription.trim().slice(0, 24000)}
+
+JSON attendu :
+{ "titre": "${opts.titreSousPoint}", "contenu": "texte développé ≥ 150 mots" }`;
+
+    const brut = await this.appelerJson(system, user, {
+      temperature: 0.4,
+      maxTokens: 4000,
+    });
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(brut.trim()) as Record<string, unknown>;
+    } catch {
+      return {
+        titre: opts.titreSousPoint,
+        contenu: opts.contenuActuel,
+      };
+    }
+    const sp = normaliserSousPoint(parsed);
+    return (
+      sp ?? {
+        titre: opts.titreSousPoint,
+        contenu: opts.contenuActuel,
+      }
+    );
+  }
+
+  async genererIntroductionConclusion(opts: {
+    reunion: ContexteReunionIa;
+    transcription: string;
+    pointsTitres: string[];
+  }): Promise<{ introduction: string; conclusion: string }> {
+    const system = `Rédacteur CR OGEFREM. JSON uniquement. Textes longs et administratifs.`;
+    const user = `Réunion : ${opts.reunion.titre}
+Description : ${opts.reunion.description ?? ''}
+Points du rapport : ${opts.pointsTitres.join(' | ')}
+
+Écris :
+- introduction : MINIMUM 150 mots (contexte, parties, objet de la séance) — sans recopier titre/date/lieu.
+- conclusion : MINIMUM 200 mots (bilan, décisions, actions, échéances, suites).
+
+=== TRANSCRIPTION ===
+${opts.transcription.trim().slice(0, 28000)}
+
+JSON : { "introduction": "...", "conclusion": "..." }`;
+
+    const brut = await this.appelerJson(system, user, {
+      temperature: 0.3,
+      maxTokens: 6000,
+    });
+    try {
+      const parsed = JSON.parse(brut.trim()) as Record<string, unknown>;
+      return {
+        introduction: String(parsed.introduction ?? '').trim(),
+        conclusion: String(parsed.conclusion ?? '').trim(),
+      };
+    } catch {
+      return { introduction: '', conclusion: '' };
+    }
+  }
 }
 
 export const crIaService = new CrIaService();
+export { compterMots };

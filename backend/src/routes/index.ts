@@ -25,6 +25,7 @@ import { enregistrementsRouter } from './enregistrements.routes.js';
 import { documentsRouter } from './documents.routes.js';
 import { transcriptionsRouter } from './transcriptions.routes.js';
 import { nettoyageRouter } from './nettoyage.routes.js';
+import { crParticulierRouter } from './cr-particulier.routes.js';
 import { attachAuth } from '../middleware/auth.js';
 
 /**
@@ -57,3 +58,4 @@ apiRouter.use('/enregistrements', enregistrementsRouter);
 apiRouter.use('/documents', documentsRouter);
 apiRouter.use('/transcriptions', transcriptionsRouter);
 apiRouter.use('/admin/nettoyage', nettoyageRouter);
+apiRouter.use('/admin/cr-particulier', crParticulierRouter);

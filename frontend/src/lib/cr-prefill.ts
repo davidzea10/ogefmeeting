@@ -6,7 +6,6 @@ import type {
   SectionCompteRendu,
 } from '@ogefmeeting/shared';
 import { libelleFonction, rangHierarchieFonction } from '@ogefmeeting/shared';
-import { LIBELLES_PARTICIPANT } from '@/lib/labels';
 
 /**
  * Sections par défaut — pas de sections globales Décisions / Actions :
@@ -27,10 +26,27 @@ export const CLE_PARTICIPANTS_EXCLUS = 'participants_exclus_ids';
 /** Clé technique : overrides d’affichage (nom / statut / fonction) dans le CR. */
 export const CLE_PARTICIPANTS_OVERRIDES = 'participants_overrides';
 
+/** Clé technique : participants externes saisis à la main (hors OGEFREM). */
+export const CLE_PARTICIPANTS_EXTERNES = 'participants_externes';
+
+/** Clé technique : titre affiché sur le CR / PDF (override du titre réunion). */
+export const CLE_TITRE_REUNION_CR = 'titre_reunion_cr';
+
 export type ParticipantCrOverride = {
   nom?: string;
   statut?: string;
   fonction?: string | null;
+  email?: string;
+  direction?: string;
+};
+
+export type ParticipantExterneCr = {
+  id: string;
+  nom: string;
+  fonction: string;
+  email: string;
+  /** Direction libre (vide par défaut — ne pas forcer « Externe »). */
+  direction?: string;
 };
 
 const AVERTISSEMENT_IA_SUPPRIME =
@@ -40,7 +56,14 @@ const AVERTISSEMENT_IA_SUPPRIME =
 export function nettoyerContenuCr(contenu: ContenuCr): ContenuCr {
   const out: ContenuCr = {};
   for (const [cle, html] of Object.entries(contenu)) {
-    if (cle === CLE_PARTICIPANTS_EXCLUS || cle === CLE_PARTICIPANTS_OVERRIDES) continue;
+    if (
+      cle === CLE_PARTICIPANTS_EXCLUS ||
+      cle === CLE_PARTICIPANTS_OVERRIDES ||
+      cle === CLE_PARTICIPANTS_EXTERNES ||
+      cle === CLE_TITRE_REUNION_CR
+    ) {
+      continue;
+    }
     let h = html;
     if (typeof h === 'string' && h.includes(AVERTISSEMENT_IA_SUPPRIME)) {
       h = h
@@ -66,6 +89,14 @@ export function lireParticipantsExclusIds(
   return raw.filter((id): id is string => typeof id === 'string' && id.length > 0);
 }
 
+/** Titre affiché sur le CR (vide = utiliser le titre de la réunion). */
+export function lireTitreReunionCr(
+  contenu: Record<string, unknown> | null | undefined,
+): string {
+  const raw = contenu?.[CLE_TITRE_REUNION_CR];
+  return typeof raw === 'string' ? raw.trim() : '';
+}
+
 export function lireParticipantsOverrides(
   contenu: Record<string, unknown> | null | undefined,
 ): Record<string, ParticipantCrOverride> {
@@ -84,7 +115,34 @@ export function lireParticipantsOverrides(
           : typeof v.fonction === 'string'
             ? v.fonction
             : undefined,
+      email: typeof v.email === 'string' ? v.email : undefined,
+      direction: typeof v.direction === 'string' ? v.direction : undefined,
     };
+  }
+  return out;
+}
+
+export function lireParticipantsExternes(
+  contenu: Record<string, unknown> | null | undefined,
+): ParticipantExterneCr[] {
+  const raw = contenu?.[CLE_PARTICIPANTS_EXTERNES];
+  if (!Array.isArray(raw)) return [];
+  const out: ParticipantExterneCr[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const v = item as Record<string, unknown>;
+    const nom = typeof v.nom === 'string' ? v.nom.trim() : '';
+    if (!nom) continue;
+    out.push({
+      id:
+        typeof v.id === 'string' && v.id.trim()
+          ? v.id.trim()
+          : `ext-${crypto.randomUUID?.() ?? Date.now()}`,
+      nom,
+      fonction: typeof v.fonction === 'string' ? v.fonction.trim() : '',
+      email: typeof v.email === 'string' ? v.email.trim() : '',
+      direction: typeof v.direction === 'string' ? v.direction.trim() : '',
+    });
   }
   return out;
 }
@@ -93,10 +151,10 @@ export type LigneParticipantCr = {
   profil_id: string;
   nom: string;
   fonction: string | null;
-  matricule: string;
   email: string;
   direction: string;
-  statut: string;
+  /** true = saisi à la main (société externe, hors OGEFREM). */
+  externe?: boolean;
 };
 
 function escapeHtml(text: string): string {
@@ -129,6 +187,15 @@ function directionAbregee(
   return dir.nom.trim().toUpperCase();
 }
 
+function libelleFonctionAffichee(
+  fonction: string | null | undefined,
+  externe?: boolean,
+): string {
+  if (!fonction?.trim()) return '—';
+  if (externe) return fonction.trim();
+  return libelleFonction(fonction);
+}
+
 /** Construit les lignes du tableau participants, triées par hiérarchie de fonction. */
 export function construireLignesParticipantsCr(
   reunion: ReunionDetail,
@@ -146,7 +213,6 @@ export function construireLignesParticipantsCr(
     const nom =
       `${prenom} ${nomFamille}`.trim() || p.profil_id.slice(0, 8);
     const fonction = fromList?.fonction ?? embedded?.fonction ?? null;
-    const matricule = fromList?.matricule?.trim() || '—';
     const email =
       fromList?.email?.trim() || embedded?.email?.trim() || '—';
     const directionId = fromList?.direction_id ?? embedded?.direction_id ?? null;
@@ -154,10 +220,9 @@ export function construireLignesParticipantsCr(
       profil_id: p.profil_id,
       nom: nom || '—',
       fonction,
-      matricule,
       email,
       direction: directionAbregee(directionId, directionMap),
-      statut: LIBELLES_PARTICIPANT[p.statut] ?? p.statut,
+      externe: false,
     };
   });
 
@@ -169,6 +234,19 @@ export function construireLignesParticipantsCr(
   });
 }
 
+export function lignesExternesVersCr(
+  externes: ParticipantExterneCr[],
+): LigneParticipantCr[] {
+  return externes.map((e) => ({
+    profil_id: e.id,
+    nom: e.nom,
+    fonction: e.fonction || null,
+    email: e.email?.trim() || '—',
+    direction: e.direction?.trim() || '',
+    externe: true,
+  }));
+}
+
 /** HTML table pour la section participants du CR. */
 export function participantsTableHtml(lignes: LigneParticipantCr[]): string {
   if (lignes.length === 0) {
@@ -177,15 +255,16 @@ export function participantsTableHtml(lignes: LigneParticipantCr[]): string {
 
   const header =
     '<thead><tr>' +
-    '<th>Nom</th><th>Fonction</th><th>Matricule</th><th>Email</th><th>Direction</th><th>Statut</th>' +
+    '<th>Nom</th><th>Fonction</th><th>Email</th><th>Direction</th>' +
     '</tr></thead>';
 
   const body = lignes
     .map(
       (l) =>
-        `<tr><td>${escapeHtml(l.nom)}</td><td>${escapeHtml(libelleFonction(l.fonction))}</td>` +
-        `<td>${escapeHtml(l.matricule)}</td><td>${escapeHtml(l.email)}</td>` +
-        `<td>${escapeHtml(l.direction)}</td><td>${escapeHtml(l.statut)}</td></tr>`,
+        `<tr><td>${escapeHtml(l.nom)}</td>` +
+        `<td>${escapeHtml(libelleFonctionAffichee(l.fonction, l.externe))}</td>` +
+        `<td>${escapeHtml(l.email)}</td>` +
+        `<td>${escapeHtml(l.direction?.trim() || '')}</td></tr>`,
     )
     .join('');
 

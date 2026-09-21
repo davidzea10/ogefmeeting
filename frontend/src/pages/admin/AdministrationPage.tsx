@@ -1,4 +1,5 @@
 import { useAnnouncerStore } from '@/components/a11y/LiveAnnouncer';
+import { CrParticulierPanel } from '@/components/admin/CrParticulierPanel';
 import { Breadcrumbs } from '@/components/layout/Breadcrumbs';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -46,7 +47,14 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
 import { formatDateHeure } from '@/lib/labels';
 
-type TabId = 'utilisateurs' | 'directions' | 'modeles' | 'parametres' | 'nettoyage' | 'audit';
+type TabId =
+  | 'utilisateurs'
+  | 'directions'
+  | 'modeles'
+  | 'parametres'
+  | 'nettoyage'
+  | 'cr-particulier'
+  | 'audit';
 
 export function AdministrationPage() {
   const role = useAuthStore((s) => s.role ?? s.profil?.role ?? null);
@@ -80,6 +88,7 @@ export function AdministrationPage() {
           ['utilisateurs', 'Utilisateurs'],
           ['directions', 'Directions'],
           ['modeles', 'Modèles CR'],
+          ['cr-particulier', 'CR particulier'],
           ['parametres', 'Paramètres'],
           ['nettoyage', 'Nettoyage'],
           ['audit', 'Journal d’audit'],
@@ -119,6 +128,7 @@ export function AdministrationPage() {
       {isAdmin && tab === 'utilisateurs' && <UtilisateursPanel />}
       {isAdmin && tab === 'directions' && <DirectionsPanel />}
       {isAdmin && tab === 'modeles' && <ModelesPanel />}
+      {isAdmin && tab === 'cr-particulier' && <CrParticulierPanel />}
       {isAdmin && tab === 'parametres' && <ParametresPanel />}
       {isAdmin && tab === 'nettoyage' && <NettoyagePanel />}
       {peutAudit && tab === 'audit' && <AuditPanel />}

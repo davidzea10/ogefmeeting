@@ -20,6 +20,9 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:4000',
         changeOrigin: true,
+        // CR particulier multi-passes : jusqu'à ~10 min
+        timeout: 10 * 60 * 1000,
+        proxyTimeout: 10 * 60 * 1000,
       },
     },
   },

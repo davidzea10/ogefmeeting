@@ -25,10 +25,11 @@ export const LIBELLES_NIVEAU_DETAIL_CR: Record<NiveauDetailCr, string> = {
 
 export const DESCRIPTIONS_NIVEAU_DETAIL_CR: Record<NiveauDetailCr, string> = {
   simple:
-    'Essentiel structuré — tous les sous-points ODJ avec faits, décisions et actions (niveau proche de l’ancien « très détaillé »).',
+    'Essentiel structuré (volume renforcé) — sous-points ODJ avec faits, décisions et actions.',
   detaille:
-    'Standard recommandé — développement complet par sous-point, chiffres et responsables.',
-  tres_detaille: 'Exhaustif — reprend quasi intégralement la transcription, sans omission.',
+    'Standard recommandé (volume ×2) — développement complet par sous-point.',
+  tres_detaille:
+    'Rapport exhaustif type administratif OGEFREM — I. Objectifs…, paragraphes longs, ≈ 2× le volume détaillé.',
 };
 
 /** Secrétariat / direction / admin. */

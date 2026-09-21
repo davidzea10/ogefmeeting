@@ -176,3 +176,94 @@ export function supprimerReunionDefinitiveAdmin(id: string) {
     method: 'DELETE',
   });
 }
+
+export type CrParticulierMeta = {
+  id: string;
+  titre: string;
+  type_reunion: string;
+  lieu: string;
+  date_reunion: string;
+  directions_codes: string[];
+  description: string;
+  participants: string[];
+  points_ordre_jour: string[];
+  transcription_apercu: string;
+  nb_mots_transcription: number;
+  transcription_complete: boolean;
+};
+
+export type CrParticulierStats = {
+  mots_introduction: number;
+  mots_conclusion: number;
+  mots_total: number;
+  points: Array<{
+    titre: string;
+    romain: string;
+    mots_contenu: number;
+    sous_points: Array<{ titre: string; mots: number }>;
+  }>;
+};
+
+export type CrParticulierPreview = {
+  meta: Omit<
+    CrParticulierMeta,
+    'transcription_apercu' | 'nb_mots_transcription' | 'transcription_complete'
+  >;
+  brouillon: {
+    niveau_detail: string;
+    directions_impliquees: string[];
+    introduction: string;
+    points_ordre_jour: Array<{
+      titre: string;
+      contenu: string;
+      sous_points: Array<{ titre: string; contenu: string }>;
+    }>;
+    conclusion: string;
+  };
+  contenu: Record<string, string>;
+  contenu_html: string;
+  nb_mots_transcription: number;
+  stats?: CrParticulierStats;
+};
+
+export function obtenirMetaCrParticulier() {
+  return apiFetch<CrParticulierMeta>('/api/admin/cr-particulier');
+}
+
+export function genererCrParticulier() {
+  return apiFetch<CrParticulierPreview>('/api/admin/cr-particulier/generer', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+export async function telechargerPdfCrParticulier(payload: {
+  contenu: Record<string, string>;
+  contenu_html: string;
+}): Promise<Blob> {
+  const { ensureFreshToken } = await import('@/lib/auth-api');
+  const { useAuthStore } = await import('@/stores/auth.store');
+  const API_URL = import.meta.env.VITE_API_URL ?? '';
+  const token =
+    (await ensureFreshToken()) ?? useAuthStore.getState().accessToken;
+  const response = await fetch(`${API_URL}/api/admin/cr-particulier/pdf`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    let message = `Erreur HTTP ${response.status}`;
+    try {
+      const j = (await response.json()) as { error?: { message?: string } };
+      if (j.error?.message) message = j.error.message;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(message);
+  }
+  return response.blob();
+}
+

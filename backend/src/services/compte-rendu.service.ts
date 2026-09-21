@@ -575,17 +575,32 @@ export class CompteRenduService {
 
     const exclusCr = this.lireParticipantsExclusIds(compte_rendu.contenu);
     const overridesCr = this.lireParticipantsOverrides(compte_rendu.contenu);
+    const externesCr = this.lireParticipantsExternes(compte_rendu.contenu);
     const participants = this.mapperParticipantsPdf(
       participantsRows ?? [],
       exclusCr,
       overridesCr,
+      externesCr,
     );
 
     const parametres = await parametresService.obtenir();
+    const titreCr = this.lireTitreReunionCr(compte_rendu.contenu);
+    const reunionPdf = {
+      ...(reunion as {
+        titre: string;
+        date_prevue: string;
+        date_debut: string | null;
+        date_fin: string | null;
+        lieu: string | null;
+        type_reunion: string;
+        description: string | null;
+      }),
+      titre: titreCr || (reunion as { titre: string }).titre,
+    };
 
     const buffer = await genererPdfCompteRendu({
       compteRendu: compte_rendu,
-      reunion: reunion as Pick<
+      reunion: reunionPdf as Pick<
         import('@ogefmeeting/shared').Reunion,
         | 'titre'
         | 'date_prevue'
@@ -608,10 +623,7 @@ export class CompteRenduService {
       .update({ chemin_pdf: `generated://${id}/${Date.now()}.pdf` })
       .eq('id', id);
 
-    const filename = nomFichierPdfCr(
-      (reunion as { titre: string }).titre,
-      compte_rendu.version,
-    );
+    const filename = nomFichierPdfCr(reunionPdf.titre, compte_rendu.version);
 
     return { buffer, filename };
   }
@@ -643,30 +655,46 @@ export class CompteRenduService {
 
     const exclusListe = this.lireParticipantsExclusIds(compte_rendu.contenu);
     const overridesListe = this.lireParticipantsOverrides(compte_rendu.contenu);
+    const externesListe = this.lireParticipantsExternes(compte_rendu.contenu);
     const participants = this.mapperParticipantsPdf(
       participantsRows ?? [],
       exclusListe,
       overridesListe,
+      externesListe,
     );
     const parametres = await parametresService.obtenir();
+    const titreCr = this.lireTitreReunionCr(compte_rendu.contenu);
+    const reunionPdf = {
+      ...(reunion as {
+        titre: string;
+        date_prevue: string;
+        date_debut: string | null;
+        lieu: string | null;
+      }),
+      titre: titreCr || (reunion as { titre: string }).titre,
+    };
 
     const buffer = await genererPdfListeParticipants({
       compteRendu: compte_rendu,
-      reunion: reunion as Pick<
-        import('@ogefmeeting/shared').Reunion,
-        'titre' | 'date_prevue' | 'date_debut' | 'lieu'
-      >,
+      reunion: reunionPdf,
       participants,
       enTetePdf: parametres.en_tete_pdf,
       sousTitrePdf: parametres.sous_titre_pdf,
     });
 
     const filename = nomFichierPdfParticipants(
-      (reunion as { titre: string }).titre,
+      reunionPdf.titre,
       compte_rendu.version,
     );
 
     return { buffer, filename };
+  }
+
+  private lireTitreReunionCr(
+    contenu: Record<string, unknown> | null | undefined,
+  ): string {
+    const raw = contenu?.titre_reunion_cr;
+    return typeof raw === 'string' ? raw.trim() : '';
   }
 
   private lireParticipantsExclusIds(
@@ -681,13 +709,25 @@ export class CompteRenduService {
     contenu: Record<string, unknown> | null | undefined,
   ): Record<
     string,
-    { nom?: string; statut?: string; fonction?: string | null }
+    {
+      nom?: string;
+      statut?: string;
+      fonction?: string | null;
+      email?: string;
+      direction?: string;
+    }
   > {
     const raw = contenu?.participants_overrides;
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
     const out: Record<
       string,
-      { nom?: string; statut?: string; fonction?: string | null }
+      {
+        nom?: string;
+        statut?: string;
+        fonction?: string | null;
+        email?: string;
+        direction?: string;
+      }
     > = {};
     for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
       if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
@@ -701,7 +741,43 @@ export class CompteRenduService {
             : typeof v.fonction === 'string'
               ? v.fonction
               : undefined,
+        email: typeof v.email === 'string' ? v.email : undefined,
+        direction: typeof v.direction === 'string' ? v.direction : undefined,
       };
+    }
+    return out;
+  }
+
+  private lireParticipantsExternes(
+    contenu: Record<string, unknown> | null | undefined,
+  ): Array<{
+    id: string;
+    nom: string;
+    fonction: string;
+    email: string;
+    direction?: string;
+  }> {
+    const raw = contenu?.participants_externes;
+    if (!Array.isArray(raw)) return [];
+    const out: Array<{
+      id: string;
+      nom: string;
+      fonction: string;
+      email: string;
+      direction?: string;
+    }> = [];
+    for (const item of raw) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+      const v = item as Record<string, unknown>;
+      const nom = typeof v.nom === 'string' ? v.nom.trim() : '';
+      if (!nom) continue;
+      out.push({
+        id: typeof v.id === 'string' && v.id.trim() ? v.id.trim() : `ext-${out.length}`,
+        nom,
+        fonction: typeof v.fonction === 'string' ? v.fonction.trim() : '',
+        email: typeof v.email === 'string' ? v.email.trim() : '',
+        direction: typeof v.direction === 'string' ? v.direction.trim() : '',
+      });
     }
     return out;
   }
@@ -711,8 +787,21 @@ export class CompteRenduService {
     exclusIds: string[] = [],
     overrides: Record<
       string,
-      { nom?: string; statut?: string; fonction?: string | null }
+      {
+        nom?: string;
+        statut?: string;
+        fonction?: string | null;
+        email?: string;
+        direction?: string;
+      }
     > = {},
+    externes: Array<{
+      id: string;
+      nom: string;
+      fonction: string;
+      email: string;
+      direction?: string;
+    }> = [],
   ): PdfParticipantLigne[] {
     type ProfilJoin = {
       prenom?: string;
@@ -755,20 +844,32 @@ export class CompteRenduService {
 
         return {
           nom: o?.nom?.trim() || `${prenom} ${nom}`.trim() || '—',
-          matricule: profil?.matricule ?? null,
-          email: profil?.email ?? null,
-          direction: directionLabel,
+          email: o?.email?.trim() || profil?.email || null,
+          direction:
+            o?.direction !== undefined
+              ? o.direction.trim() || null
+              : directionLabel,
           fonction:
             o?.fonction !== undefined ? o.fonction : (profil?.fonction ?? null),
-          statut:
-            o?.statut?.trim() ||
-            String((row as { statut?: string }).statut ?? 'invite'),
+          externe: false,
         };
       });
 
-    return lignes.sort((a, b) => {
-      const ra = a.fonction ? (ordreFonction[a.fonction] ?? 50) : 99;
-      const rb = b.fonction ? (ordreFonction[b.fonction] ?? 50) : 99;
+    const lignesExternes: PdfParticipantLigne[] = externes.map((e) => ({
+      nom: e.nom,
+      email: e.email || null,
+      // Direction vide par défaut — ne jamais forcer « Externe »
+      direction: e.direction?.trim() || null,
+      fonction: e.fonction || null,
+      externe: true,
+    }));
+
+    return [...lignes, ...lignesExternes].sort((a, b) => {
+      if (Boolean(a.externe) !== Boolean(b.externe)) {
+        return a.externe ? 1 : -1;
+      }
+      const ra = a.fonction && !a.externe ? (ordreFonction[a.fonction] ?? 50) : 99;
+      const rb = b.fonction && !b.externe ? (ordreFonction[b.fonction] ?? 50) : 99;
       if (ra !== rb) return ra - rb;
       return a.nom.localeCompare(b.nom, 'fr');
     });

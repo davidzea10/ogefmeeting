@@ -16,13 +16,6 @@ const LIBELLES_TYPE: Record<string, string> = {
   autre: 'Autre',
 };
 
-const LIBELLES_PARTICIPANT: Record<string, string> = {
-  invite: 'Invité',
-  confirme: 'Confirmé',
-  present: 'Présent',
-  absent: 'Absent',
-};
-
 const LIBELLES_FONCTION: Record<string, string> = {
   agent: 'Agent',
   chef_service: 'Chef de service',
@@ -30,8 +23,9 @@ const LIBELLES_FONCTION: Record<string, string> = {
   directeur: 'Directeur',
 };
 
-function libelleFonctionPdf(fonction: string | null | undefined): string {
+function libelleFonctionPdf(fonction: string | null | undefined, externe?: boolean): string {
   if (!fonction) return '—';
+  if (externe) return fonction.trim() || '—';
   return LIBELLES_FONCTION[fonction] ?? fonction;
 }
 
@@ -49,11 +43,11 @@ const COLORS = {
 
 export type PdfParticipantLigne = {
   nom: string;
-  matricule?: string | null;
   email?: string | null;
   direction?: string | null;
   fonction?: string | null;
-  statut: string;
+  /** Participant saisi à la main (hors OGEFREM). */
+  externe?: boolean;
 };
 
 export type PdfCompteRenduInput = {
@@ -436,12 +430,10 @@ function drawParticipantsTable(
 ) {
   const left = doc.page.margins.left;
   const col = {
-    nom: Math.floor(pageWidth * 0.2),
-    fonction: Math.floor(pageWidth * 0.18),
-    matricule: Math.floor(pageWidth * 0.12),
-    email: Math.floor(pageWidth * 0.22),
-    direction: Math.floor(pageWidth * 0.12),
-    statut: Math.floor(pageWidth * 0.16),
+    nom: Math.floor(pageWidth * 0.28),
+    fonction: Math.floor(pageWidth * 0.24),
+    email: Math.floor(pageWidth * 0.28),
+    direction: Math.floor(pageWidth * 0.2),
   };
   const rowH = 22;
   const headerH = 24;
@@ -456,13 +448,9 @@ function drawParticipantsTable(
     x += col.nom;
     doc.text('FONCTION', x, y + 8, { width: col.fonction - 8 });
     x += col.fonction;
-    doc.text('MATR.', x, y + 8, { width: col.matricule - 6 });
-    x += col.matricule;
     doc.text('EMAIL', x, y + 8, { width: col.email - 8 });
     x += col.email;
-    doc.text('DIR.', x, y + 8, { width: col.direction - 6 });
-    x += col.direction;
-    doc.text('STATUT', x, y + 8, { width: col.statut - 8 });
+    doc.text('DIRECTION', x, y + 8, { width: col.direction - 8 });
     doc.y = y + headerH;
   };
 
@@ -489,29 +477,18 @@ function drawParticipantsTable(
     let x = left + 6;
     doc.text(p.nom || '—', x, y + 7, { width: col.nom - 8, ellipsis: true });
     x += col.nom;
-    doc.text(libelleFonctionPdf(p.fonction), x, y + 7, {
+    doc.text(libelleFonctionPdf(p.fonction, p.externe), x, y + 7, {
       width: col.fonction - 8,
       ellipsis: true,
     });
     x += col.fonction;
-    doc.text(p.matricule?.trim() || '—', x, y + 7, {
-      width: col.matricule - 6,
-      ellipsis: true,
-    });
-    x += col.matricule;
     doc.fillColor(COLORS.muted).text(p.email || '—', x, y + 7, {
       width: col.email - 8,
       ellipsis: true,
     });
     x += col.email;
-    doc.fillColor(COLORS.ink).text(p.direction || '—', x, y + 7, {
-      width: col.direction - 6,
-      ellipsis: true,
-    });
-    x += col.direction;
-    const statutLabel = LIBELLES_PARTICIPANT[p.statut] ?? p.statut;
-    doc.fillColor(COLORS.navy).font('Helvetica-Bold').text(statutLabel, x, y + 7, {
-      width: col.statut - 8,
+    doc.fillColor(COLORS.ink).text(p.direction?.trim() || '', x, y + 7, {
+      width: col.direction - 8,
       ellipsis: true,
     });
     doc.y = y + rowH;

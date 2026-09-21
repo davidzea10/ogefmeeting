@@ -2,6 +2,7 @@ import { useAnnouncerStore } from '@/components/a11y/LiveAnnouncer';
 import { Breadcrumbs } from '@/components/layout/Breadcrumbs';
 import { CrSectionEditor } from '@/components/comptes-rendus/CrSectionEditor';
 import { CrParticipantsTable } from '@/components/comptes-rendus/CrParticipantsTable';
+import { CrPdfPagesEditor } from '@/components/comptes-rendus/CrPdfPagesEditor';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import {
@@ -24,13 +25,18 @@ import {
 import {
   CLE_PARTICIPANTS_EXCLUS,
   CLE_PARTICIPANTS_OVERRIDES,
+  CLE_PARTICIPANTS_EXTERNES,
+  CLE_TITRE_REUNION_CR,
   contenuEstVide,
   contenuVersHtml,
   lireParticipantsExclusIds,
+  lireParticipantsExternes,
   lireParticipantsOverrides,
+  lireTitreReunionCr,
   nettoyerContenuCr,
   preremplirContenuCr,
   type ParticipantCrOverride,
+  type ParticipantExterneCr,
   sectionsDepuisModele,
   type ContenuCr,
 } from '@/lib/cr-prefill';
@@ -105,6 +111,15 @@ export function CompteRenduEditorPage() {
   const [participantsOverrides, setParticipantsOverrides] = useState<
     Record<string, ParticipantCrOverride>
   >({});
+  const [participantsExternes, setParticipantsExternes] = useState<
+    ParticipantExterneCr[]
+  >([]);
+  /** Titre affiché sur le CR / PDF (override local, sans modifier la réunion). */
+  const [titreReunionCr, setTitreReunionCr] = useState('');
+  const [pdfEditor, setPdfEditor] = useState<{
+    blob: Blob;
+    filename: string;
+  } | null>(null);
   const initDone = useRef(false);
 
   const crQuery = useQuery({
@@ -173,6 +188,9 @@ export function CompteRenduEditorPage() {
     setAfficherParticipantsCorps(crQuery.data.afficher_participants_corps ?? true);
     setParticipantsExclusIds(lireParticipantsExclusIds(crQuery.data.contenu));
     setParticipantsOverrides(lireParticipantsOverrides(crQuery.data.contenu));
+    setParticipantsExternes(lireParticipantsExternes(crQuery.data.contenu));
+    const titreSauvegarde = lireTitreReunionCr(crQuery.data.contenu);
+    setTitreReunionCr(titreSauvegarde || reunionQuery.data.titre);
 
     const profils = profilsQuery.data?.items ?? [];
     const directions = directionsQuery.data ?? [];
@@ -226,6 +244,8 @@ export function CompteRenduEditorPage() {
     ...contenu,
     [CLE_PARTICIPANTS_EXCLUS]: participantsExclusIds,
     [CLE_PARTICIPANTS_OVERRIDES]: participantsOverrides,
+    [CLE_PARTICIPANTS_EXTERNES]: participantsExternes,
+    [CLE_TITRE_REUNION_CR]: titreReunionCr.trim(),
   });
 
   const saveMut = useMutation({
@@ -353,15 +373,8 @@ export function CompteRenduEditorPage() {
   const pdfMut = useMutation({
     mutationFn: () => telechargerPdfCompteRendu(id!),
     onSuccess: ({ blob, filename }) => {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      announce('PDF téléchargé.');
+      setPdfEditor({ blob, filename });
+      announce('Aperçu PDF prêt — vous pouvez supprimer des pages avant téléchargement.');
     },
     onError: (e: Error) => announce(e.message),
   });
@@ -421,7 +434,7 @@ export function CompteRenduEditorPage() {
       saveMut.mutate({ historiser: false });
     }, 30_000);
     return () => window.clearTimeout(t);
-  }, [contenu, dirty, editable, afficherParticipantsCorps, participantsExclusIds, participantsOverrides]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [contenu, dirty, editable, afficherParticipantsCorps, participantsExclusIds, participantsOverrides, participantsExternes, titreReunionCr]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const statusLabel = useMemo(() => {
     if (saveMut.isPending || soumettreMut.isPending) return 'Enregistrement…';
@@ -505,12 +518,42 @@ export function CompteRenduEditorPage() {
           <span className="text-xs text-text-muted">{statusLabel}</span>
         </div>
         <h2 className="text-xl font-bold text-text sm:text-2xl">
-          Compte rendu — {reunion.titre}
+          Compte rendu — {titreReunionCr.trim() || reunion.titre}
         </h2>
-        <p className="text-sm text-text-muted">
-          {formatDateHeure(reunion.date_prevue)}
-          {reunion.lieu ? ` · ${reunion.lieu}` : ''}
-        </p>
+        {editable ? (
+          <label className="block space-y-1 text-sm">
+            <span className="font-medium text-text">Titre de la réunion (CR)</span>
+            <input
+              type="text"
+              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-text"
+              value={titreReunionCr}
+              onChange={(e) => {
+                setTitreReunionCr(e.target.value);
+                setDirty(true);
+              }}
+              placeholder={reunion.titre}
+              aria-label="Titre de la réunion pour le compte rendu"
+            />
+            <span className="text-xs text-text-muted">
+              Ce titre apparaît sur le PDF. Il ne modifie pas la réunion d’origine
+              {titreReunionCr.trim() &&
+              titreReunionCr.trim() !== reunion.titre
+                ? ` (« ${reunion.titre} »).`
+                : '.'}
+            </span>
+          </label>
+        ) : (
+          <p className="text-sm text-text-muted">
+            {formatDateHeure(reunion.date_prevue)}
+            {reunion.lieu ? ` · ${reunion.lieu}` : ''}
+          </p>
+        )}
+        {editable && (
+          <p className="text-sm text-text-muted">
+            {formatDateHeure(reunion.date_prevue)}
+            {reunion.lieu ? ` · ${reunion.lieu}` : ''}
+          </p>
+        )}
 
         <p
           className="rounded-lg border border-border bg-surface-muted/70 px-3 py-2 text-sm text-text"
@@ -743,7 +786,7 @@ export function CompteRenduEditorPage() {
             onClick={() => pdfMut.mutate()}
           >
             <Download className="h-4 w-4" aria-hidden />
-            Télécharger PDF CR
+            PDF CR (pages)
           </Button>
 
           <Button
@@ -917,11 +960,13 @@ export function CompteRenduEditorPage() {
                   valueHtml={contenu.participants}
                   exclusIds={participantsExclusIds}
                   overrides={participantsOverrides}
+                  externes={participantsExternes}
                   editable={editable}
-                  onChange={(html, exclusIds, overrides) => {
+                  onChange={(html, exclusIds, overrides, externes) => {
                     setContenu((prev) => ({ ...prev, participants: html }));
                     setParticipantsExclusIds(exclusIds);
                     setParticipantsOverrides(overrides);
+                    setParticipantsExternes(externes);
                     setDirty(true);
                   }}
                 />
@@ -945,6 +990,16 @@ export function CompteRenduEditorPage() {
           );
         })}
       </div>
+
+      {pdfEditor && (
+        <CrPdfPagesEditor
+          open
+          blob={pdfEditor.blob}
+          filename={pdfEditor.filename}
+          onClose={() => setPdfEditor(null)}
+          onAnnounce={announce}
+        />
+      )}
     </div>
   );
 }
