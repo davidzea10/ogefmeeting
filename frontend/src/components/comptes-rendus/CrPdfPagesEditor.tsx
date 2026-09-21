@@ -49,10 +49,8 @@ async function rendrePreviews(bytes: Uint8Array): Promise<PagePreview[]> {
       const canvas = document.createElement('canvas');
       canvas.width = Math.floor(viewport.width);
       canvas.height = Math.floor(viewport.height);
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('Canvas 2D indisponible.');
       await page.render({
-        canvasContext: ctx,
+        canvas,
         viewport,
         background: '#ffffff',
       }).promise;
